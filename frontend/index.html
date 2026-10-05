@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>محاسب پرو - سیستم یکپارچه مالی</title>
+    <script>
+      window.addEventListener('error', function(e) {
+        document.body.innerHTML += '<div style="color:red; background:#fee; padding:20px; z-index:9999; position:absolute; top:0; left:0; right:0; direction:ltr;"><h3>JS Error:</h3><pre>' + e.error.stack + '</pre></div>';
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        document.body.innerHTML += '<div style="color:red; background:#fee; padding:20px; z-index:9999; position:absolute; top:0; left:0; right:0; direction:ltr;"><h3>Promise Error:</h3><pre>' + e.reason + '</pre></div>';
+      });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

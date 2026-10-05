@@ -1,0 +1,100 @@
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Vazirmatn', system-ui, sans-serif;
+    background-color: #020617;
+    color: #f1f5f9;
+    direction: rtl;
+    text-align: right;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0f172a;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+  }
+
+  /* Select options dark bg */
+  option {
+    background-color: #1e293b;
+    color: #f1f5f9;
+  }
+}
+
+@layer utilities {
+  .font-vazirmatn {
+    font-family: 'Vazirmatn', system-ui, sans-serif;
+  }
+  
+  .text-gradient {
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .glass {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* JalaliDatePicker dropdown animation */
+  .animate-fade-in {
+    animation: fadeInDown 0.18s ease-out forwards;
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+
+/* Light theme for the main application surfaces. */
+[data-theme="light"] { color-scheme: light; background: #f4f6fb !important; color: #172033; }
+[data-theme="light"] body { background: #f4f6fb; color: #172033; }
+[data-theme="light"] main { color: #172033; }
+[data-theme="light"] [class*="bg-slate-950"] { background-color: #f4f6fb !important; }
+[data-theme="light"] [class*="bg-slate-900"] { background-color: #fff !important; }
+[data-theme="light"] [class*="bg-slate-800"] { background-color: #fff !important; }
+[data-theme="light"] [class*="bg-slate-700"] { background-color: #f0f3f8 !important; }
+[data-theme="light"] [class*="text-white"], [data-theme="light"] [class*="text-slate-100"], [data-theme="light"] [class*="text-slate-200"] { color: #172033 !important; }
+[data-theme="light"] [class*="text-slate-300"] { color: #344256 !important; }
+[data-theme="light"] [class*="text-slate-400"] { color: #526176 !important; }
+[data-theme="light"] [class*="text-slate-500"] { color: #64748b !important; }
+[data-theme="light"] [class*="text-slate-600"] { color: #475569 !important; }
+[data-theme="light"] [class*="border-slate-700"], [data-theme="light"] [class*="border-slate-600"] { border-color: #d6deea !important; }
+[data-theme="light"] input, [data-theme="light"] textarea, [data-theme="light"] select { color: #172033 !important; }
+[data-theme="light"] input::placeholder, [data-theme="light"] textarea::placeholder { color: #64748b !important; opacity: 1; }
+[data-theme="light"] option { background: #fff; color: #172033; }
+[data-theme="light"] ::-webkit-scrollbar-track { background: #e7ecf4; }
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: #b6c2d2; }
+[data-theme="light"] .glass { background: rgba(255,255,255,.8); border-color: #dce3ed; }
