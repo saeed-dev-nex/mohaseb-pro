@@ -6,6 +6,12 @@ set "ROOT=%ROOT:~0,-1%"
 set "FRONTEND=%ROOT%\frontend"
 set "BACKEND=%ROOT%\backend"
 
+if not defined MOHASEB_SKIP_UPDATE (
+    echo [INFO] Checking for project updates...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\update_project.ps1"
+    if errorlevel 1 echo [WARN] Update was skipped or failed. Starting the local version.
+)
+
 call "%BACKEND%\ensure_venv.bat"
 if errorlevel 1 (
     pause
@@ -80,6 +86,7 @@ goto end
 
 :lan
 echo Launching LAN server mode...
+set "MOHASEB_SKIP_UPDATE=1"
 call "%ROOT%\run_network.bat"
 goto end
 

@@ -8,6 +8,12 @@ set "BACKEND=%ROOT%\backend"
 set "DIST=%FRONTEND%\dist"
 set "HASH_FILE=%FRONTEND%\.build_hash"
 
+if not defined MOHASEB_SKIP_UPDATE (
+    echo [INFO] Checking for project updates...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\update_project.ps1"
+    if errorlevel 1 echo [WARN] Update was skipped or failed. Starting the local version.
+)
+
 call "%BACKEND%\ensure_venv.bat"
 if errorlevel 1 (
     pause

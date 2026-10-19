@@ -37,7 +37,7 @@ const Navbar = ({ onMenuToggle }) => {
       <div className="flex items-center gap-3">
         <div className="text-right">
           <p className="text-white text-sm font-medium leading-none">{currentUser?.first_name || currentUser?.username || 'کاربر'}</p>
-          <p className="text-slate-400 text-xs mt-0.5">{currentUser?.username || ''}</p>
+<p className="text-slate-400 text-xs mt-0.5">{currentUser?.username || ''} <span className="text-slate-500">· نسخه {__APP_VERSION__}</span></p>
         </div>
         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-sm font-bold text-white shadow-lg shadow-blue-500/30">
           {(currentUser?.first_name || currentUser?.username || 'م').slice(0, 1)}
