@@ -1,22 +1,28 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Customers from './pages/Customers';
-import CustomerDetail from './pages/CustomerDetail';
-import Services from './pages/Services';
-import Invoices from './pages/Invoices';
-import InvoiceForm from './pages/InvoiceForm';
-import InvoiceDetail from './pages/InvoiceDetail';
-import Reports from './pages/Reports';
-import Settings from './pages/Settings';
-import Expenses from './pages/Expenses';
-import Cheques from './pages/Cheques';
-import StaffPage from './pages/StaffPage';
-import UsersPage from './pages/UsersPage';
-import Chat from './pages/Chat';
-import Layout from './components/Layout';
+const Login = lazy(() => import('./pages/Login'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Customers = lazy(() => import('./pages/Customers'));
+const CustomerDetail = lazy(() => import('./pages/CustomerDetail'));
+const Services = lazy(() => import('./pages/Services'));
+const Invoices = lazy(() => import('./pages/Invoices'));
+const InvoiceForm = lazy(() => import('./pages/InvoiceForm'));
+const InvoiceDetail = lazy(() => import('./pages/InvoiceDetail'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Expenses = lazy(() => import('./pages/Expenses'));
+const Cheques = lazy(() => import('./pages/Cheques'));
+const StaffPage = lazy(() => import('./pages/StaffPage'));
+const UsersPage = lazy(() => import('./pages/UsersPage'));
+const Chat = lazy(() => import('./pages/Chat'));
+const Layout = lazy(() => import('./components/Layout'));
+
+const PageLoader = () => (
+  <div className="flex min-h-screen items-center justify-center bg-slate-950" dir="rtl">
+    <div className="h-9 w-9 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" aria-label="در حال بارگذاری" />
+  </div>
+);
 
 const ProtectedRoute = ({ children }) => {
   const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
@@ -26,7 +32,8 @@ const ProtectedRoute = ({ children }) => {
 function App() {
   return (
     <Router>
-      <Routes>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
         <Route path="/login" element={<Login />} />
         <Route
           path="/"
@@ -71,7 +78,8 @@ function App() {
           <Route path="settings" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+        </Routes>
+      </Suspense>
     </Router>
   );
 }
