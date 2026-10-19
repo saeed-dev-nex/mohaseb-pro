@@ -268,7 +268,7 @@ const Invoices = () => {
                   <th className="text-right py-4 px-5 font-medium">شماره</th>
                   <th className="text-right py-4 px-5 font-medium">مشتری</th>
                   <th className="text-right py-4 px-5 font-medium">زمان ایجاد</th>
-                  <th className="text-right py-4 px-5 font-medium">مبلغ فاکتور</th>
+                  <th className="text-right py-4 px-5 font-medium">مجموع مبلغ فاکتور</th>
                   <th className="text-right py-4 px-5 font-medium">مجموع مبلغ پرداختی</th>
                   {showPaymentType && <th className="text-right py-4 px-5 font-medium">نوع پرداخت</th>}
                   <th className="text-right py-4 px-5 font-medium">وضعیت</th>
@@ -292,7 +292,7 @@ const Invoices = () => {
                       )}
                     </td>
                     <td className="py-4 px-5 text-slate-400 text-xs">{persianDate(inv.created_at)}<span className="block text-slate-500 mt-1">{inv.created_at ? new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' }).format(new Date(inv.created_at)) : ''}</span></td>
-                    <td className="py-4 px-5 text-slate-300">{formatPrice(inv.total_amount)}</td>
+                    <td className="py-4 px-5 text-slate-300">{formatPrice(inv.final_amount)}</td>
                     <td className="py-4 px-5 text-white font-semibold">{formatPrice(inv.paid_amount ?? (inv.status === 'paid' ? inv.final_amount : 0))}</td>
                     {showPaymentType && <td className="py-4 px-5 text-slate-300">
                       {inv.status === 'paid'

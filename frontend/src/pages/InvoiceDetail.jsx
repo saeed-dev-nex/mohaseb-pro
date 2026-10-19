@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { invoicesAPI, profileAPI, customersAPI, invoiceSettingsAPI } from '../services/api';
+import { invoicesAPI, profileAPI, customersAPI, invoiceSettingsAPI, documentsAPI } from '../services/api';
 import { useSelector } from 'react-redux';
 import { toJalali, numberToWords } from '../utils/persian';
 import PriceInput from '../components/PriceInput';
@@ -136,8 +136,13 @@ const InvoiceDetail = () => {
   const [restoringVersionId, setRestoringVersionId] = useState(null);
   const [expandedVersionId, setExpandedVersionId] = useState(null);
   const [showPriorSnapshot, setShowPriorSnapshot] = useState(false);
+  const [invoiceDocuments, setInvoiceDocuments] = useState([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsUploading, setDocumentsUploading] = useState(false);
+  const [documentError, setDocumentError] = useState('');
   const printRef = useRef(null);
   const exportRef = useRef(null);
+  const documentInputRef = useRef(null);
 
   useEffect(() => {
     invoiceSettingsAPI.get().then(({ data }) => setInvoiceFields({
@@ -202,6 +207,62 @@ const InvoiceDetail = () => {
         .catch(() => {});
     }
   }, [invoice?.customer]);
+
+  const loadInvoiceDocuments = async () => {
+    if (!id) return;
+    setDocumentsLoading(true);
+    try {
+      const { data } = await documentsAPI.list({ invoice: id });
+      setInvoiceDocuments(Array.isArray(data) ? data : data.results || []);
+    } catch {
+      setDocumentError('دریافت مدارک فاکتور انجام نشد.');
+    } finally {
+      setDocumentsLoading(false);
+    }
+  };
+
+  useEffect(() => { loadInvoiceDocuments(); }, [id]);
+
+  const handleDocumentUpload = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    if (!invoice?.customer) {
+      setDocumentError('برای بارگذاری مدرک، ابتدا یک مشتری برای فاکتور ثبت کنید.');
+      event.target.value = '';
+      return;
+    }
+    setDocumentsUploading(true);
+    setDocumentError('');
+    try {
+      await Promise.all(files.map((file) => {
+        const formData = new FormData();
+        formData.append('customer', String(invoice.customer));
+        formData.append('invoice', String(invoice.id));
+        formData.append('title', file.name);
+        formData.append('file', file);
+        return documentsAPI.create(formData);
+      }));
+      if (documentInputRef.current) documentInputRef.current.value = '';
+      await loadInvoiceDocuments();
+      window.dispatchEvent(new Event('mohaseb:data-changed'));
+    } catch (error) {
+      setDocumentError(error.response?.data?.file?.[0] || 'بارگذاری مدرک انجام نشد.');
+    } finally {
+      setDocumentsUploading(false);
+    }
+  };
+
+  const handleDeleteDocument = async (document) => {
+    if (!window.confirm(`مدرک «${document.title}» حذف شود؟`)) return;
+    setDocumentError('');
+    try {
+      await documentsAPI.delete(document.id);
+      setInvoiceDocuments((items) => items.filter((item) => item.id !== document.id));
+      window.dispatchEvent(new Event('mohaseb:data-changed'));
+    } catch {
+      setDocumentError('حذف مدرک انجام نشد.');
+    }
+  };
 
   const handleChangeStatus = async (newStatus) => {
     setStatusChanging(true);
@@ -698,6 +759,31 @@ const InvoiceDetail = () => {
           )}
 
           <PaymentDescriptions payments={invoice.payments || []} />
+
+          <section className="no-print border-b border-slate-700/50 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-white">📎 مدارک پیوست فاکتور</h3>
+                <p className="mt-1 text-xs text-slate-400">مدارک در پوشهٔ مشتری و همراه این فاکتور ذخیره می‌شوند.</p>
+              </div>
+              <label className={`cursor-pointer rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 ${documentsUploading ? 'pointer-events-none opacity-60' : ''}`}>
+                {documentsUploading ? 'در حال بارگذاری…' : 'افزودن مدرک'}
+                <input ref={documentInputRef} type="file" multiple className="hidden" disabled={documentsUploading} onChange={handleDocumentUpload} />
+              </label>
+            </div>
+            {documentError && <p role="alert" className="mt-3 text-xs text-red-400">{documentError}</p>}
+            {documentsLoading ? <p className="mt-4 text-xs text-slate-500">در حال دریافت مدارک…</p> : invoiceDocuments.length > 0 ? (
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {invoiceDocuments.map((document) => (
+                  <div key={document.id} className="flex items-center gap-3 rounded-xl border border-slate-700/60 bg-slate-900/30 px-3 py-2.5">
+                    <span className="text-lg">📄</span>
+                    <a href={document.file_url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-sm text-blue-300 hover:text-blue-200 hover:underline">{document.title || 'مدرک بدون عنوان'}</a>
+                    <button type="button" onClick={() => handleDeleteDocument(document)} className="text-xs text-red-400 hover:text-red-300">حذف</button>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="mt-4 text-xs text-slate-500">مدرکی برای این فاکتور ثبت نشده است.</p>}
+          </section>
 
           <section className="no-print p-5 border-b border-slate-700/50 space-y-4">
             <div className="flex items-center justify-between gap-4">
