@@ -104,6 +104,7 @@ const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true');
   const [quickInvoice, setQuickInvoice] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null);
   const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
 
   React.useEffect(() => {
@@ -146,6 +147,22 @@ const Layout = () => {
     return () => window.clearInterval(timer);
   }, [isAuthenticated]);
 
+  React.useEffect(() => {
+    const captureInstallPrompt = (event) => {
+      event.preventDefault();
+      setInstallPrompt(event);
+    };
+    window.addEventListener('beforeinstallprompt', captureInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', captureInstallPrompt);
+  }, []);
+
+  const installPwa = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  };
+
   return (
     <div data-theme={localStorage.getItem("app-theme") || "dark"} className="min-h-screen bg-slate-950 font-vazirmatn" dir="rtl">
       {/* Sidebar */}
@@ -187,6 +204,7 @@ const Layout = () => {
         onClose={() => setQuickInvoice(false)}
         onSuccess={() => {}}
       />
+      {installPrompt && <button type="button" onClick={installPwa} className="fixed bottom-24 left-6 z-40 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-900/30 hover:bg-emerald-500">⬇ نصب محاسب پرو</button>}
     </div>
   );
 };
