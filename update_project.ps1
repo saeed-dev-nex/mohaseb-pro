@@ -25,7 +25,7 @@ $remoteBranch = "origin/$branch"
 & git -C $projectRoot rev-parse --verify $remoteBranch 2>$null
 if ($LASTEXITCODE -ne 0) { throw "Remote branch $remoteBranch was not found." }
 
-$counts = (& git -C $projectRoot rev-list --left-right --count "HEAD...$remoteBranch").Trim().Split([char[]]' ', [System.StringSplitOptions]::RemoveEmptyEntries)
+$counts = (& git -C $projectRoot rev-list --left-right --count "HEAD...$remoteBranch").Trim().Split([char[]]" `t", [System.StringSplitOptions]::RemoveEmptyEntries)
 $ahead = [int]$counts[0]
 $behind = [int]$counts[1]
 if ($behind -eq 0) {
