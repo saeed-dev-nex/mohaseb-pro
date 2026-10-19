@@ -46,8 +46,16 @@ if not errorlevel 1 exit /b 0
 
 echo [INFO] Installing missing or incomplete backend dependencies...
 rem Allow more time to fetch large package indexes on slow connections.
+rem Autobahn's optional NVX extensions do not yet provide wheels for every
+rem Python release (notably Python 3.15 on Windows).  They are a performance
+rem optimization only; install the supported pure-Python implementation so
+rem first-run setup does not require Visual C++ Build Tools.
+setlocal
+set "AUTOBAHN_USE_NVX=0"
 "%BACKEND_PYTHON%" -m pip install --timeout 60 --retries 3 -r "%BACKEND%\requirements.txt"
-if errorlevel 1 (
+set "PIP_INSTALL_EXIT=%ERRORLEVEL%"
+endlocal & set "PIP_INSTALL_EXIT=%PIP_INSTALL_EXIT%"
+if not "%PIP_INSTALL_EXIT%"=="0" (
     echo [ERROR] Could not install backend dependencies.
     echo         Check your internet connection and pip package index, then run this script again.
     exit /b 1

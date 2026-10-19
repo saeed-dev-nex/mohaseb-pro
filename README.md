@@ -17,7 +17,7 @@
 ## پیش‌نیازها
 
 - Windows 10 یا جدیدتر برای اسکریپت‌های آماده
-- Python 3.10 یا جدیدتر
+- Python 3.10 یا جدیدتر (برای Python 3.15 در Windows، راه‌انداز پروژه به‌طور خودکار وابستگی شبکه را بدون افزونهٔ اختیاری C++ نصب می‌کند.)
 - Node.js 18 یا جدیدتر و npm
 
 ## راه‌اندازی در Windows
@@ -50,6 +50,7 @@ Backend:
 cd backend
 py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1
+$env:AUTOBAHN_USE_NVX = "0" # برای Python 3.15 در Windows
 python -m pip install -r requirements.txt
 python manage.py migrate
 python manage.py ensure_admin
