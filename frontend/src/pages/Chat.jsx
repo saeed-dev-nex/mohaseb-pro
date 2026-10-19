@@ -25,16 +25,18 @@ const Chat = () => {
   const [notificationPermission, setNotificationPermission] = useState(() => typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
+  const loadedRecipientRef = useRef(null);
   const selectedUser = useMemo(() => users.find((user) => String(user.id) === recipient), [recipient, users]);
 
   const loadUsers = useCallback(async () => {
     try { setUsers((await chatAPI.users()).data); } catch { /* The chat remains usable if presence is temporarily unavailable. */ }
   }, []);
   const loadMessages = useCallback(async () => {
-    setLoading(true);
+    const isNewConversation = loadedRecipientRef.current !== recipient;
+    if (isNewConversation) setLoading(true);
     try { setMessages((await chatAPI.list(recipient === 'all' ? {} : { recipient })).data); }
     catch { setError('دریافت پیام‌ها انجام نشد. اتصال سرور را بررسی کنید.'); }
-    finally { setLoading(false); }
+    finally { loadedRecipientRef.current = recipient; if (isNewConversation) setLoading(false); }
   }, [recipient]);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
@@ -55,6 +57,13 @@ const Chat = () => {
     window.addEventListener('mohaseb:chat-presence', loadUsers);
     return () => { window.removeEventListener('mohaseb:chat-message', onMessage); window.removeEventListener('mohaseb:chat-connection', onConnection); window.removeEventListener('mohaseb:chat-presence', loadUsers); };
   }, [recipient, loadUsers]);
+  useEffect(() => {
+    // WebSocket is the immediate delivery channel. This lightweight fallback
+    // also keeps conversations live when a proxy/LAN setup accepts a socket
+    // but drops channel-layer events, so a manual page refresh is never needed.
+    const timer = window.setInterval(loadMessages, 1500);
+    return () => window.clearInterval(timer);
+  }, [loadMessages]);
   useEffect(() => { const timer = window.setInterval(loadUsers, 60000); return () => window.clearInterval(timer); }, [loadUsers]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [messages]);
 
