@@ -21,7 +21,7 @@ import json, calendar, os, shutil
 from .models import (
     Customer, Service, Invoice, InvoiceEditRequest, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
-    Cheque, InvoiceSettings, ChatMessage, ChatNotification
+    Cheque, InvoiceSettings, ChatMessage, ChatNotification, ChatPresence
 )
 from .serializers import (
     CustomerListSerializer, CustomerDetailSerializer,
@@ -975,16 +975,37 @@ class DocumentViewSet(viewsets.ModelViewSet):
 class ChatMessageViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin, viewsets.mixins.CreateModelMixin):
     permission_classes = [IsAuthenticated]
     serializer_class = ChatMessageSerializer
-    queryset = ChatMessage.objects.select_related('sender').all()
+    queryset = ChatMessage.objects.select_related('sender', 'recipient').all()
+
+    def get_queryset(self):
+        user = self.request.user
+        return super().get_queryset().filter(Q(sender=user) | Q(recipient=user) | Q(recipient__isnull=True))
 
     def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset().order_by('-created_at', '-id')[:100]
+        queryset = self.get_queryset()
+        recipient_id = request.query_params.get('recipient')
+        if recipient_id:
+            try:
+                recipient_id = int(recipient_id)
+            except (TypeError, ValueError):
+                return Response({'recipient': ['کاربر انتخاب‌شده معتبر نیست.']}, status=status.HTTP_400_BAD_REQUEST)
+            if recipient_id == request.user.id:
+                return Response([])
+            queryset = queryset.filter(
+                Q(sender=request.user, recipient_id=recipient_id) |
+                Q(sender_id=recipient_id, recipient=request.user)
+            )
+        else:
+            queryset = queryset.filter(recipient__isnull=True)
+        queryset = queryset.order_by('-created_at', '-id')[:100]
         messages = list(reversed(queryset))
         return Response(self.get_serializer(messages, many=True).data)
 
     def perform_create(self, serializer):
         message = serializer.save(sender=self.request.user)
         recipients = User.objects.filter(is_active=True).exclude(pk=self.request.user.pk)
+        if message.recipient_id:
+            recipients = recipients.filter(pk=message.recipient_id)
         ChatNotification.objects.bulk_create([
             ChatNotification(recipient=user, message=message) for user in recipients
         ], ignore_conflicts=True)
@@ -995,6 +1016,22 @@ class ChatMessageViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin
                 'type': 'chat.message',
                 'payload': ChatMessageSerializer(message, context={'request': self.request}).data,
             })
+
+    @action(detail=False, methods=['get'])
+    def users(self, request):
+        online_after = timezone.now() - timedelta(seconds=90)
+        presence = {
+            row['user_id']: row['last_seen']
+            for row in ChatPresence.objects.filter(last_seen__gte=online_after).values('user_id', 'last_seen')
+        }
+        users = User.objects.filter(is_active=True).exclude(pk=request.user.pk).order_by('first_name', 'last_name', 'username')
+        return Response([{
+            'id': user.id,
+            'name': user.get_full_name().strip() or user.username,
+            'username': user.username,
+            'online': user.id in presence,
+            'last_seen': presence.get(user.id),
+        } for user in users])
 
     @action(detail=False, methods=['get'])
     def unread(self, request):

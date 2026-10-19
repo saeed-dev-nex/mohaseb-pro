@@ -260,6 +260,11 @@ class Document(models.Model):
 
 class ChatMessage(models.Model):
     sender = models.ForeignKey(User, related_name='chat_messages', on_delete=models.CASCADE)
+    recipient = models.ForeignKey(
+        User, related_name='received_chat_messages', on_delete=models.CASCADE,
+        blank=True, null=True,
+        help_text='خالی بودن این فیلد به‌معنای پیام برای همهٔ کاربران است.',
+    )
     text = models.TextField(blank=True, default='')
     file = models.FileField(upload_to='chat_files/%Y/%m/', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
@@ -268,7 +273,17 @@ class ChatMessage(models.Model):
         ordering = ['created_at', 'id']
 
     def __str__(self):
-        return f'{self.sender.username}: {self.text[:50]}'
+        recipient = self.recipient.username if self.recipient else 'همه'
+        return f'{self.sender.username} → {recipient}: {self.text[:50]}'
+
+
+class ChatPresence(models.Model):
+    """آخرین زمان اتصال WebSocket هر کاربر برای نمایش وضعیت آنلاین."""
+    user = models.OneToOneField(User, related_name='chat_presence', on_delete=models.CASCADE)
+    last_seen = models.DateTimeField(default=timezone.now, db_index=True)
+
+    def __str__(self):
+        return f'{self.user.username}: {self.last_seen}'
 
 
 class ChatNotification(models.Model):

@@ -1,6 +1,8 @@
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.contrib.auth import get_user_model
+from django.utils import timezone
+from .models import ChatPresence
 from rest_framework_simplejwt.tokens import AccessToken
 
 
@@ -25,6 +27,8 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
         self.group_name = 'chat_room'
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept(subprotocol='mohaseb-chat')
+        await self.touch_presence(self.user_id)
+        await self.channel_layer.group_send(self.group_name, {'type': 'chat.presence', 'user_id': self.user_id})
         await self.send_json({'type': 'connected'})
 
     async def disconnect(self, close_code):
@@ -33,7 +37,20 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             await self.channel_layer.group_discard(group_name, self.channel_name)
 
     async def chat_message(self, event):
-        await self.send_json({'type': 'message', 'message': event['payload']})
+        message = event['payload']
+        if not message.get('recipient') or self.user_id in (message.get('sender'), message.get('recipient')):
+            await self.send_json({'type': 'message', 'message': message})
+
+    async def chat_presence(self, event):
+        await self.send_json({'type': 'presence', 'user_id': event['user_id']})
+
+    async def receive_json(self, content, **kwargs):
+        if content.get('type') == 'heartbeat':
+            await self.touch_presence(self.user_id)
+
+    @database_sync_to_async
+    def touch_presence(self, user_id):
+        ChatPresence.objects.update_or_create(user_id=user_id, defaults={'last_seen': timezone.now()})
 
     @database_sync_to_async
     def user_is_active(self, user_id):

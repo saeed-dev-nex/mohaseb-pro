@@ -95,17 +95,24 @@ class InvoiceSettingsSerializer(serializers.ModelSerializer):
 class ChatMessageSerializer(serializers.ModelSerializer):
     sender = serializers.IntegerField(source='sender_id', read_only=True)
     sender_name = serializers.SerializerMethodField()
+    recipient = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True), required=False, allow_null=True)
+    recipient_name = serializers.SerializerMethodField()
     file = serializers.FileField(write_only=True, required=False, allow_null=True)
     file_name = serializers.SerializerMethodField()
     file_url = serializers.SerializerMethodField()
 
     class Meta:
         model = ChatMessage
-        fields = ['id', 'sender', 'sender_name', 'text', 'file', 'file_name', 'file_url', 'created_at']
+        fields = ['id', 'sender', 'sender_name', 'recipient', 'recipient_name', 'text', 'file', 'file_name', 'file_url', 'created_at']
         read_only_fields = ['id', 'sender', 'sender_name', 'file_name', 'file_url', 'created_at']
 
     def get_sender_name(self, obj):
         return obj.sender.get_full_name().strip() or obj.sender.username
+
+    def get_recipient_name(self, obj):
+        if not obj.recipient:
+            return 'همهٔ کاربران'
+        return obj.recipient.get_full_name().strip() or obj.recipient.username
 
     def get_file_name(self, obj):
         return obj.file.name.rsplit('/', 1)[-1] if obj.file else ''

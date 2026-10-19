@@ -169,8 +169,9 @@ export const invoiceSettingsAPI = {
 };
 
 export const chatAPI = {
-  list: () => api.get('chat/'),
+  list: (params = {}) => api.get('chat/', { params }),
   create: (formData) => api.post('chat/', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  users: () => api.get('chat/users/'),
   unread: () => api.get('chat/unread/'),
   markRead: () => api.post('chat/mark_read/'),
   download: (id) => api.get(`chat/${id}/download/`, { responseType: 'blob' }),

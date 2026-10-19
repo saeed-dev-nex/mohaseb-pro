@@ -19,6 +19,7 @@ const ChatRealtimeBridge = () => {
     let socket;
     let reconnectTimer;
     let noticeTimer;
+    let heartbeatTimer;
     let reconnectDelay = 1000;
 
     const setConnection = (connected) => window.dispatchEvent(new CustomEvent('mohaseb:chat-connection', { detail: { connected } }));
@@ -32,10 +33,21 @@ const ChatRealtimeBridge = () => {
       if (!active) return;
       try { socket = new WebSocket(chatSocketURL(), chatSocketProtocols()); }
       catch { scheduleReconnect(); return; }
-      socket.onopen = () => { reconnectDelay = 1000; setConnection(true); refreshUnread(); };
+      socket.onopen = () => {
+        reconnectDelay = 1000;
+        setConnection(true);
+        refreshUnread();
+        heartbeatTimer = window.setInterval(() => {
+          if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'heartbeat' }));
+        }, 30000);
+      };
       socket.onmessage = (event) => {
         let payload;
         try { payload = JSON.parse(event.data); } catch { return; }
+        if (payload.type === 'presence') {
+          window.dispatchEvent(new CustomEvent('mohaseb:chat-presence'));
+          return;
+        }
         if (payload.type !== 'message' || !payload.message) return;
         const message = payload.message;
         window.dispatchEvent(new CustomEvent('mohaseb:chat-message', { detail: message }));
@@ -47,7 +59,7 @@ const ChatRealtimeBridge = () => {
           window.clearTimeout(noticeTimer);
           noticeTimer = window.setTimeout(() => setNotice(null), 7000);
         }
-        if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        if (!onChatPage && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
           try {
             const notification = new Notification(`پیام جدید از ${message.sender_name}`, {
               body: message.text || `فایل پیوست: ${message.file_name}`,
@@ -57,7 +69,7 @@ const ChatRealtimeBridge = () => {
           } catch { /* Browser notification delivery is optional. */ }
         }
       };
-      socket.onclose = () => { setConnection(false); scheduleReconnect(); };
+      socket.onclose = () => { window.clearInterval(heartbeatTimer); setConnection(false); scheduleReconnect(); };
       socket.onerror = () => socket?.close();
     };
     const scheduleReconnect = () => {
@@ -80,6 +92,7 @@ const ChatRealtimeBridge = () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       window.clearTimeout(reconnectTimer);
       window.clearTimeout(noticeTimer);
+      window.clearInterval(heartbeatTimer);
       socket?.close();
     };
   }, [isAuthenticated, user?.id]);
