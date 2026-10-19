@@ -93,7 +93,7 @@ class InvoiceSettingsSerializer(serializers.ModelSerializer):
 
 
 class ChatMessageSerializer(serializers.ModelSerializer):
-    sender = serializers.IntegerField(read_only=True)
+    sender = serializers.IntegerField(source='sender_id', read_only=True)
     sender_name = serializers.SerializerMethodField()
     file = serializers.FileField(write_only=True, required=False, allow_null=True)
     file_name = serializers.SerializerMethodField()
