@@ -15,6 +15,7 @@ import Expenses from './pages/Expenses';
 import Cheques from './pages/Cheques';
 import StaffPage from './pages/StaffPage';
 import UsersPage from './pages/UsersPage';
+import Chat from './pages/Chat';
 import Layout from './components/Layout';
 
 const ProtectedRoute = ({ children }) => {
@@ -64,6 +65,7 @@ function App() {
 
           {/* Users (admin only) */}
           <Route path="users" element={<UsersPage />} />
+          <Route path="chat" element={<Chat />} />
 
           {/* Settings */}
           <Route path="settings" element={<Settings />} />

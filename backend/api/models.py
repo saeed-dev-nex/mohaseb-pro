@@ -258,6 +258,33 @@ class Document(models.Model):
         return f"{self.title} - {self.customer.name}"
 
 
+class ChatMessage(models.Model):
+    sender = models.ForeignKey(User, related_name='chat_messages', on_delete=models.CASCADE)
+    text = models.TextField(blank=True, default='')
+    file = models.FileField(upload_to='chat_files/%Y/%m/', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['created_at', 'id']
+
+    def __str__(self):
+        return f'{self.sender.username}: {self.text[:50]}'
+
+
+class ChatNotification(models.Model):
+    recipient = models.ForeignKey(User, related_name='chat_notifications', on_delete=models.CASCADE)
+    message = models.ForeignKey(ChatMessage, related_name='notifications', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        constraints = [models.UniqueConstraint(fields=['recipient', 'message'], name='unique_chat_notification_recipient')]
+
+    def __str__(self):
+        return f'{self.recipient.username} ← {self.message.sender.username}'
+
+
 class BackupConfig(models.Model):
     """Singleton model for backup configuration"""
     FREQ_CHOICES = [

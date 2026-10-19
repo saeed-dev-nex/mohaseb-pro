@@ -6,7 +6,7 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from .models import (
     Customer, Service, Invoice, InvoiceItem, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
-    Cheque, InvoiceSettings
+    Cheque, InvoiceSettings, ChatMessage
 )
 
 
@@ -90,6 +90,49 @@ class InvoiceSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = InvoiceSettings
         fields = ['office_card_fee_threshold', 'show_discount_field', 'show_tax_field']
+
+
+class ChatMessageSerializer(serializers.ModelSerializer):
+    sender = serializers.IntegerField(read_only=True)
+    sender_name = serializers.SerializerMethodField()
+    file = serializers.FileField(write_only=True, required=False, allow_null=True)
+    file_name = serializers.SerializerMethodField()
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChatMessage
+        fields = ['id', 'sender', 'sender_name', 'text', 'file', 'file_name', 'file_url', 'created_at']
+        read_only_fields = ['id', 'sender', 'sender_name', 'file_name', 'file_url', 'created_at']
+
+    def get_sender_name(self, obj):
+        return obj.sender.get_full_name().strip() or obj.sender.username
+
+    def get_file_name(self, obj):
+        return obj.file.name.rsplit('/', 1)[-1] if obj.file else ''
+
+    def get_file_url(self, obj):
+        if not obj.file:
+            return ''
+        request = self.context.get('request')
+        if not request:
+            return ''
+        from rest_framework.reverse import reverse
+        return reverse('chat-download', args=[obj.pk], request=request)
+
+    def validate_file(self, value):
+        if value and value.size > 20 * 1024 * 1024:
+            raise serializers.ValidationError('حداکثر حجم فایل پیوست ۲۰ مگابایت است.')
+        return value
+
+    def validate_text(self, value):
+        if len(value) > 5000:
+            raise serializers.ValidationError('حداکثر طول پیام ۵۰۰۰ نویسه است.')
+        return value
+
+    def validate(self, attrs):
+        if not (attrs.get('text') or '').strip() and not attrs.get('file'):
+            raise serializers.ValidationError('متن پیام یا یک فایل پیوست کنید.')
+        return attrs
 
 
 class CustomerListSerializer(serializers.ModelSerializer):

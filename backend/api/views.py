@@ -10,22 +10,25 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from datetime import timedelta, date
 from django.http import JsonResponse, HttpResponse
+from django.http import FileResponse
 from django.core.paginator import Paginator, EmptyPage
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.models import User
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 import json, calendar, os, shutil
 
 from .models import (
     Customer, Service, Invoice, InvoiceEditRequest, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
-    Cheque, InvoiceSettings
+    Cheque, InvoiceSettings, ChatMessage, ChatNotification
 )
 from .serializers import (
     CustomerListSerializer, CustomerDetailSerializer,
     ServiceSerializer, InvoiceSerializer, DocumentSerializer,
     BusinessProfileSerializer, ExpenseCategorySerializer,
     ExpenseSerializer, StaffSerializer, VehicleTypeSerializer,
-    UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer
+    UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer
 )
 from .audit import snapshot, record_audit, is_invoice_content_version
 
@@ -967,6 +970,56 @@ class DocumentViewSet(viewsets.ModelViewSet):
             return Response({'files': files, 'folder': folder_path})
         except Customer.DoesNotExist:
             return Response({'error': 'customer not found'}, status=404)
+
+
+class ChatMessageViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin, viewsets.mixins.CreateModelMixin):
+    permission_classes = [IsAuthenticated]
+    serializer_class = ChatMessageSerializer
+    queryset = ChatMessage.objects.select_related('sender').all()
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset().order_by('-created_at', '-id')[:100]
+        messages = list(reversed(queryset))
+        return Response(self.get_serializer(messages, many=True).data)
+
+    def perform_create(self, serializer):
+        message = serializer.save(sender=self.request.user)
+        recipients = User.objects.filter(is_active=True).exclude(pk=self.request.user.pk)
+        ChatNotification.objects.bulk_create([
+            ChatNotification(recipient=user, message=message) for user in recipients
+        ], ignore_conflicts=True)
+
+        layer = get_channel_layer()
+        if layer:
+            async_to_sync(layer.group_send)('chat_room', {
+                'type': 'chat.message',
+                'payload': ChatMessageSerializer(message, context={'request': self.request}).data,
+            })
+
+    @action(detail=False, methods=['get'])
+    def unread(self, request):
+        unread = ChatNotification.objects.filter(recipient=request.user, read_at__isnull=True)
+        latest = unread.select_related('message__sender').order_by('-created_at', '-id')[:20]
+        return Response({
+            'count': unread.count(),
+            'results': [{
+                'id': notification.id,
+                'created_at': notification.created_at,
+                'message': ChatMessageSerializer(notification.message, context={'request': request}).data,
+            } for notification in latest],
+        })
+
+    @action(detail=False, methods=['post'])
+    def mark_read(self, request):
+        updated = ChatNotification.objects.filter(recipient=request.user, read_at__isnull=True).update(read_at=timezone.now())
+        return Response({'updated': updated})
+
+    @action(detail=True, methods=['get'])
+    def download(self, request, pk=None):
+        message = self.get_object()
+        if not message.file:
+            return Response({'detail': 'فایلی برای این پیام ثبت نشده است.'}, status=404)
+        return FileResponse(message.file.open('rb'), as_attachment=True, filename=os.path.basename(message.file.name))
 
 
 class InvoiceSettingsViewSet(viewsets.ViewSet):

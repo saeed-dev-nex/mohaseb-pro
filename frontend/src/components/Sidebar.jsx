@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../features/authSlice';
-import { invoicesAPI } from '../services/api';
+import { invoicesAPI, chatAPI } from '../services/api';
 
 const BASE_NAV_GROUPS = [
   {
@@ -27,6 +27,12 @@ const BASE_NAV_GROUPS = [
     ],
   },
   {
+    label: 'ارتباطات',
+    items: [
+      { to: '/chat', label: 'گفتگوی کاربران', icon: '💬' },
+    ],
+  },
+  {
     label: 'مدیریت',
     items: [
       { to: '/customers', label: 'مشتریان', icon: '👥' },
@@ -43,6 +49,18 @@ const Sidebar = ({ isOpen, onClose, isCollapsed = false, onToggleCollapse }) => 
   const isAdmin = currentUser?.is_superuser;
   const isManager = Boolean(currentUser?.is_staff || currentUser?.is_superuser);
   const [editRequestCount, setEditRequestCount] = useState(0);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    chatAPI.unread().then(({ data }) => {
+      setChatUnreadCount(data.count || 0);
+      window.dispatchEvent(new CustomEvent('mohaseb:chat-unread', { detail: { count: data.count || 0 } }));
+    }).catch(() => {});
+    const syncCount = (event) => setChatUnreadCount(event.detail?.count || 0);
+    window.addEventListener('mohaseb:chat-unread', syncCount);
+    return () => window.removeEventListener('mohaseb:chat-unread', syncCount);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (!isManager) { setEditRequestCount(0); return; }
@@ -143,6 +161,7 @@ const Sidebar = ({ isOpen, onClose, isCollapsed = false, onToggleCollapse }) => 
                     <span className="text-base">{item.icon}</span>
                     <span className={isCollapsed ? 'lg:hidden' : ''}>{item.label}</span>
                     {isManager && item.to === '/invoices' && editRequestCount > 0 && <span className="mr-auto min-w-5 rounded-full bg-amber-500 px-1.5 py-0.5 text-center text-[10px] font-bold text-white">{editRequestCount}</span>}
+                    {item.to === '/chat' && chatUnreadCount > 0 && <span className="mr-auto min-w-5 rounded-full bg-blue-500 px-1.5 py-0.5 text-center text-[10px] font-bold text-white" title={`${chatUnreadCount} پیام خوانده‌نشده`}>{chatUnreadCount > 99 ? '۹۹+' : chatUnreadCount}</span>}
                   </NavLink>
                 ))}
               </div>

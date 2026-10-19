@@ -6,7 +6,7 @@ from .views import (
     DocumentViewSet, DashboardViewSet,
     BusinessProfileViewSet, ExpenseCategoryViewSet,
     ExpenseViewSet, StaffViewSet, BackupViewSet, VehicleTypeViewSet,
-    UserViewSet, BackupConfigViewSet, InvoiceSettingsViewSet, ChequeViewSet, AuditLogViewSet
+    UserViewSet, BackupConfigViewSet, InvoiceSettingsViewSet, ChequeViewSet, AuditLogViewSet, ChatMessageViewSet
 )
 from .serializers import SafeTokenRefreshSerializer
 from .views import database_revision
@@ -28,6 +28,7 @@ router.register(r'vehicle-types', VehicleTypeViewSet, basename='vehicle-type')
 router.register(r'users', UserViewSet, basename='user')
 router.register(r'cheques', ChequeViewSet, basename='cheque')
 router.register(r'audit', AuditLogViewSet, basename='audit')
+router.register(r'chat', ChatMessageViewSet, basename='chat')
 
 
 urlpatterns = [

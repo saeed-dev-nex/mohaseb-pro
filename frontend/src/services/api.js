@@ -168,6 +168,27 @@ export const invoiceSettingsAPI = {
   update: (data) => api.patch('invoice-settings/update_config/', data),
 };
 
+export const chatAPI = {
+  list: () => api.get('chat/'),
+  create: (formData) => api.post('chat/', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  unread: () => api.get('chat/unread/'),
+  markRead: () => api.post('chat/mark_read/'),
+  download: (id) => api.get(`chat/${id}/download/`, { responseType: 'blob' }),
+};
+
+export const chatSocketURL = () => {
+  const apiURL = new URL(API_BASE_URL, window.location.href);
+  apiURL.protocol = apiURL.protocol === 'https:' ? 'wss:' : 'ws:';
+  apiURL.pathname = `${apiURL.pathname.replace(/\/api\/?$/, '').replace(/\/$/, '')}/ws/chat/`;
+  apiURL.search = '';
+  return apiURL.toString();
+};
+
+export const chatSocketProtocols = () => {
+  const access = Cookies.get('access_token');
+  return access ? ['mohaseb-chat', access] : ['mohaseb-chat'];
+};
+
 // ---- Vehicle Types ----
 export const vehicleTypesAPI = {
   list: () => api.get('vehicle-types/'),
