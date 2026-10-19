@@ -1,41 +1,102 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchInvoices, markInvoicePaid, cancelInvoice, deleteInvoice } from '../features/invoicesSlice';
 import { StatusBadge, Button, Spinner, EmptyState, ConfirmDialog, formatPrice } from '../components/ui';
 import { invoicesAPI } from '../services/api';
+import JalaliDatePicker from '../components/JalaliDatePicker';
 
 const invoiceTabs = [
   { value: 'pending', label: 'پرداخت نشده' },
   { value: 'paid', label: 'پرداخت شده' },
+  { value: 'commission_paid', label: 'کارمزد پرداخت شده' },
   { value: '', label: 'کل فاکتورها' },
 ];
+const amountInTomans = (value) => {
+  const latin = String(value).replace(/[۰-۹٠-٩]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit) >= 0 ? '۰۱۲۳۴۵۶۷۸۹'.indexOf(digit) : '٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+  const amount = Number(latin.replace(/\D/g, ''));
+  return amount ? amount * 1000 : '';
+};
+const formatThousands = (value) => {
+  const digits = String(value).replace(/[^\d۰-۹٠-٩]/g, '');
+  const latin = digits.replace(/[۰-۹٠-٩]/g, digit => {
+    const fa = '۰۱۲۳۴۵۶۷۸۹'.indexOf(digit);
+    return String(fa >= 0 ? fa : '٠١٢٣٤٥٦٧٨٩'.indexOf(digit));
+  });
+  return latin.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+};
 
 const Invoices = () => {
   const dispatch = useDispatch();
-  const { list, loading } = useSelector(s => s.invoices);
+  const { list, loading, loadingMore, hasMore, currentPage } = useSelector(s => s.invoices);
   const currentUser = useSelector(s => s.auth.currentUser);
   const canSeeIssuer = Boolean(currentUser?.is_staff || currentUser?.is_superuser);
   const isManager = Boolean(currentUser?.is_staff || currentUser?.is_superuser);
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [vehiclePlate, setVehiclePlate] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [paidBy, setPaidBy] = useState('');
+  const [createdBy, setCreatedBy] = useState('');
+  const [paidMin, setPaidMin] = useState('');
+  const [paidMax, setPaidMax] = useState('');
+  const [paymentSource, setPaymentSource] = useState('');
+  const [filterOptions, setFilterOptions] = useState({ issuers: [], payers: [] });
+  const [counts, setCounts] = useState({ all: 0, paid: 0, pending: 0, commission_paid: 0 });
+  const sentinelRef = useRef(null);
+  const pageRequestRef = useRef(false);
   const initialStatus = searchParams.get('status');
-  const [statusFilter, setStatusFilter] = useState(['pending', 'paid'].includes(initialStatus) ? initialStatus : initialStatus === '' ? '' : 'pending');
+  const [statusFilter, setStatusFilter] = useState(['pending', 'paid', 'commission_paid'].includes(initialStatus) ? initialStatus : initialStatus === '' ? '' : 'pending');
+  const showPaymentType = statusFilter === 'paid';
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
   const [editRequests, setEditRequests] = useState([]);
   const hasWaitingEditApproval = !isManager && list.some((invoice) => invoice.status === 'paid' && invoice.edit_request_status === 'pending');
+  const invoiceFilters = {
+    status: statusFilter,
+    search,
+    customer_name: customerName,
+    vehicle_plate: vehiclePlate,
+    date_from: dateFrom,
+    date_to: dateTo,
+    paid_by: paidBy,
+    created_by: createdBy,
+    amount_min: amountInTomans(paidMin),
+    amount_max: amountInTomans(paidMax),
+    payment_source: paymentSource,
+  };
 
   useEffect(() => {
-    dispatch(fetchInvoices({ status: statusFilter, search }));
-  }, [dispatch, statusFilter, search]);
+    pageRequestRef.current = false;
+    const refresh = () => {
+      dispatch(fetchInvoices({ ...invoiceFilters, page: 1 }));
+      invoicesAPI.stats().then(({ data }) => setCounts(data)).catch(() => {});
+    };
+    refresh();
+    window.addEventListener('mohaseb:data-changed', refresh);
+    return () => window.removeEventListener('mohaseb:data-changed', refresh);
+  }, [dispatch, statusFilter, search, customerName, vehiclePlate, dateFrom, dateTo, paidBy, createdBy, paidMin, paidMax, paymentSource]);
 
   useEffect(() => {
-    if (!hasWaitingEditApproval) return undefined;
-    const timer = window.setInterval(() => dispatch(fetchInvoices({ status: statusFilter, search })), 3000);
-    return () => window.clearInterval(timer);
-  }, [dispatch, hasWaitingEditApproval, statusFilter, search]);
+    invoicesAPI.filterOptions().then(({ data }) => setFilterOptions(data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !hasMore || loading || loadingMore) return undefined;
+    const observer = new IntersectionObserver(entries => {
+      if (!entries.some(entry => entry.isIntersecting) || pageRequestRef.current) return;
+      pageRequestRef.current = true;
+      dispatch(fetchInvoices({ ...invoiceFilters, page: currentPage + 1 }))
+        .finally(() => { pageRequestRef.current = false; });
+    }, { rootMargin: '300px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [dispatch, hasMore, loading, loadingMore, currentPage, statusFilter, search, customerName, vehiclePlate, dateFrom, dateTo, paidBy, createdBy, paidMin, paidMax, paymentSource]);
 
   const refreshEditRequests = async () => {
     if (!isManager) return;
@@ -45,13 +106,13 @@ const Invoices = () => {
   useEffect(() => {
     if (!isManager) return undefined;
     refreshEditRequests();
-    const timer = window.setInterval(refreshEditRequests, 3000);
-    return () => window.clearInterval(timer);
+    window.addEventListener('mohaseb:data-changed', refreshEditRequests);
+    return () => window.removeEventListener('mohaseb:data-changed', refreshEditRequests);
   }, [isManager]);
 
   const requestEdit = async (id) => {
     setActionLoading(`${id}_request`);
-    try { await invoicesAPI.requestEdit(id); await dispatch(fetchInvoices({ status: statusFilter, search })); }
+    try { await invoicesAPI.requestEdit(id); await dispatch(fetchInvoices({ ...invoiceFilters, page: 1 })); }
     finally { setActionLoading(null); }
   };
 
@@ -60,7 +121,7 @@ const Invoices = () => {
     try {
       await invoicesAPI.reviewEditRequest(item.invoice_id, item.id, decision);
       await refreshEditRequests();
-      await dispatch(fetchInvoices({ status: statusFilter, search }));
+      await dispatch(fetchInvoices({ ...invoiceFilters, page: 1 }));
     } finally { setActionLoading(null); }
   };
 
@@ -133,16 +194,51 @@ const Invoices = () => {
       )}
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="جستجو: شماره فاکتور، نام مشتری، شماره پلاک یا VIN..."
-            className="w-full px-4 py-3 pr-12 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-          />
-          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500">🔍</span>
+      <section className="rounded-2xl border border-slate-700/50 bg-slate-800/30 p-4 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-slate-200">جستجو و فیلتر فاکتورها</h3>
+          <button
+            type="button"
+      onClick={() => { setSearch(''); setCustomerName(''); setVehiclePlate(''); setDateFrom(''); setDateTo(''); setPaidBy(''); setCreatedBy(''); setPaidMin(''); setPaidMax(''); setPaymentSource(''); }}
+            disabled={!search && !customerName && !vehiclePlate && !dateFrom && !dateTo && !paidBy && !createdBy && !paidMin && !paidMax && !paymentSource}
+            className="text-xs text-blue-300 hover:text-blue-200 disabled:text-slate-600 disabled:cursor-not-allowed"
+          >
+            پاک کردن فیلترها
+          </button>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <label className="space-y-1.5">
+            <span className="text-xs text-slate-400">نام مشتری یا صاحب برگ سبز</span>
+            <input type="search" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="نام مشتری یا صاحب برگ سبز" className="w-full rounded-xl border border-slate-700/70 bg-slate-800/70 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-xs text-slate-400">شماره پلاک</span>
+            <input type="search" value={vehiclePlate} onChange={e => setVehiclePlate(e.target.value)} placeholder="شماره پلاک را وارد کنید" className="w-full rounded-xl border border-slate-700/70 bg-slate-800/70 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-xs text-slate-400">شماره فاکتور یا VIN</span>
+            <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="شماره فاکتور یا VIN" className="w-full rounded-xl border border-slate-700/70 bg-slate-800/70 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+          </label>
+          <div>
+            <span className="mb-1.5 block text-xs text-slate-400">از تاریخ صدور</span>
+            <JalaliDatePicker value={dateFrom} onChange={setDateFrom} placeholder="انتخاب تاریخ شروع" className="w-full" />
+          </div>
+          <div>
+            <span className="mb-1.5 block text-xs text-slate-400">تا تاریخ صدور</span>
+            <JalaliDatePicker value={dateTo} onChange={setDateTo} placeholder="انتخاب تاریخ پایان" className="w-full" />
+          </div>
+        </div>
+        <div>
+          <button type="button" onClick={() => setAdvancedOpen(value => !value)} aria-expanded={advancedOpen} className="text-xs text-blue-300 hover:text-blue-200">
+            {advancedOpen ? '− بستن جستجوی پیشرفته' : '+ جستجوی پیشرفته'}
+          </button>
+          {advancedOpen && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 mt-3 rounded-xl border border-slate-700/50 bg-slate-900/30 p-3">
+            <label className="space-y-1.5"><span className="text-xs text-slate-400">پرداخت‌کننده</span><select value={paidBy} onChange={e => setPaidBy(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white"><option value="">همه پرداخت‌کنندگان</option>{filterOptions.payers.map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
+            {canSeeIssuer && <label className="space-y-1.5"><span className="text-xs text-slate-400">صادرکننده</span><select value={createdBy} onChange={e => setCreatedBy(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white"><option value="">همه صادرکنندگان</option>{filterOptions.issuers.map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>}
+            <label className="space-y-1.5"><span className="text-xs text-slate-400">حداقل مبلغ کل (هزار تومان)</span><input inputMode="numeric" value={paidMin} onChange={e => setPaidMin(formatThousands(e.target.value))} placeholder="مثلاً 100" className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder-slate-500" /></label>
+            <label className="space-y-1.5"><span className="text-xs text-slate-400">حداکثر مبلغ کل (هزار تومان)</span><input inputMode="numeric" value={paidMax} onChange={e => setPaidMax(formatThousands(e.target.value))} placeholder="مثلاً 500" className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder-slate-500" /></label>
+            <label className="space-y-1.5"><span className="text-xs text-slate-400">نوع پرداخت</span><select value={paymentSource} onChange={e => setPaymentSource(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white"><option value="">همه</option><option value="customer">کارت مشتری</option><option value="office">کارت دفتر</option></select></label>
+          </div>}
         </div>
         <div className="flex flex-wrap gap-2" role="tablist" aria-label="فیلتر وضعیت فاکتورها">
           {invoiceTabs.map(tab => (
@@ -154,15 +250,15 @@ const Invoices = () => {
               onClick={() => selectTab(tab.value)}
               className={`px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${statusFilter === tab.value ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-800/50 border-slate-700/50 text-slate-300 hover:bg-slate-700/60'}`}
             >
-              {tab.label}
+              {tab.value === 'pending' ? `${tab.label} (${counts.pending})` : tab.value === 'paid' ? `${tab.label} (${counts.paid})` : tab.value === 'commission_paid' ? `${tab.label} (${counts.commission_paid})` : `${tab.label} (${counts.all})`}
             </button>
           ))}
         </div>
-      </div>
+      </section>
 
       {/* Invoice Table */}
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
-        {loading ? <Spinner /> : list.length === 0 ? (
+        {loading && list.length === 0 ? <Spinner /> : list.length === 0 ? (
           <EmptyState icon="🧾" title="فاکتوری یافت نشد" description="با کلیک روی فاکتور جدید، اولین فاکتور خود را صادر کنید" />
         ) : (
           <div className="overflow-x-auto">
@@ -172,8 +268,11 @@ const Invoices = () => {
                   <th className="text-right py-4 px-5 font-medium">شماره</th>
                   <th className="text-right py-4 px-5 font-medium">مشتری</th>
                   <th className="text-right py-4 px-5 font-medium">زمان ایجاد</th>
-                  <th className="text-right py-4 px-5 font-medium">مبلغ</th>
+                  <th className="text-right py-4 px-5 font-medium">مبلغ فاکتور</th>
+                  <th className="text-right py-4 px-5 font-medium">مجموع مبلغ پرداختی</th>
+                  {showPaymentType && <th className="text-right py-4 px-5 font-medium">نوع پرداخت</th>}
                   <th className="text-right py-4 px-5 font-medium">وضعیت</th>
+                  <th className="text-right py-4 px-5 font-medium">پرداخت‌کننده</th>
                   {canSeeIssuer && <th className="text-right py-4 px-5 font-medium">صادرکننده</th>}
                   <th className="py-4 px-5 font-medium text-right">عملیات</th>
                 </tr>
@@ -193,8 +292,15 @@ const Invoices = () => {
                       )}
                     </td>
                     <td className="py-4 px-5 text-slate-400 text-xs">{persianDate(inv.created_at)}<span className="block text-slate-500 mt-1">{inv.created_at ? new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' }).format(new Date(inv.created_at)) : ''}</span></td>
-                    <td className="py-4 px-5 text-white font-medium">{formatPrice(inv.total_amount)}</td>
-                    <td className="py-4 px-5"><StatusBadge status={inv.status} /></td>
+                    <td className="py-4 px-5 text-slate-300">{formatPrice(inv.total_amount)}</td>
+                    <td className="py-4 px-5 text-white font-semibold">{formatPrice(inv.paid_amount ?? (inv.status === 'paid' ? inv.final_amount : 0))}</td>
+                    {showPaymentType && <td className="py-4 px-5 text-slate-300">
+                      {inv.status === 'paid'
+                        ? (inv.card_payment_source === 'office' ? 'کارت دفتر' : 'کارت مشتری')
+                        : '—'}
+                    </td>}
+                    <td className="py-4 px-5"><StatusBadge status={inv.commission_paid ? 'commission_paid' : inv.status} /></td>
+                    <td className="py-4 px-5 text-slate-300">{inv.paid_by_name || '—'}</td>
                     {canSeeIssuer && <td className="py-4 px-5 text-slate-300">{inv.operator_name || '—'}</td>}
                     <td className="py-4 px-5">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -253,6 +359,9 @@ const Invoices = () => {
             </table>
           </div>
         )}
+        <div ref={sentinelRef} className="min-h-3" />
+        {(loadingMore || hasMore) && <div className="py-4 text-center text-xs text-slate-400">{loadingMore ? 'در حال بارگذاری فاکتورهای بعدی…' : 'برای مشاهده موارد بعدی اسکرول کنید'}</div>}
+        {!hasMore && list.length > 0 && <div className="py-3 text-center text-xs text-slate-500">همه {list.length.toLocaleString('fa-IR')} فاکتور بارگذاری شد</div>}
       </div>
 
       <ConfirmDialog

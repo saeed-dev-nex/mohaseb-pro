@@ -6,7 +6,7 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from .models import (
     Customer, Service, Invoice, InvoiceItem, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
-    Cheque
+    Cheque, InvoiceSettings
 )
 
 
@@ -65,7 +65,7 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Document
-        fields = ['id', 'customer', 'title', 'file', 'file_url', 'description', 'tags', 'file_path', 'uploaded_at', 'updated_at']
+        fields = ['id', 'customer', 'invoice', 'title', 'file', 'file_url', 'description', 'tags', 'file_path', 'uploaded_at', 'updated_at']
         read_only_fields = ['uploaded_at', 'updated_at', 'file_url']
 
     def get_file_url(self, obj):
@@ -82,6 +82,14 @@ class BackupConfigSerializer(serializers.ModelSerializer):
         model = BackupConfig
         fields = ['backup_path', 'auto_backup', 'backup_frequency', 'backup_hour', 'last_backup_at', 'last_backup_path']
         read_only_fields = ['last_backup_at', 'last_backup_path']
+
+
+class InvoiceSettingsSerializer(serializers.ModelSerializer):
+    office_card_fee_threshold = serializers.DecimalField(max_digits=15, decimal_places=0, min_value=0)
+
+    class Meta:
+        model = InvoiceSettings
+        fields = ['office_card_fee_threshold', 'show_discount_field', 'show_tax_field']
 
 
 class CustomerListSerializer(serializers.ModelSerializer):
@@ -212,8 +220,9 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'service', 'service_title', 'service_title_snapshot',
             'quantity', 'main_price', 'extra_price', 'commission',
-            'notes', 'line_total', 'line_commission'
+            'notes', 'line_total', 'line_commission', 'is_office_card_fee'
         ]
+        read_only_fields = ['is_office_card_fee']
 
     def get_service_title(self, obj):
         return obj.service_title_snapshot or (obj.service.title if obj.service else '---')
@@ -258,8 +267,9 @@ class InvoiceSerializer(serializers.ModelSerializer):
     payments = InvoicePaymentSerializer(many=True, read_only=True)
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     operator_name = serializers.SerializerMethodField()
+    paid_by_name = serializers.SerializerMethodField()
     final_amount = serializers.SerializerMethodField()
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    status_display = serializers.SerializerMethodField()
     edit_request_status = serializers.SerializerMethodField()
     can_edit = serializers.SerializerMethodField()
     paid_amount = serializers.SerializerMethodField()
@@ -278,14 +288,17 @@ class InvoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invoice
         fields = [
-            'id', 'invoice_number', 'customer', 'customer_name', 'operator_name',
+            'id', 'invoice_number', 'customer', 'customer_name', 'operator_name', 'paid_by_name',
+            'card_payment_source',
             'date', 'due_date', 'description', 'total_amount',
             'commission_total', 'discount', 'tax', 'status', 'status_display',
+            'commission_paid',
             'paper_size', 'final_amount', 'items', 'created_at', 'updated_at',
             'edit_request_status', 'can_edit', 'payments', 'paid_amount', 'remaining_amount',
             # vehicle / custom fields
             'vehicle_plate', 'vehicle_vin', 'vehicle_model', 'vehicle_type',
             'vehicle_year', 'custom_fields', 'created_by',
+            'green_card_owner_name', 'green_card_owner_national_id',
         ]
         read_only_fields = ['invoice_number', 'created_at', 'updated_at', 'created_by']
 
@@ -293,6 +306,13 @@ class InvoiceSerializer(serializers.ModelSerializer):
     def get_operator_name(self, obj):
       if not obj.created_by: return ''
       return obj.created_by.get_full_name() or obj.created_by.username
+
+    def get_status_display(self, obj):
+      return 'کارمزد پرداخت شده' if obj.commission_paid else obj.get_status_display()
+
+    def get_paid_by_name(self, obj):
+      if not obj.paid_by: return ''
+      return obj.paid_by.get_full_name() or obj.paid_by.username
 
     def get_edit_request_status(self, obj):
       request = self.context.get('request')
@@ -332,6 +352,27 @@ class InvoiceSerializer(serializers.ModelSerializer):
             total += (int(mp) + int(ep)) * int(qty)
         return total
 
+    def _sync_office_card_fee(self, invoice, items_total):
+        """Rebuild the generated office-card fee row from trusted invoice data."""
+        InvoiceItem.objects.filter(invoice=invoice, is_office_card_fee=True).delete()
+        threshold = int(InvoiceSettings.load().office_card_fee_threshold or 0)
+        fee = 0
+        if invoice.card_payment_source == 'office' and threshold > 0 and items_total > threshold:
+            # 10,000 toman for each 1,000,000 toman, prorated to whole toman.
+            fee = (int(items_total) * 10_000) // 1_000_000
+            if fee:
+                InvoiceItem.objects.create(
+                    invoice=invoice,
+                    service_title_snapshot='واریزی',
+                    quantity=1,
+                    main_price=fee,
+                    extra_price=0,
+                    commission=0,
+                    is_office_card_fee=True,
+                )
+        invoice.total_amount = int(items_total) + fee
+        invoice.save(update_fields=['total_amount', 'updated_at'])
+
     def create(self, validated_data):
         items_data = validated_data.pop('items')
         # commission_total comes directly from validated_data (manual input)
@@ -342,8 +383,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             if svc and not item_data.get('service_title_snapshot'):
                 item_data['service_title_snapshot'] = svc.title
             InvoiceItem.objects.create(invoice=invoice, **item_data)
-        invoice.total_amount = total
-        invoice.save()
+        self._sync_office_card_fee(invoice, total)
         return invoice
 
     def update(self, instance, validated_data):
@@ -351,15 +391,19 @@ class InvoiceSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if items_data is not None:
-            instance.items.all().delete()
-            total = self._calc_total(items_data)
+            instance.items.filter(is_office_card_fee=False).delete()
             for item_data in items_data:
+                item_data.pop('is_office_card_fee', None)
                 svc = item_data.get('service')
                 if svc and not item_data.get('service_title_snapshot'):
                     item_data['service_title_snapshot'] = svc.title
                 InvoiceItem.objects.create(invoice=instance, **item_data)
-            instance.total_amount = total
+        items_total = self._calc_total([
+            {'quantity': item.quantity, 'main_price': item.main_price, 'extra_price': item.extra_price}
+            for item in instance.items.filter(is_office_card_fee=False)
+        ])
         instance.save()
+        self._sync_office_card_fee(instance, items_total)
         return instance
 
 

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchServices } from '../features/servicesSlice';
 import { fetchCustomers, createCustomer } from '../features/customersSlice';
-import { invoicesAPI, vehicleTypesAPI } from '../services/api';
+import { invoicesAPI, vehicleTypesAPI, invoiceSettingsAPI, documentsAPI } from '../services/api';
 import PriceInput from '../components/PriceInput';
 import PlateInput from '../components/PlateInput';
 import JalaliDatePicker from '../components/JalaliDatePicker';
@@ -367,6 +367,7 @@ const InvoiceForm = () => {
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [creatingVehicleType, setCreatingVehicleType] = useState(false);
   const [inlineNotice, setInlineNotice] = useState('');
+  const [invoiceDocuments, setInvoiceDocuments] = useState([]);
   // New customer modal state
   const [newCustomerModal, setNewCustomerModal] = useState(null); // null | { pendingName, resolve }
   const [customerError, setCustomerError] = useState('');
@@ -434,22 +435,36 @@ const InvoiceForm = () => {
 
   const [form, setForm] = useState({
     customer: '', status: 'pending',
+    card_payment_source: 'customer',
     date: new Date().toISOString().slice(0, 10),
     due_date: '', description: '',
     discount: 0, tax: 0, commission_total: 0,
     paper_size: 'a5',
     vehicle_plate: '', vehicle_vin: '', vehicle_model: '', vehicle_type: '', vehicle_year: '',
+    green_card_owner_name: '', green_card_owner_national_id: '',
     tags: [],
   });
   const [items, setItems] = useState([]);
+  const [officeCardThreshold, setOfficeCardThreshold] = useState(0);
+  const [invoiceFields, setInvoiceFields] = useState({ show_discount_field: true, show_tax_field: true });
 
-  useEffect(() => { dispatch(fetchServices()); dispatch(fetchCustomers()); }, [dispatch]);
+  useEffect(() => {
+    const refreshReferences = () => { dispatch(fetchServices()); dispatch(fetchCustomers()); };
+    refreshReferences();
+    window.addEventListener('mohaseb:data-changed', refreshReferences);
+    invoiceSettingsAPI.get().then(({ data }) => {
+      setOfficeCardThreshold(Number(data.office_card_fee_threshold) || 0);
+      setInvoiceFields({ show_discount_field: data.show_discount_field !== false, show_tax_field: data.show_tax_field !== false });
+    }).catch(() => {});
+    return () => window.removeEventListener('mohaseb:data-changed', refreshReferences);
+  }, [dispatch]);
 
   useEffect(() => {
     if (!isEdit) return;
     invoicesAPI.detail(id).then(({ data }) => {
       setForm({
         customer: data.customer || '', status: data.status || 'pending',
+        card_payment_source: data.card_payment_source || 'customer',
         date: data.date ? data.date.slice(0, 10) : '',
         due_date: data.due_date || '', description: data.description || '',
         discount: data.discount || 0, tax: data.tax || 0,
@@ -458,9 +473,11 @@ const InvoiceForm = () => {
         vehicle_plate: data.vehicle_plate || '', vehicle_vin: data.vehicle_vin || '',
         vehicle_model: data.vehicle_model || '', vehicle_type: data.vehicle_type || '',
         vehicle_year: data.vehicle_year || '',
+        green_card_owner_name: data.green_card_owner_name || '',
+        green_card_owner_national_id: data.green_card_owner_national_id || '',
         tags: data.tags || [],
       });
-      setItems((data.items || []).map((it) => ({
+      setItems((data.items || []).filter((it) => !it.is_office_card_fee).map((it) => ({
         _key: Math.random(), service: it.service || '',
         service_title_snapshot: it.service_title_snapshot || it.service_title || '',
         quantity: it.quantity || 1, main_price: it.main_price || '',
@@ -472,9 +489,11 @@ const InvoiceForm = () => {
   // Calculations
   const subtotal = items.reduce((s, it) =>
     s + ((Number(it.main_price) || 0) + (Number(it.extra_price) || 0)) * (Number(it.quantity) || 1), 0);
-  const taxAmount = (subtotal * Number(form.tax || 0)) / 100;
   const commissionAmt = Number(form.commission_total || 0);
-  const finalAmount = subtotal + commissionAmt + taxAmount - Number(form.discount || 0);
+  const officeCardFee = form.card_payment_source === 'office' && officeCardThreshold > 0 && subtotal > officeCardThreshold
+    ? Math.floor(subtotal / 100) : 0;
+  const taxAmount = ((subtotal + officeCardFee) * Number(form.tax || 0)) / 100;
+  const finalAmount = subtotal + officeCardFee + commissionAmt + taxAmount - Number(form.discount || 0);
 
   const handleItemChange = useCallback((idx, updated) => {
     setItems((prev) => prev.map((it, i) => (i === idx ? updated : it)));
@@ -505,6 +524,8 @@ const InvoiceForm = () => {
       commission_total: Number(form.commission_total) || 0,
       due_date: form.due_date || null,
       vehicle_year: form.vehicle_year || '',
+      green_card_owner_name: form.green_card_owner_name || '',
+      green_card_owner_national_id: form.green_card_owner_national_id || '',
       tags: form.tags || [],
       items: items.map((it) => ({
         service: it.service ? Number(it.service) : null,
@@ -517,7 +538,18 @@ const InvoiceForm = () => {
     };
     try {
       if (isEdit) { await invoicesAPI.update(id, payload); navigate(`/invoices/${id}`); }
-      else { const { data } = await invoicesAPI.create(payload); navigate(`/invoices/${data.id}`); }
+      else {
+        const { data } = await invoicesAPI.create(payload);
+        for (const file of invoiceDocuments) {
+          const fd = new FormData();
+          fd.append('customer', String(form.customer));
+          fd.append('invoice', String(data.id));
+          fd.append('title', file.name);
+          fd.append('file', file);
+          await documentsAPI.create(fd);
+        }
+        navigate(`/invoices/${data.id}`);
+      }
     } catch (err) {
       const msg = err.response?.data;
       setError(typeof msg === 'object' ? JSON.stringify(msg) : 'خطا در ذخیره فاکتور');
@@ -587,6 +619,15 @@ const InvoiceForm = () => {
               onChange={(v) => setField('status', v)}
               options={STATUS_OPTIONS.map((s) => ({ value: s.value, label: s.label }))}
               placeholder="وضعیت"
+              clearable={false}
+            />
+          </Field>
+          <Field label="کارت پرداخت">
+            <SearchableSelect
+              value={form.card_payment_source}
+              onChange={(v) => setField('card_payment_source', v)}
+              options={[{ value: 'customer', label: 'کارت مشتری' }, { value: 'office', label: 'کارت دفتر' }]}
+              placeholder="انتخاب کارت"
               clearable={false}
             />
           </Field>
@@ -707,6 +748,17 @@ const InvoiceForm = () => {
         );
       })()}
 
+      <Section title="صاحب برگ سبز" icon="🪪">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="نام مندرج روی برگ سبز">
+            <input type="text" value={form.green_card_owner_name} onChange={(e) => setField('green_card_owner_name', toPersianKeyboard(e.target.value))} className={inputCls} placeholder="نام صاحب خودرو" maxLength={255} />
+          </Field>
+          <Field label="کد ملی صاحب خودرو">
+            <input type="text" value={form.green_card_owner_national_id} onChange={(e) => setField('green_card_owner_national_id', e.target.value)} className={inputCls} placeholder="کد ملی" dir="ltr" maxLength={20} />
+          </Field>
+        </div>
+      </Section>
+
       {/* Items */}
       <Section title={`ردیف‌های فاکتور (${items.length})`} icon="🧾">
         <div className="space-y-2">
@@ -735,17 +787,23 @@ const InvoiceForm = () => {
         </div>
       </Section>
 
+      {form.card_payment_source === 'office' && officeCardFee > 0 && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          با توجه به مبلغ خدمات و کارت دفتر، ردیف «واریزی» به مبلغ {fmt(officeCardFee)} به‌صورت خودکار به فاکتور اضافه می‌شود.
+        </div>
+      )}
+
       {/* Financial Summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <Section title="خلاصه مالی" icon="💰">
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="تخفیف">
+            <div className={`grid grid-cols-1 ${invoiceFields.show_discount_field && invoiceFields.show_tax_field ? 'sm:grid-cols-2' : ''} gap-3`}>
+              {invoiceFields.show_discount_field && <Field label="تخفیف">
                 <PriceInput value={form.discount} onChange={(v) => setField('discount', v)} />
-              </Field>
-              <Field label="مالیات (%)">
+              </Field>}
+              {invoiceFields.show_tax_field && <Field label="مالیات (%)">
                 <input type="number" step="0.1" min="0" max="100" placeholder="0" value={form.tax} onChange={(e) => setField('tax', e.target.value)} className={inputCls} />
-              </Field>
+              </Field>}
             </div>
 
             {/* Global Commission */}
@@ -763,19 +821,23 @@ const InvoiceForm = () => {
                 <span className="text-slate-400">جمع خدمات</span>
                 <span className="text-slate-200">{fmt(subtotal)}</span>
               </div>
+              {officeCardFee > 0 && <div className="flex justify-between text-sm">
+                <span className="text-amber-300">واریزی کارت دفتر</span>
+                <span className="text-amber-300">+{fmt(officeCardFee)}</span>
+              </div>}
               {Number(form.commission_total) > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-yellow-400/80">💼 کارمزد (درآمد شما)</span>
                   <span className="text-yellow-400">+{fmt(Number(form.commission_total))}</span>
                 </div>
               )}
-              {Number(form.tax) > 0 && (
+              {invoiceFields.show_tax_field && Number(form.tax) > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">مالیات ({form.tax}%)</span>
                   <span className="text-orange-400">+{fmt(taxAmount)}</span>
                 </div>
               )}
-              {Number(form.discount) > 0 && (
+              {invoiceFields.show_discount_field && Number(form.discount) > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">تخفیف</span>
                   <span className="text-green-400">−{fmt(Number(form.discount))}</span>
@@ -824,6 +886,11 @@ const InvoiceForm = () => {
               </div>
             )}
           </div>
+          {!isEdit && <div className="mt-4 space-y-2">
+            <label className="text-xs text-slate-400 block">📎 مدارک پیوست فاکتور (اختیاری)</label>
+            <input type="file" multiple onChange={event => setInvoiceDocuments(Array.from(event.target.files || []))} className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-white" />
+            {invoiceDocuments.length > 0 && <p className="text-xs text-slate-400">{invoiceDocuments.map(file => file.name).join('، ')} — پس از ثبت فاکتور در پوشه مدارک مشتری ذخیره می‌شوند.</p>}
+          </div>}
         </Section>
       </div>
 

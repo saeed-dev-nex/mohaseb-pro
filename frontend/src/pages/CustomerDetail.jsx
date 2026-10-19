@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { customersAPI, documentsAPI, auditAPI } from '../services/api';
 
 const fmt = (n) => new Intl.NumberFormat('fa-IR').format(Number(n) || 0) + ' تومان';
@@ -93,6 +93,7 @@ const TagInput = ({ tags = [], onChange }) => {
 const CustomerDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const fileInputRef = useRef();
 
   const [customer, setCustomer] = useState(null);
@@ -100,7 +101,7 @@ const CustomerDetail = () => {
   const [docs, setDocs] = useState([]);
   const [auditEvents, setAuditEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('invoices');
+  const [tab, setTab] = useState(() => searchParams.get('tab') === 'edit' ? 'edit' : 'invoices');
 
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
@@ -130,6 +131,22 @@ const CustomerDetail = () => {
       })
       .catch(() => navigate('/customers'))
       .finally(() => setLoading(false));
+  }, [id]);
+
+  useEffect(() => {
+    const refresh = () => Promise.all([
+      customersAPI.detail(id),
+      customersAPI.invoices(id),
+      documentsAPI.list({ customer: id }),
+      auditAPI.list({ object_type: 'customer', object_id: id }),
+    ]).then(([cRes, iRes, dRes, aRes]) => {
+      setCustomer(cRes.data);
+      setInvoices(iRes.data);
+      setDocs(dRes.data);
+      setAuditEvents(aRes.data);
+    }).catch(() => {});
+    window.addEventListener('mohaseb:data-changed', refresh);
+    return () => window.removeEventListener('mohaseb:data-changed', refresh);
   }, [id]);
 
   useEffect(() => {

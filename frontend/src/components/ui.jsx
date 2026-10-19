@@ -30,6 +30,7 @@ export const StatusBadge = ({ status }) => {
     draft: { label: 'پیش‌نویس', cls: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
     pending: { label: 'در انتظار', cls: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
     paid: { label: 'پرداخت شده', cls: 'bg-green-500/20 text-green-400 border-green-500/30' },
+    commission_paid: { label: 'کارمزد پرداخت شده', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
     cancelled: { label: 'لغو شده', cls: 'bg-red-500/20 text-red-400 border-red-500/30' },
   };
   const { label, cls } = map[status] || { label: status, cls: '' };

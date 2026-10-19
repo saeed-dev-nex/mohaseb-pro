@@ -24,8 +24,13 @@ const NewInvoice = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    dispatch(fetchCustomers());
-    dispatch(fetchServices({ active: 'true' }));
+    const refreshReferences = () => {
+      dispatch(fetchCustomers());
+      dispatch(fetchServices({ active: 'true' }));
+    };
+    refreshReferences();
+    window.addEventListener('mohaseb:data-changed', refreshReferences);
+    return () => window.removeEventListener('mohaseb:data-changed', refreshReferences);
   }, [dispatch]);
 
   const addItem = () => setItems(prev => [...prev, { ...emptyItem }]);

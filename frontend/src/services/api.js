@@ -68,10 +68,14 @@ export const invoicesAPI = {
   patch: (id, data) => api.patch(`invoices/${id}/`, data),
   delete: (id) => api.delete(`invoices/${id}/`),
   markPaid: (id) => api.post(`invoices/${id}/mark_paid/`),
+  markCommissionPaid: (id, commission_paid = true) => api.post(`invoices/${id}/mark_commission_paid/`, { commission_paid }),
   cancel: (id) => api.post(`invoices/${id}/cancel/`),
   changeStatus: (id, newStatus) => api.patch(`invoices/${id}/change_status/`, { status: newStatus }),
   overdue: () => api.get('invoices/overdue/'),
   report: (params = {}) => api.get('invoices/report/', { params }),
+  stats: () => api.get('invoices/stats/'),
+  filterOptions: () => api.get('invoices/filter_options/'),
+  exportExcel: (params = {}) => api.get('invoices/export_excel/', { params, responseType: 'blob' }),
   exportCsv: (params = {}) => api.get('invoices/export_csv/', { params, responseType: 'blob' }),
   quickCreate: (data) => api.post('invoices/quick_create/', data),
   requestEdit: (id) => api.post(`invoices/${id}/request-edit/`),
@@ -82,6 +86,7 @@ export const invoicesAPI = {
   updatePayment: (invoiceId, paymentId, data) => api.patch(`invoices/${invoiceId}/payments/${paymentId}/`, data),
   deletePayment: (invoiceId, paymentId) => api.delete(`invoices/${invoiceId}/payments/${paymentId}/`),
   history: (id) => api.get(`invoices/${id}/history/`),
+  restoreVersion: (id, auditId) => api.post(`invoices/${id}/restore-version/`, { audit_id: auditId }),
 };
 
 export const auditAPI = {
@@ -156,6 +161,11 @@ export const backupConfigAPI = {
   runBackup: (data = {}) => api.post('backup-config/run_backup/', data),
   runBackupDownload: (data = {}) => api.post('backup-config/run_backup/', data, { responseType: 'blob' }),
   checkAuto: () => api.get('backup-config/check_auto/'),
+};
+
+export const invoiceSettingsAPI = {
+  get: () => api.get('invoice-settings/'),
+  update: (data) => api.patch('invoice-settings/update_config/', data),
 };
 
 // ---- Vehicle Types ----

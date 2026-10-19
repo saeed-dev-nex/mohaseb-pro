@@ -23,6 +23,7 @@
         <label>🔒 رمز عبور</label>
         <input type="password" id="login-password" placeholder="••••••••" />
       </div>
+      <label class="remember-row"><input type="checkbox" id="remember-me" checked /> <span>مرا به خاطر بسپار و ورود خودکار</span></label>
     </div>
     <div id="login-error" class="error-msg" style="display:none;"></div>
     <button id="login-btn" class="btn-primary btn-gradient">ورود به حساب</button>
@@ -108,6 +109,14 @@
 
 
     <!-- Status -->
+    <div class="glass-card">
+      <div class="form-group" style="margin-bottom:0;">
+        <label for="card-payment-source">کارت پرداخت</label>
+        <select id="card-payment-source"><option value="customer">کارت مشتری</option><option value="office">کارت دفتر</option></select>
+      </div>
+    </div>
+
+    <!-- Status -->
     <div class="section">
       <div class="status-row">
         <button class="status-btn active" data-status="pending">⏳ پرداخت نشده</button>
@@ -156,6 +165,40 @@
       </div>
     </div>
   </div>
+
+  <template id="item-row-template">
+    <div class="item-row">
+      <span class="item-num"></span>
+      <button type="button" class="item-remove" data-action="remove-row">×</button>
+      <div class="item-title-input">
+        <input type="text" class="item-title" placeholder="عنوان خدمت (تایپ کنید برای جستجو)" autocomplete="off" />
+        <div class="svc-suggestions" style="display:none;"></div>
+        <button type="button" class="btn-outline-sm svc-picker-toggle">افزودن از لیست خدمات</button>
+        <div class="svc-picker-list" style="display:none;"></div>
+      </div>
+      <div class="item-prices">
+        <div>
+          <span class="price-label">قیمت اصلی</span>
+          <div class="price-wrap">
+            <input type="number" class="item-main-price" placeholder="0" />
+            <span class="price-unit">هزار ت</span>
+          </div>
+        </div>
+        <div>
+          <span class="price-label">قیمت اضافی</span>
+          <div class="price-wrap">
+            <input type="number" class="item-extra-price" placeholder="0" />
+            <span class="price-unit">هزار ت</span>
+          </div>
+        </div>
+        <div>
+          <span class="price-label">تعداد</span>
+          <input type="number" class="item-qty" min="1" placeholder="1" />
+        </div>
+      </div>
+      <div class="item-line-total"></div>
+    </div>
+  </template>
 
   <script src="popup.js"></script>
 </body>

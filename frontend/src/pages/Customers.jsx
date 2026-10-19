@@ -62,7 +62,10 @@ const Customers = () => {
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    dispatch(fetchCustomers({ search }));
+    const refresh = () => dispatch(fetchCustomers({ search }));
+    refresh();
+    window.addEventListener('mohaseb:data-changed', refresh);
+    return () => window.removeEventListener('mohaseb:data-changed', refresh);
   }, [dispatch, search]);
 
   const openAdd = () => { setEditTarget(null); setModalOpen(true); };

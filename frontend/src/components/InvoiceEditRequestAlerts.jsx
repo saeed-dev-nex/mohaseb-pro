@@ -12,19 +12,20 @@ const InvoiceEditRequestAlerts = () => {
   useEffect(() => {
     if (!isManager) return undefined;
     let active = true;
-    let timer;
     const refresh = async () => {
       try {
         const { data } = await invoicesAPI.editRequests();
         if (active) setRequests(data);
       } catch {
         // Keep the last known requests visible while the API is temporarily unavailable.
-      } finally {
-        if (active) timer = window.setTimeout(refresh, 3000);
       }
     };
     refresh();
-    return () => { active = false; window.clearTimeout(timer); };
+    window.addEventListener('mohaseb:data-changed', refresh);
+    return () => {
+      active = false;
+      window.removeEventListener('mohaseb:data-changed', refresh);
+    };
   }, [isManager]);
 
   const review = async (item, decision) => {

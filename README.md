@@ -80,7 +80,7 @@ npm run dev
 ## افزونه‌های مرورگر
 
 - **Chrome:** از صفحهٔ افزونه‌ها حالت Developer mode را فعال و `chrome-extension/` را بارگذاری کنید.
-- **Firefox:** در `about:debugging` از بخش This Firefox گزینهٔ Load Temporary Add-on را بزنید و `firefox-extension/manifest.json` را انتخاب کنید. برای ساخت بستهٔ ارسال به AMO، اسکریپت `firefox-extension/package.ps1` را اجرا کنید.
+- **Firefox:** برای آزمایش موقت، `about:debugging` → `This Firefox` → `Load Temporary Add-on` را باز کنید و `firefox-extension/manifest.json` را انتخاب کنید؛ نصب موقت با بستن Firefox پاک می‌شود. برای نصب پایدار، بسته را با `firefox-extension/package.ps1` بسازید و پس از دریافت امضای AMO، فایل XPI را نصب کنید. راهنمای تصویری مرحله‌به‌مرحله در [`firefox-extension/INSTALL_FIREFOX_FA.md`](firefox-extension/INSTALL_FIREFOX_FA.md) است.
 
 افزونه‌ها به backend محلی در `http://localhost:8000` متصل می‌شوند.
 

@@ -55,7 +55,11 @@ export default function UsersPage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    window.addEventListener('mohaseb:data-changed', load);
+    return () => window.removeEventListener('mohaseb:data-changed', load);
+  }, []);
 
   const openCreate = () => {
     setEditingUser(null);

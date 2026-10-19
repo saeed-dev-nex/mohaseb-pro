@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { invoicesAPI, profileAPI, customersAPI } from '../services/api';
+import { invoicesAPI, profileAPI, customersAPI, invoiceSettingsAPI } from '../services/api';
 import { useSelector } from 'react-redux';
 import { toJalali, numberToWords } from '../utils/persian';
 import PriceInput from '../components/PriceInput';
@@ -10,6 +10,36 @@ const fmt = (n) =>
   new Intl.NumberFormat('fa-IR').format(Number(n) || 0) + ' تومان';
 
 const persianDate = (dateStr) => toJalali(dateStr, 'long');
+
+const PaymentDescriptions = ({ payments = [], exportMode = false }) => {
+  if (!payments.length) return null;
+  if (exportMode) return (
+    <section style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '12px', marginBottom: '12px', color: '#374151' }}>
+      <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '6px', fontWeight: 600 }}>توضیحات پرداخت</div>
+      {payments.map((payment) => (
+        <div key={payment.id} style={{ fontSize: '11px', marginTop: '4px' }}>
+          دریافت {fmt(payment.amount)} از طریق {payment.method_display || 'پرداخت'} در تاریخ {persianDate(payment.paid_at)}
+          {payment.reference && ` · شماره پیگیری: ${payment.reference}`}
+          {payment.note && ` · توضیح: ${payment.note}`}
+        </div>
+      ))}
+    </section>
+  );
+  return (
+    <section className="print-payment-notes border-b border-slate-700/50 px-5 py-4">
+      <p className="mb-1 text-xs font-semibold text-slate-500">توضیحات پرداخت</p>
+      <div className="space-y-1">
+        {payments.map((payment) => (
+          <p key={payment.id} className="text-sm text-slate-700">
+            دریافت {fmt(payment.amount)} از طریق {payment.method_display || 'پرداخت'} در تاریخ {persianDate(payment.paid_at)}
+            {payment.reference && ` · شماره پیگیری: ${payment.reference}`}
+            {payment.note && ` · توضیح: ${payment.note}`}
+          </p>
+        ))}
+      </div>
+    </section>
+  );
+};
 
 const auditDescription = (event) => {
   const { before, after } = event.changes || {};
@@ -38,6 +68,7 @@ const STATUS_MAP = {
   draft:     { label: 'پیش‌نویس',      color: 'bg-slate-500/20 text-slate-300 border-slate-500/30' },
   pending:   { label: 'پرداخت نشده',   color: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' },
   paid:      { label: 'پرداخت شده',    color: 'bg-green-500/20 text-green-300 border-green-500/30' },
+  commission_paid: { label: 'کارمزد پرداخت شده', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
   cancelled: { label: 'لغو شده',       color: 'bg-red-500/20 text-red-300 border-red-500/30' },
 };
 
@@ -72,6 +103,7 @@ const buildPrintCSS = (size) => {
         direction: rtl;
       }
       .no-print { display: none !important; }
+      .print-payment-notes, .print-payment-notes * { color: #111 !important; background: transparent !important; }
       .print-table th, .print-table td { border: 1px solid #ddd; padding: 4px 6px; }
       .print-table { border-collapse: collapse; width: 100%; }
       .print-header { background: transparent !important; color: #111 !important; border: 1px solid #111 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
@@ -88,6 +120,7 @@ const InvoiceDetail = () => {
   const [invoice, setInvoice] = useState(null);
   const [paperSize, setPaperSize] = useState('a5');
   const [profile, setProfile] = useState(null);
+  const [invoiceFields, setInvoiceFields] = useState({ show_discount_field: true, show_tax_field: true });
   const [loading, setLoading] = useState(true);
   const [statusChanging, setStatusChanging] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
@@ -100,18 +133,43 @@ const InvoiceDetail = () => {
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [history, setHistory] = useState([]);
+  const [restoringVersionId, setRestoringVersionId] = useState(null);
+  const [expandedVersionId, setExpandedVersionId] = useState(null);
+  const [showPriorSnapshot, setShowPriorSnapshot] = useState(false);
   const printRef = useRef(null);
   const exportRef = useRef(null);
 
   useEffect(() => {
-    profileAPI.get().then(({ data }) => {
+    invoiceSettingsAPI.get().then(({ data }) => setInvoiceFields({
+      show_discount_field: data.show_discount_field !== false,
+      show_tax_field: data.show_tax_field !== false,
+    })).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const refreshProfile = () => profileAPI.get().then(({ data }) => {
       const p = Array.isArray(data) ? data[0] : data;
       if (p) setProfile(p);
     }).catch(() => {});
+    refreshProfile();
+    window.addEventListener('mohaseb:data-changed', refreshProfile);
+    return () => window.removeEventListener('mohaseb:data-changed', refreshProfile);
   }, []);
 
   useEffect(() => {
     invoicesAPI.history(id).then(({ data }) => setHistory(data)).catch(() => setHistory([]));
+  }, [id]);
+
+  useEffect(() => {
+    const refresh = () => {
+      invoicesAPI.detail(id).then((res) => {
+        setInvoice(res.data);
+        setPaperSize(res.data.paper_size || 'a5');
+      }).catch(() => {});
+      invoicesAPI.history(id).then(({ data }) => setHistory(data)).catch(() => setHistory([]));
+    };
+    window.addEventListener('mohaseb:data-changed', refresh);
+    return () => window.removeEventListener('mohaseb:data-changed', refresh);
   }, [id]);
 
   useEffect(() => {
@@ -128,10 +186,12 @@ const InvoiceDetail = () => {
       && !currentUser?.is_superuser;
     if (!isOperatorWaiting) return undefined;
     let active = true;
-    const timer = window.setInterval(() => {
-      invoicesAPI.detail(id).then((res) => { if (active) setInvoice(res.data); }).catch(() => {});
-    }, 3000);
-    return () => { active = false; window.clearInterval(timer); };
+    const refresh = () => invoicesAPI.detail(id).then((res) => { if (active) setInvoice(res.data); }).catch(() => {});
+    window.addEventListener('mohaseb:data-changed', refresh);
+    return () => {
+      active = false;
+      window.removeEventListener('mohaseb:data-changed', refresh);
+    };
   }, [id, invoice?.status, invoice?.edit_request_status, currentUser?.is_staff, currentUser?.is_superuser]);
 
   // Fetch customer details (phone/email) for display
@@ -149,6 +209,19 @@ const InvoiceDetail = () => {
     try {
       const res = await invoicesAPI.changeStatus(id, newStatus);
       setInvoice(res.data);
+    } finally {
+      setStatusChanging(false);
+    }
+  };
+
+  const handleCardSourceChange = async (event) => {
+    const card_payment_source = event.target.value;
+    setStatusChanging(true);
+    try {
+      const { data } = await invoicesAPI.patch(id, { card_payment_source });
+      setInvoice(data);
+    } catch (error) {
+      setPaymentError(error.response?.data?.detail || 'ذخیره نوع کارت پرداخت انجام نشد.');
     } finally {
       setStatusChanging(false);
     }
@@ -216,6 +289,22 @@ const InvoiceDetail = () => {
     } catch (error) {
       setPaymentError(error.response?.data?.detail || 'حذف پرداخت انجام نشد.');
     } finally { setPaymentSaving(false); }
+  };
+
+  const handleRestoreVersion = async (event) => {
+    if (!window.confirm('نسخهٔ پیش از ویرایش جایگزین اطلاعات فعلی فاکتور شود؟ این عملیات در تاریخچه ثبت می‌شود.')) return;
+    setRestoringVersionId(event.id);
+    try {
+      const invoiceRes = await invoicesAPI.restoreVersion(id, event.id);
+      const historyRes = await invoicesAPI.history(id);
+      setInvoice(invoiceRes.data);
+      setHistory(historyRes.data);
+      setPaperSize(invoiceRes.data.paper_size || 'a5');
+    } catch (error) {
+      window.alert(error.response?.data?.detail || 'بازیابی نسخه انجام نشد.');
+    } finally {
+      setRestoringVersionId(null);
+    }
   };
 
   const handlePrint = () => window.print();
@@ -288,6 +377,22 @@ const InvoiceDetail = () => {
   if (!invoice) return null;
 
   const isPaidOperator = invoice.status === 'paid' && !currentUser?.is_staff && !currentUser?.is_superuser;
+  const isManager = !!(currentUser?.is_staff || currentUser?.is_superuser);
+  const latestInvoiceVersion = isManager ? history.find((event) => event.is_invoice_version) : null;
+  const priorSnapshot = latestInvoiceVersion?.changes?.before;
+  const editDateText = latestInvoiceVersion?.created_at
+    ? new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(latestInvoiceVersion.created_at))
+    : null;
+  const priorSnapshotCustomer = priorSnapshot?.customer_name
+    || (priorSnapshot?.customer === invoice.customer ? invoice.customer_name : `شناسه ${priorSnapshot?.customer || '---'}`);
+  const priorSnapshotSubtotal = (priorSnapshot?.items || []).reduce(
+    (sum, item) => sum + (Number(item.main_price) + Number(item.extra_price)) * Number(item.quantity || 1),
+    0,
+  );
+  const priorSnapshotFinal = priorSnapshotSubtotal
+    + Number(priorSnapshot?.commission_total || 0)
+    + (priorSnapshotSubtotal * Number(priorSnapshot?.tax || 0)) / 100
+    - Number(priorSnapshot?.discount || 0);
 
   const subtotal = invoice.items?.reduce(
     (s, it) => s + ((Number(it.main_price) || 0) + (Number(it.extra_price) || 0)) * (Number(it.quantity) || 1),
@@ -314,11 +419,38 @@ const InvoiceDetail = () => {
             </Link>
             <div className="flex items-center gap-3">
               <h2 className="text-2xl font-bold text-white">{invoice.invoice_number}</h2>
-              <StatusBadge status={invoice.status} />
+              <StatusBadge status={invoice.commission_paid ? 'commission_paid' : invoice.status} />
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {Number(invoice.commission_total) > 0 && !isPaidOperator && <label
+              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-600/20 text-emerald-300 text-sm border border-emerald-500/30 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={Boolean(invoice.commission_paid)}
+                disabled={statusChanging}
+                onChange={async (event) => {
+                setStatusChanging(true);
+                try {
+                  const { data } = await invoicesAPI.markCommissionPaid(id, event.target.checked);
+                  setInvoice(data);
+                  window.dispatchEvent(new Event('mohaseb:data-changed'));
+                }
+                finally { setStatusChanging(false); }
+              }}
+              />
+              کارمزد توسط مشتری پرداخت شده است
+            </label>}
+            {!isPaidOperator && <label className="flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-slate-300">
+              <span>کارت پرداخت</span>
+              <select aria-label="کارت پرداخت فاکتور" value={invoice.card_payment_source || 'customer'} onChange={handleCardSourceChange} disabled={statusChanging}
+                className="rounded-lg border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-white disabled:opacity-60">
+                <option value="customer">کارت مشتری</option>
+                <option value="office">کارت دفتر</option>
+              </select>
+            </label>}
             {/* Status Change Dropdown */}
             {!isPaidOperator && <div className="relative">
               <button
@@ -333,7 +465,7 @@ const InvoiceDetail = () => {
               </button>
               {showStatusMenu && (
                 <div className="absolute left-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl z-50 overflow-hidden w-48">
-                  {Object.entries(STATUS_MAP).map(([val, { label, color }]) => (
+                  {Object.entries(STATUS_MAP).filter(([val]) => val !== 'commission_paid').map(([val, { label, color }]) => (
                     <button
                       key={val}
                       onClick={() => handleChangeStatus(val)}
@@ -353,6 +485,13 @@ const InvoiceDetail = () => {
             >
               ✏️ ویرایش
             </Link>}
+            {isManager && latestInvoiceVersion && <button
+              type="button"
+              onClick={() => setShowPriorSnapshot(true)}
+              className="px-3 py-2 rounded-xl bg-sky-700/80 hover:bg-sky-600 text-white text-sm border border-sky-500/40 transition-all flex items-center gap-2"
+            >
+              ◷ نمایش فاکتور پیش از ویرایش
+            </button>}
             {invoice.status === 'paid' && !currentUser?.is_staff && !currentUser?.is_superuser && (
               invoice.edit_request_status === 'approved' ?
                 <span className="px-3 py-2 rounded-xl bg-green-600/20 border border-green-500/30 text-green-300 text-sm">درخواست ویرایش تأیید شد</span> :
@@ -434,8 +573,9 @@ const InvoiceDetail = () => {
               </div>
               <div className="text-left space-y-1">
                 <p className="text-blue-400 font-mono text-lg font-bold">{invoice.invoice_number}</p>
-                <StatusBadge status={invoice.status} />
-                <p className="text-slate-500 text-xs">{persianDate(invoice.date)}</p>
+                <StatusBadge status={invoice.commission_paid ? 'commission_paid' : invoice.status} />
+                <p className="text-slate-500 text-xs">تاریخ صدور: {persianDate(invoice.date)}</p>
+                {editDateText && <p className="text-slate-400 text-[10px] mt-0.5">ویرایش: {editDateText}</p>}
                 {invoice.created_at && <p className="text-slate-500 text-xs mt-1">ایجاد: {persianDate(invoice.created_at)}، {new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' }).format(new Date(invoice.created_at))}</p>}
               </div>
             </div>
@@ -450,7 +590,12 @@ const InvoiceDetail = () => {
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500/30 to-blue-600/20 border border-indigo-500/30 flex items-center justify-center text-base shrink-0">👤</div>
                 <div>
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">مشتری</p>
-                  <p className="text-white text-sm font-semibold leading-tight">{invoice.customer_name || '---'}</p>
+                  <div className="flex items-center gap-2">
+                    {invoice.customer
+                      ? <Link to={`/customers/${invoice.customer}`} className="text-white text-sm font-semibold leading-tight hover:text-blue-300 hover:underline">{invoice.customer_name || '---'}</Link>
+                      : <span className="text-white text-sm font-semibold leading-tight">{invoice.customer_name || '---'}</span>}
+                    {invoice.customer && <Link to={`/customers/${invoice.customer}?tab=edit`} className="rounded-md border border-slate-600 px-1.5 py-0.5 text-[10px] text-blue-300 hover:bg-slate-700" title="مشاهده و ویرایش پروفایل مشتری">پروفایل</Link>}
+                  </div>
                   {customerInfo?.phone && (
                     <p className="text-slate-400 text-[11px] mt-0.5 font-mono dir-ltr">📞 {customerInfo.phone}</p>
                   )}
@@ -465,6 +610,10 @@ const InvoiceDetail = () => {
 
               {/* Vehicle chips */}
               <div className="flex flex-wrap gap-2 flex-1">
+                {(invoice.green_card_owner_name || invoice.green_card_owner_national_id) && <div className="flex flex-wrap gap-2 w-full">
+                  {invoice.green_card_owner_name && <span className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs text-indigo-200">صاحب برگ سبز: {invoice.green_card_owner_name}</span>}
+                  {invoice.green_card_owner_national_id && <span className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs text-indigo-200">کد ملی: {invoice.green_card_owner_national_id}</span>}
+                </div>}
                 {invoice.vehicle_plate && (
                   <div className="flex items-center gap-1.5 bg-slate-700/40 border border-slate-600/40 rounded-lg px-3 py-1.5">
                     <span className="text-slate-500 text-[10px]">پلاک</span>
@@ -548,6 +697,8 @@ const InvoiceDetail = () => {
             </div>
           )}
 
+          <PaymentDescriptions payments={invoice.payments || []} />
+
           <section className="no-print p-5 border-b border-slate-700/50 space-y-4">
             <div className="flex items-center justify-between gap-4">
               <h3 className="font-semibold text-white">پرداخت‌های ثبت‌شده</h3>
@@ -620,13 +771,13 @@ const InvoiceDetail = () => {
                     <span className="text-yellow-400">+{fmt(invoice.commission_total)}</span>
                   </div>
                 )}
-                {Number(invoice.tax) > 0 && (
+                {invoiceFields.show_tax_field && Number(invoice.tax) > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">مالیات ({invoice.tax}%)</span>
                     <span className="text-orange-400">+{fmt(taxAmount)}</span>
                   </div>
                 )}
-                {Number(invoice.discount) > 0 && (
+                {invoiceFields.show_discount_field && Number(invoice.discount) > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">تخفیف</span>
                     <span className="text-green-400">−{fmt(Number(invoice.discount))}</span>
@@ -652,16 +803,124 @@ const InvoiceDetail = () => {
           {profile?.website && <span className="mr-2">| {profile.website}</span>}
         </div>
       </div>
-      {history.length > 0 && (
+      {isManager && showPriorSnapshot && priorSnapshot && (
+        <div className="no-print fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="prior-invoice-title" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowPriorSnapshot(false); }}>
+          <section className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl">
+            <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-700 bg-slate-900/95 px-5 py-4 backdrop-blur">
+              <div>
+                <h3 id="prior-invoice-title" className="text-lg font-bold text-white">فاکتور پیش از ویرایش</h3>
+                <p className="mt-1 text-xs text-slate-400">این تصویر، اطلاعات فاکتور را پیش از آخرین ویرایش نشان می‌دهد.</p>
+              </div>
+              <button type="button" onClick={() => setShowPriorSnapshot(false)} className="rounded-lg px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800" aria-label="بستن پیش‌نمایش">بستن ✕</button>
+            </header>
+            <div className="space-y-5 p-5 text-sm text-slate-200">
+              <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+                <div>
+                  <p className="text-xs text-slate-400">شماره فاکتور</p>
+                  <p className="mt-1 font-mono text-lg font-bold text-blue-300">{invoice.invoice_number}</p>
+                  <p className="mt-2 text-xs text-slate-400">مشتری: <span className="text-slate-200">{priorSnapshotCustomer}</span></p>
+                </div>
+                <div className="text-left text-xs">
+                  <p className="text-slate-300">تاریخ صدور: {priorSnapshot.date ? persianDate(priorSnapshot.date) : '---'}</p>
+                  <p className="mt-1 text-sky-300">تاریخ ویرایش: {editDateText}</p>
+                  <p className="mt-2"><StatusBadge status={priorSnapshot.status} /></p>
+                </div>
+              </div>
+
+              {(priorSnapshot.vehicle_plate || priorSnapshot.vehicle_type || priorSnapshot.vehicle_model || priorSnapshot.vehicle_year || priorSnapshot.vehicle_vin || priorSnapshot.due_date) && (
+                <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-slate-700 p-4 text-xs text-slate-300">
+                  {priorSnapshot.vehicle_plate && <span>پلاک: {priorSnapshot.vehicle_plate}</span>}
+                  {priorSnapshot.vehicle_type && <span>نوع خودرو: {priorSnapshot.vehicle_type}</span>}
+                  {priorSnapshot.vehicle_model && <span>مدل: {priorSnapshot.vehicle_model}</span>}
+                  {priorSnapshot.vehicle_year && <span>سال ساخت: {priorSnapshot.vehicle_year}</span>}
+                  {priorSnapshot.vehicle_vin && <span>VIN: {priorSnapshot.vehicle_vin}</span>}
+                  {priorSnapshot.due_date && <span>سررسید: {persianDate(priorSnapshot.due_date)}</span>}
+                </div>
+              )}
+
+              <div className="overflow-x-auto rounded-xl border border-slate-700">
+                <table className="w-full min-w-[620px] text-right text-xs">
+                  <thead className="bg-slate-800 text-slate-300">
+                    <tr><th className="p-3">شرح</th><th className="p-3">تعداد</th><th className="p-3">مبلغ پرداختی</th><th className="p-3">مبلغ استعلام</th><th className="p-3">کارمزد</th><th className="p-3">جمع ردیف</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {(priorSnapshot.items || []).map((item, index) => (
+                      <tr key={`${latestInvoiceVersion.id}-${item.id || index}`}>
+                        <td className="p-3">{item.title || 'خدمت'}{item.notes && <div className="mt-1 text-[10px] text-slate-500">{item.notes}</div>}</td>
+                        <td className="p-3">{new Intl.NumberFormat('fa-IR').format(item.quantity || 1)}</td>
+                        <td className="p-3">{fmt(item.main_price)}</td>
+                        <td className="p-3">{fmt(item.extra_price)}</td>
+                        <td className="p-3">{fmt(Number(item.commission) * Number(item.quantity || 1))}</td>
+                        <td className="p-3">{fmt((Number(item.main_price) + Number(item.extra_price)) * Number(item.quantity || 1))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {priorSnapshot.description && <p className="whitespace-pre-wrap rounded-xl border border-slate-700 p-4 text-xs text-slate-300">توضیحات: {priorSnapshot.description}</p>}
+              <div className="ml-auto max-w-sm space-y-2 rounded-xl border border-slate-700 bg-slate-800/50 p-4 text-xs">
+                <div className="flex justify-between"><span>مبلغ کل</span><span>{fmt(priorSnapshotSubtotal)}</span></div>
+                {Number(priorSnapshot.commission_total) > 0 && <div className="flex justify-between"><span>کارمزد</span><span>{fmt(priorSnapshot.commission_total)}</span></div>}
+                {invoiceFields.show_tax_field && Number(priorSnapshot.tax) > 0 && <div className="flex justify-between"><span>مالیات ({priorSnapshot.tax}٪)</span><span>{fmt((priorSnapshotSubtotal * Number(priorSnapshot.tax)) / 100)}</span></div>}
+                {invoiceFields.show_discount_field && Number(priorSnapshot.discount) > 0 && <div className="flex justify-between"><span>تخفیف</span><span>−{fmt(priorSnapshot.discount)}</span></div>}
+                <div className="flex justify-between border-t border-slate-700 pt-2 text-sm font-bold text-white"><span>مبلغ نهایی</span><span>{fmt(priorSnapshotFinal)}</span></div>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {isManager && history.length > 0 && (
         <section className="no-print mt-6 rounded-2xl border border-slate-700/50 bg-slate-800/40 p-5">
           <h3 className="mb-3 font-semibold text-white">تاریخچهٔ فاکتور</h3>
           <div className="space-y-2">
-            {history.slice(0, 20).map((event) => (
-              <div key={event.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-700/30 px-3 py-2 text-sm">
-                <span className="text-slate-200">{auditDescription(event)} <span className="text-slate-500">— {event.user_name}</span></span>
-                <time className="text-xs text-slate-500">{new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(event.created_at))}</time>
-              </div>
-            ))}
+            {history.map((event) => {
+              const oldInvoice = event.changes?.before;
+              const canRestore = event.is_invoice_version && (currentUser?.is_staff || currentUser?.is_superuser);
+              const expanded = expandedVersionId === event.id;
+              return (
+                <div key={event.id} className="rounded-xl bg-slate-700/30 px-3 py-2 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-slate-200">{auditDescription(event)} <span className="text-slate-500">— {event.user_name}</span></span>
+                    <time className="text-xs text-slate-500">{new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(event.created_at))}</time>
+                  </div>
+                  {event.is_invoice_version && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => setExpandedVersionId(expanded ? null : event.id)} className="rounded-lg border border-slate-600 px-2.5 py-1 text-xs text-blue-300 hover:bg-slate-700">
+                        {expanded ? 'بستن نسخهٔ پیش از ویرایش' : 'مشاهدهٔ نسخهٔ پیش از ویرایش'}
+                      </button>
+                      {canRestore && <button type="button" disabled={restoringVersionId === event.id} onClick={() => handleRestoreVersion(event)} className="rounded-lg border border-amber-500/40 px-2.5 py-1 text-xs text-amber-300 hover:bg-amber-500/10 disabled:opacity-50">
+                        {restoringVersionId === event.id ? 'در حال بازیابی…' : 'بازیابی این نسخه'}
+                      </button>}
+                    </div>
+                  )}
+                  {expanded && oldInvoice && (
+                    <div className="mt-3 rounded-lg border border-slate-600/70 bg-slate-900/40 p-3 text-xs text-slate-300">
+                      <div className="mb-2 grid gap-1 sm:grid-cols-2">
+                        <span>مشتری: {oldInvoice.customer_name || (oldInvoice.customer === invoice.customer ? invoice.customer_name : `شناسه ${oldInvoice.customer || '---'}`)}</span>
+                        <span>تاریخ فاکتور: {oldInvoice.date ? persianDate(oldInvoice.date) : '---'}</span>
+                        <span>مبلغ کل: {fmt(oldInvoice.total_amount)}</span>
+                        <span>کارمزد: {fmt(oldInvoice.commission_total)}</span>
+                        <span>تخفیف: {fmt(oldInvoice.discount)}</span>
+                        <span>مالیات: {oldInvoice.tax || 0}٪</span>
+                        <span>وضعیت: {STATUS_MAP[oldInvoice.status]?.label || oldInvoice.status || '---'}</span>
+                      </div>
+                      {oldInvoice.description && <p className="mb-2 whitespace-pre-wrap">توضیحات: {oldInvoice.description}</p>}
+                      <div className="space-y-1 border-t border-slate-700 pt-2">
+                        {(oldInvoice.items || []).map((item, index) => (
+                          <div key={`${event.id}-${item.id || index}`} className="flex flex-wrap justify-between gap-x-3 gap-y-1">
+                            <span>{item.title || 'خدمت'} × {new Intl.NumberFormat('fa-IR').format(item.quantity || 1)}</span>
+                            <span>{fmt((Number(item.main_price) + Number(item.extra_price)) * Number(item.quantity || 1))}</span>
+                          </div>
+                        ))}
+                        {!(oldInvoice.items || []).length && <span className="text-slate-500">ردیفی برای این نسخه ثبت نشده است.</span>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -697,9 +956,10 @@ const InvoiceDetail = () => {
           </div>
           <div style={{ textAlign: 'left' }}>
             <div style={{ fontFamily: 'monospace', fontSize: '18px', fontWeight: 'bold', color: '#93c5fd' }}>{invoice?.invoice_number}</div>
-            <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '4px' }}>{invoice?.date && persianDate(invoice.date)}</div>
+            <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '4px' }}>تاریخ صدور: {invoice?.date && persianDate(invoice.date)}</div>
+            {editDateText && <div style={{ fontSize: '9px', opacity: 0.65, marginTop: '2px' }}>ویرایش: {editDateText}</div>}
             <div style={{ display: 'inline-block', marginTop: '4px', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', background: invoice?.status === 'paid' ? '#166534' : invoice?.status === 'cancelled' ? '#991b1b' : '#713f12', color: 'white' }}>
-              {STATUS_MAP[invoice?.status]?.label || ''}
+              {invoice?.commission_paid ? 'کارمزد پرداخت شده' : STATUS_MAP[invoice?.status]?.label || ''}
             </div>
           </div>
         </div>
@@ -762,6 +1022,8 @@ const InvoiceDetail = () => {
           </div>
         )}
 
+        <PaymentDescriptions payments={invoice?.payments || []} exportMode />
+
         {/* Totals */}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <div style={{ minWidth: '280px', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '12px' }}>
@@ -775,13 +1037,13 @@ const InvoiceDetail = () => {
                 <span style={{ color: '#92400e' }}>+{fmt(commissionAmt)}</span>
               </div>
             )}
-            {taxAmount > 0 && (
+            {invoiceFields.show_tax_field && taxAmount > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '12px' }}>
                 <span style={{ color: '#6b7280' }}>مالیات ({invoice?.tax}%)</span>
                 <span style={{ color: '#d97706' }}>+{fmt(taxAmount)}</span>
               </div>
             )}
-            {Number(invoice?.discount) > 0 && (
+            {invoiceFields.show_discount_field && Number(invoice?.discount) > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '12px' }}>
                 <span style={{ color: '#6b7280' }}>تخفیف</span>
                 <span style={{ color: '#059669' }}>−{fmt(Number(invoice?.discount))}</span>

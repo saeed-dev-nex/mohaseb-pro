@@ -195,6 +195,8 @@ const Cheques = () => {
 
   useEffect(() => {
     loadData();
+    window.addEventListener('mohaseb:data-changed', loadData);
+    return () => window.removeEventListener('mohaseb:data-changed', loadData);
   }, [filters]);
 
   const handleSave = async (form) => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { invoicesAPI, expensesAPI } from '../services/api';
+import { invoicesAPI } from '../services/api';
 import JalaliDatePicker from '../components/JalaliDatePicker';
 
 
@@ -37,30 +37,47 @@ const Reports = () => {
 
   const [dateFrom, setDateFrom] = useState(firstOfMonth);
   const [dateTo, setDateTo] = useState(today);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
   const [report, setReport] = useState(null);
   const [overdue, setOverdue] = useState([]);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState('summary'); // summary | invoices | overdue
+  const [exporting, setExporting] = useState(false);
 
   const loadReport = async () => {
     setLoading(true);
     try {
-      const [repRes, ovRes, expRes] = await Promise.all([
-        invoicesAPI.report({ date_from: dateFrom, date_to: dateTo }),
+      const [repRes, ovRes] = await Promise.all([
+        invoicesAPI.report({ date_from: dateFrom, date_to: dateTo, status: statusFilter, customer_name: customerSearch }),
         invoicesAPI.overdue(),
-        expensesAPI.summary({ date_from: dateFrom, date_to: dateTo }),
       ]);
       setReport(repRes.data);
       setOverdue(ovRes.data);
-      // Merge expense data into report
-      repRes.data._expenseTotal = expRes.data.total || 0;
-      repRes.data._expenseCategories = expRes.data.by_category || [];
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { loadReport(); }, []);
+  const downloadExcel = async () => {
+    setExporting(true);
+    try {
+      const { data } = await invoicesAPI.exportExcel({ date_from: dateFrom, date_to: dateTo, status: statusFilter, customer_name: customerSearch });
+      const url = URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `financial_report_${dateFrom}_${dateTo}.xlsx`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch { alert('خطا در دریافت فایل اکسل'); }
+    finally { setExporting(false); }
+  };
+
+  useEffect(() => {
+    loadReport();
+    window.addEventListener('mohaseb:data-changed', loadReport);
+    return () => window.removeEventListener('mohaseb:data-changed', loadReport);
+  }, [dateFrom, dateTo, statusFilter, customerSearch]);
 
   return (
     <div className="space-y-6">
@@ -70,21 +87,30 @@ const Reports = () => {
           <h2 className="text-2xl font-bold text-white">گزارشات مالی</h2>
           <p className="text-slate-400 text-sm mt-0.5">تحلیل و گزارش‌گیری از عملکرد مالی</p>
         </div>
+        <div className="flex gap-2">
+        <button onClick={downloadExcel} disabled={exporting} className="px-4 py-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/30 hover:bg-emerald-600/30 text-emerald-400 text-sm transition-all flex items-center gap-2 disabled:opacity-50">
+          {exporting ? 'در حال آماده‌سازی…' : '📊 دریافت گزارش Excel'}
+        </button>
         <button onClick={async () => {
           try {
-            const { data } = await invoicesAPI.exportCsv({ date_from: dateFrom, date_to: dateTo });
+            const { data } = await invoicesAPI.exportCsv({ date_from: dateFrom, date_to: dateTo, status: statusFilter, customer_name: customerSearch });
             const url = URL.createObjectURL(data);
             const a = document.createElement('a'); a.href = url;
             a.download = `invoices_${dateFrom}_${dateTo}.csv`;
-            a.click(); URL.revokeObjectURL(url);
+            a.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
           } catch { alert('خطا در دانلود'); }
         }} className="px-4 py-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/30 hover:bg-emerald-600/30 text-emerald-400 text-sm transition-all flex items-center gap-2">
           📄 خروجی CSV
         </button>
+        </div>
       </div>
 
       {/* Date Filter */}
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+          <label className="space-y-1.5"><span className="text-xs text-slate-400">وضعیت فاکتور</span><select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white"><option value="">همه وضعیت‌ها</option>{Object.entries(STATUS_MAP).map(([value, item]) => <option key={value} value={value}>{item.label}</option>)}</select></label>
+          <label className="space-y-1.5"><span className="text-xs text-slate-400">مشتری</span><input type="search" value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} placeholder="جستجو بر اساس نام مشتری" className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder-slate-500" /></label>
+        </div>
         <div className="flex flex-col sm:flex-row items-end gap-4">
           <div className="space-y-1.5 flex-1">
             <label className="text-xs text-slate-400">از تاریخ</label>
@@ -99,6 +125,7 @@ const Reports = () => {
             {[
               { label: 'امروز', f: today, t: today },
               { label: 'این ماه', f: firstOfMonth, t: today },
+              { label: 'ماه گذشته', f: new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1).toISOString().slice(0, 10), t: new Date(new Date().getFullYear(), new Date().getMonth(), 0).toISOString().slice(0, 10) },
               { label: 'همه', f: '2020-01-01', t: today },
             ].map((q) => (
               <button
@@ -124,12 +151,12 @@ const Reports = () => {
       {/* Stats Cards */}
       {report && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <StatBox icon="💰" label="درآمد خالص (کارمزد)" value={fmt(report.total_commission)} color="green" />
-          <StatBox icon="🟡" label="مبلغ معوقه" value={fmt(report.pending_amount)} color="yellow" />
-          <StatBox icon="🧾" label="گردش مالی کل" value={fmt(report.total_revenue)} color="purple" />
+          <StatBox icon="💳" label="مبلغ دریافت‌شده" value={fmt(report.total_revenue)} color="green" />
+          <StatBox icon="🟡" label="مانده فاکتورهای پرداخت‌نشده" value={fmt(report.pending_amount)} color="yellow" />
+          <StatBox icon="🧾" label="ارزش فاکتورها" value={fmt(report.invoice_amount)} color="purple" />
           <StatBox icon="📋" label="تعداد فاکتور" value={fmtN(report.total_count)} color="blue" />
-          <StatBox icon="💸" label="کل هزینه‌ها" value={fmt(report._expenseTotal || 0)} color="red" />
-          <StatBox icon="📈" label="سود خالص" value={fmt((report.total_commission || 0) - (report._expenseTotal || 0))} color={((report.total_commission || 0) - (report._expenseTotal || 0)) >= 0 ? 'green' : 'red'} />
+          <StatBox icon="💸" label="کل هزینه‌ها" value={fmt(report.expense_total)} color="red" />
+          <StatBox icon="📈" label="سود خالص (کارمزد − هزینه)" value={fmt(report.net_profit)} color={Number(report.net_profit) >= 0 ? 'green' : 'red'} />
         </div>
       )}
 
@@ -151,10 +178,33 @@ const Reports = () => {
         </div>
       )}
 
+      {report && tab === 'summary' && <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <section className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5">
+          <h3 className="font-semibold text-white mb-4">روند ماهانه دریافت‌ها</h3>
+          {report.monthly?.length ? <div className="space-y-3">{report.monthly.slice(-12).map(row => {
+            const max = Math.max(...report.monthly.map(item => Number(item.received) || 0), 1);
+            return <div key={row.month} className="grid grid-cols-[5rem_1fr_auto] gap-3 items-center text-xs"><span className="text-slate-400">{row.month}</span><div className="h-2 rounded bg-slate-700 overflow-hidden"><div className="h-full rounded bg-emerald-500" style={{ width: `${Math.max(2, Number(row.received) * 100 / max)}%` }} /></div><span className="text-slate-200">{fmt(row.received)}</span></div>;
+          })}</div> : <p className="text-sm text-slate-500">در این بازه داده‌ای نیست</p>}
+        </section>
+        <section className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5">
+          <h3 className="font-semibold text-white mb-4">هزینه بر اساس دسته</h3>
+          {report.expense_categories?.length ? <div className="space-y-3">{report.expense_categories.map(row => <div key={row.name} className="flex justify-between gap-3 border-b border-slate-700/40 pb-2 text-sm"><span className="text-slate-300">{row.name}</span><span className="text-rose-300">{fmt(row.amount)}</span></div>)}</div> : <p className="text-sm text-slate-500">هزینه‌ای در این بازه ثبت نشده است</p>}
+        </section>
+        <section className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5">
+          <h3 className="font-semibold text-white mb-4">مشتری‌های برتر بر اساس مبلغ فاکتور</h3>
+          {report.top_customers?.length ? <div className="space-y-3">{report.top_customers.map((row, index) => <div key={`${row.name}-${index}`} className="flex justify-between gap-3 text-sm"><span className="text-slate-300">{index + 1}. {row.name} <span className="text-slate-500">({fmtN(row.count)} فاکتور)</span></span><span className="text-blue-300">{fmt(row.amount)}</span></div>)}</div> : <p className="text-sm text-slate-500">مشتری‌ای در این بازه ثبت نشده است</p>}
+        </section>
+        <section className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5">
+          <h3 className="font-semibold text-white mb-4">خدمات و روش‌های پرداخت</h3>
+          <div className="grid sm:grid-cols-2 gap-5"><div><p className="text-xs text-slate-500 mb-2">خدمات پرفروش</p>{report.top_services?.slice(0, 5).map(row => <div key={row.name} className="flex justify-between gap-2 text-xs py-1.5"><span className="text-slate-300">{row.name}</span><span className="text-amber-300">{fmt(row.amount)}</span></div>)}</div><div><p className="text-xs text-slate-500 mb-2">روش پرداخت ثبت‌شده</p>{report.payment_methods?.length ? report.payment_methods.map(row => <div key={row.name} className="flex justify-between gap-2 text-xs py-1.5"><span className="text-slate-300">{row.name}</span><span className="text-emerald-300">{fmt(row.amount)}</span></div>) : <span className="text-xs text-slate-500">پرداختی ثبت نشده است</span>}</div></div>
+        </section>
+      </div>}
+
       {/* Tabs */}
       <div className="flex gap-1 border-b border-slate-700/50">
         {[
-          { key: 'invoices', label: `📋 لیست فاکتورها (${report?.total_count || 0})` },
+          { key: 'summary', label: '📊 نمای کلی' },
+          { key: 'invoices', label: `📋 فاکتورها (${Math.min(report?.total_count || 0, 100)} از ${report?.total_count || 0})` },
           { key: 'overdue', label: `⏰ معوقه‌ها (${overdue.length})` },
         ].map((t) => (
           <button
@@ -185,8 +235,12 @@ const Reports = () => {
                     <th className="text-right py-3 px-4 font-medium">مشتری</th>
                     <th className="text-right py-3 px-4 font-medium">تاریخ</th>
                     <th className="text-right py-3 px-4 font-medium">مبلغ</th>
+                    <th className="text-right py-3 px-4 font-medium">پرداخت‌شده</th>
+                    <th className="text-right py-3 px-4 font-medium">مانده</th>
                     <th className="text-right py-3 px-4 font-medium">کارمزد</th>
                     <th className="text-right py-3 px-4 font-medium">وضعیت</th>
+                    <th className="text-right py-3 px-4 font-medium">پرداخت‌کننده</th>
+                    <th className="text-right py-3 px-4 font-medium">صادرکننده</th>
                     <th className="py-3 px-4" />
                   </tr>
                 </thead>
@@ -199,10 +253,14 @@ const Reports = () => {
                         <td className="py-3 px-4 text-white">{inv.customer_name}</td>
                         <td className="py-3 px-4 text-slate-400 text-xs">{persianDate(inv.date)}</td>
                         <td className="py-3 px-4 text-white font-medium">{fmt(inv.total_amount)}</td>
+                        <td className="py-3 px-4 text-emerald-300">{fmt(inv.paid_amount)}</td>
+                        <td className="py-3 px-4 text-amber-300">{fmt(inv.remaining_amount)}</td>
                         <td className="py-3 px-4 text-yellow-400">{Number(inv.commission_total) > 0 ? fmt(inv.commission_total) : '—'}</td>
                         <td className="py-3 px-4">
                           <span className={`text-xs px-2 py-0.5 rounded-full border ${st.color}`}>{st.label}</span>
                         </td>
+                        <td className="py-3 px-4 text-slate-300">{inv.paid_by_name || '—'}</td>
+                        <td className="py-3 px-4 text-slate-300">{inv.operator_name || '—'}</td>
                         <td className="py-3 px-4">
                           <Link to={`/invoices/${inv.id}`} className="text-xs text-blue-400 hover:text-blue-300 transition-colors">مشاهده →</Link>
                         </td>

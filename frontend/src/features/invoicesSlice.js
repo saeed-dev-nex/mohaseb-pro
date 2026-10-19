@@ -77,15 +77,42 @@ const invoicesSlice = createSlice({
   name: 'invoices',
   initialState: {
     list: [],
+    count: 0,
+    currentPage: 0,
+    hasMore: false,
     loading: false,
+    loadingMore: false,
     error: null,
   },
   reducers: {},
   extraReducers: (builder) => {
     builder
-      .addCase(fetchInvoices.pending, (state) => { state.loading = true; state.error = null; })
-      .addCase(fetchInvoices.fulfilled, (state, action) => { state.loading = false; state.list = action.payload; })
-      .addCase(fetchInvoices.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
+      .addCase(fetchInvoices.pending, (state, action) => {
+        const page = Number(action.meta.arg?.page || 1);
+        state.loading = page <= 1;
+        state.loadingMore = page > 1;
+        state.error = null;
+      })
+      .addCase(fetchInvoices.fulfilled, (state, action) => {
+        state.loading = false;
+        state.loadingMore = false;
+        if (Array.isArray(action.payload)) {
+          state.list = action.payload;
+          state.count = action.payload.length;
+          state.currentPage = 0;
+          state.hasMore = false;
+          return;
+        }
+        const page = Number(action.meta.arg?.page || 1);
+        const results = action.payload?.results || [];
+        state.list = page > 1
+          ? [...state.list, ...results.filter(item => !state.list.some(existing => existing.id === item.id))]
+          : results;
+        state.count = action.payload?.count || 0;
+        state.currentPage = page;
+        state.hasMore = Boolean(action.payload?.next);
+      })
+      .addCase(fetchInvoices.rejected, (state, action) => { state.loading = false; state.loadingMore = false; state.error = action.payload; })
       .addCase(createInvoice.fulfilled, (state, action) => { state.list.unshift(action.payload); })
       .addCase(updateInvoice.fulfilled, (state, action) => {
         const idx = state.list.findIndex(i => i.id === action.payload.id);

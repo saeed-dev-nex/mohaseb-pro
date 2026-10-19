@@ -75,11 +75,19 @@ class Invoice(models.Model):
 
     customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='مشتری')
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='issued_invoices', verbose_name='صادرکننده')
+    paid_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='paid_invoices', verbose_name='پرداخت‌کننده')
+    card_payment_source = models.CharField(
+        max_length=20,
+        choices=[('customer', 'کارت مشتری'), ('office', 'کارت دفتر')],
+        default='customer',
+        verbose_name='کارت پرداخت',
+    )
     date = models.DateTimeField(default=timezone.now, verbose_name='تاریخ')
     due_date = models.DateField(null=True, blank=True, verbose_name='سررسید')
     description = models.TextField(blank=True, null=True, verbose_name='توضیحات')
     total_amount = models.DecimalField(max_digits=15, decimal_places=0, default=0, verbose_name='مبلغ کل')
     commission_total = models.DecimalField(max_digits=15, decimal_places=0, default=0, verbose_name='جمع کارمزد')
+    commission_paid = models.BooleanField(default=False, verbose_name='کارمزد پرداخت شده')
     discount = models.DecimalField(max_digits=15, decimal_places=0, default=0, verbose_name='تخفیف')
     tax = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name='مالیات (%)')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='وضعیت')
@@ -94,6 +102,8 @@ class Invoice(models.Model):
     vehicle_model = models.CharField(max_length=100, blank=True, null=True, verbose_name='مدل خودرو')
     vehicle_type = models.CharField(max_length=100, blank=True, null=True, verbose_name='نوع خودرو')
     vehicle_year = models.CharField(max_length=10, blank=True, null=True, verbose_name='سال ساخت')
+    green_card_owner_name = models.CharField(max_length=255, blank=True, default='', verbose_name='نام صاحب برگ سبز')
+    green_card_owner_national_id = models.CharField(max_length=20, blank=True, default='', verbose_name='کد ملی صاحب برگ سبز')
     custom_fields = models.JSONField(default=dict, blank=True, verbose_name='فیلدهای دلخواه')
     tags = models.JSONField(default=list, blank=True, verbose_name='برچسب‌ها')
 
@@ -133,8 +143,10 @@ class InvoiceItem(models.Model):
     commission = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name='کارمزد')
     notes = models.CharField(max_length=500, blank=True, null=True, verbose_name='یادداشت')
     staff = models.ForeignKey('Staff', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='تکنسین')
+    is_office_card_fee = models.BooleanField(default=False, verbose_name='ردیف واریزی کارت دفتر')
 
     class Meta:
+        ordering = ['id']
         verbose_name = 'آیتم فاکتور'
         verbose_name_plural = 'آیتم‌های فاکتور'
 
@@ -228,6 +240,7 @@ class AuditLog(models.Model):
 
 class Document(models.Model):
     customer = models.ForeignKey(Customer, related_name='documents', on_delete=models.CASCADE)
+    invoice = models.ForeignKey(Invoice, related_name='documents', on_delete=models.SET_NULL, null=True, blank=True)
     title = models.CharField(max_length=255, verbose_name='عنوان')
     file = models.FileField(upload_to='customer_docs/', verbose_name='فایل')
     description = models.TextField(blank=True, null=True, verbose_name='توضیحات')
@@ -274,6 +287,29 @@ class BackupConfig(models.Model):
 
     def __str__(self):
         return 'پیکربندی بکاپ'
+
+
+class InvoiceSettings(models.Model):
+    """Singleton settings used for office-card deposit fees on invoices."""
+    office_card_fee_threshold = models.DecimalField(
+        max_digits=15, decimal_places=0, default=0,
+        verbose_name='حداقل مبلغ واریزی کارت دفتر (تومان)',
+    )
+    show_discount_field = models.BooleanField(default=True, verbose_name='نمایش فیلد تخفیف در فاکتور')
+    show_tax_field = models.BooleanField(default=True, verbose_name='نمایش فیلد مالیات در فاکتور')
+
+    class Meta:
+        verbose_name = 'تنظیمات فاکتور'
+        verbose_name_plural = 'تنظیمات فاکتور'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
 
 
 class BusinessProfile(models.Model):

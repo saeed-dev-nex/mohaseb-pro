@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { invoicesAPI, servicesAPI, customersAPI } from '../services/api';
+import { invoicesAPI, servicesAPI, customersAPI, invoiceSettingsAPI } from '../services/api';
 import PriceInput from './PriceInput';
 import { toPersianKeyboard } from '../utils/persian';
 
@@ -167,6 +167,8 @@ const QuickInvoiceModal = ({ isOpen, onClose, onSuccess }) => {
   ]);
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('pending');
+  const [cardPaymentSource, setCardPaymentSource] = useState('customer');
+  const [officeCardThreshold, setOfficeCardThreshold] = useState(0);
   const [commissionTotal, setCommissionTotal] = useState(0);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
@@ -175,11 +177,23 @@ const QuickInvoiceModal = ({ isOpen, onClose, onSuccess }) => {
   useEffect(() => {
     if (!isOpen) return;
     servicesAPI.list().then(({ data }) => setServices(data.results || data)).catch(() => {});
+    invoiceSettingsAPI.get().then(({ data }) => setOfficeCardThreshold(Number(data.office_card_fee_threshold) || 0)).catch(() => {});
     // Reset form on open
     setCustomerName(''); setCustomerPhone(''); setDescription('');
     setItems([{ _key: Math.random(), service: null, service_title_snapshot: '', quantity: 1, main_price: 0, extra_price: 0, notes: '' }]);
     setCommissionTotal(0);
     setResult(null); setError(''); setStatus('pending');
+    setCardPaymentSource('customer');
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const refreshReferences = () => {
+      servicesAPI.list().then(({ data }) => setServices(data.results || data)).catch(() => {});
+      invoiceSettingsAPI.get().then(({ data }) => setOfficeCardThreshold(Number(data.office_card_fee_threshold) || 0)).catch(() => {});
+    };
+    window.addEventListener('mohaseb:data-changed', refreshReferences);
+    return () => window.removeEventListener('mohaseb:data-changed', refreshReferences);
   }, [isOpen]);
 
   const addRow = () => {
@@ -192,7 +206,9 @@ const QuickInvoiceModal = ({ isOpen, onClose, onSuccess }) => {
   const subtotal = items.reduce((s, it) =>
     s + ((Number(it.main_price) || 0) + (Number(it.extra_price) || 0)) * (Number(it.quantity) || 1), 0);
   const commissionAmt = Number(commissionTotal) || 0;
-  const grandTotal = subtotal + commissionAmt;
+  const officeCardFee = cardPaymentSource === 'office' && officeCardThreshold > 0 && subtotal > officeCardThreshold
+    ? Math.floor(subtotal / 100) : 0;
+  const grandTotal = subtotal + commissionAmt + officeCardFee;
 
   const handleSubmit = async () => {
     if (!customerName.trim()) { setError('نام مشتری الزامی است'); return; }
@@ -205,6 +221,7 @@ const QuickInvoiceModal = ({ isOpen, onClose, onSuccess }) => {
         customer_name: customerName,
         customer_phone: customerPhone,
         status,
+        card_payment_source: cardPaymentSource,
         description,
         commission_total: commissionAmt,
         items: items.filter(it => it.service_title_snapshot || it.main_price).map(it => ({
@@ -348,6 +365,20 @@ const QuickInvoiceModal = ({ isOpen, onClose, onSuccess }) => {
 
           {/* Status */}
           <div>
+            <label className="text-xs text-slate-400 mb-1 block">کارت پرداخت</label>
+            <div className="flex gap-2">
+              {[{ value: 'customer', label: 'کارت مشتری' }, { value: 'office', label: 'کارت دفتر' }].map((option) => (
+                <button key={option.value} type="button" onClick={() => setCardPaymentSource(option.value)}
+                  className={`flex-1 text-xs py-2 rounded-xl border transition-all ${cardPaymentSource === option.value ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' : 'bg-slate-700/30 border-slate-600/30 text-slate-400'}`}>
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {officeCardFee > 0 && <p className="text-amber-300 text-[11px] mt-2">ردیف واریزی خودکار: {fmt(officeCardFee)} تومان</p>}
+          </div>
+
+          {/* Status */}
+          <div>
             <label className="text-xs text-slate-400 mb-1 block">وضعیت</label>
             <div className="flex gap-2">
               {[
@@ -374,6 +405,10 @@ const QuickInvoiceModal = ({ isOpen, onClose, onSuccess }) => {
               <span className="text-slate-400">جمع خدمات</span>
               <span className="text-slate-200">{fmt(subtotal)} <span className="text-xs font-normal">تومان</span></span>
             </div>
+            {officeCardFee > 0 && <div className="flex justify-between text-sm text-amber-300">
+              <span>واریزی کارت دفتر</span>
+              <span>+{fmt(officeCardFee)} تومان</span>
+            </div>}
             {commissionAmt > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-yellow-400/80">💼 کارمزد</span>

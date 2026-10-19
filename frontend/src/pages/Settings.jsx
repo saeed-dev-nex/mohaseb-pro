@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
-import { profileAPI, backupConfigAPI, backupAPI } from '../services/api';
+import { profileAPI, backupConfigAPI, backupAPI, invoiceSettingsAPI } from '../services/api';
 
 const inp = 'w-full px-3 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all';
 const RESTORE_CONFIRMATION_PHRASE = 'تایید';
@@ -24,6 +24,7 @@ const F = ({ label, children }) => (
 
 const Settings = () => {
   const isSuperuser = useSelector((state) => state.auth.currentUser?.is_superuser);
+  const isManager = useSelector((state) => !!(state.auth.currentUser?.is_staff || state.auth.currentUser?.is_superuser));
   const [form, setForm] = useState({
     name: '', subtitle: '', phone: '', mobile: '', address: '',
     website: '', instagram: '', telegram: '', footer_text: '', tax_id: '',
@@ -47,6 +48,9 @@ const Settings = () => {
   const [backupSaving, setBackupSaving] = useState(false);
   const [backupRunning, setBackupRunning] = useState(false);
   const [backupMsg, setBackupMsg] = useState('');
+  const [invoiceCfg, setInvoiceCfg] = useState({ office_card_fee_threshold: 0, show_discount_field: true, show_tax_field: true });
+  const [invoiceCfgSaving, setInvoiceCfgSaving] = useState(false);
+  const [invoiceCfgMsg, setInvoiceCfgMsg] = useState('');
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [folderPickerTarget, setFolderPickerTarget] = useState('backup');
   const [folderPickerData, setFolderPickerData] = useState(null);
@@ -62,7 +66,8 @@ const Settings = () => {
     Promise.all([
       profileAPI.get(),
       backupConfigAPI.get().catch(() => ({ data: {} })),
-    ]).then(([pRes, bRes]) => {
+      invoiceSettingsAPI.get().catch(() => ({ data: {} })),
+    ]).then(([pRes, bRes, iRes]) => {
       const profile = Array.isArray(pRes.data) ? pRes.data[0] : pRes.data;
       if (profile) {
         setForm({
@@ -78,6 +83,7 @@ const Settings = () => {
       if (bRes.data && Object.keys(bRes.data).length) {
         setBackupCfg((prev) => ({ ...prev, ...bRes.data }));
       }
+      if (iRes.data && Object.keys(iRes.data).length) setInvoiceCfg((prev) => ({ ...prev, ...iRes.data }));
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -138,6 +144,24 @@ const Settings = () => {
       setBackupMsg('❌ خطا در ذخیره تنظیمات بکاپ');
       setTimeout(() => setBackupMsg(''), 4000);
     } finally { setBackupSaving(false); }
+  };
+
+  const handleSaveInvoiceConfig = async () => {
+    setInvoiceCfgSaving(true);
+    try {
+      const { data } = await invoiceSettingsAPI.update({
+        office_card_fee_threshold: Number(invoiceCfg.office_card_fee_threshold) || 0,
+        show_discount_field: Boolean(invoiceCfg.show_discount_field),
+        show_tax_field: Boolean(invoiceCfg.show_tax_field),
+      });
+      setInvoiceCfg((prev) => ({ ...prev, ...data }));
+      setInvoiceCfgMsg('✅ تنظیمات واریزی ذخیره شد');
+    } catch (error) {
+      setInvoiceCfgMsg(error.response?.data?.detail || '❌ ذخیره تنظیمات واریزی انجام نشد');
+    } finally {
+      setInvoiceCfgSaving(false);
+      setTimeout(() => setInvoiceCfgMsg(''), 4000);
+    }
   };
 
   const handleRunBackup = async (saveToPath) => {
@@ -304,6 +328,25 @@ const Settings = () => {
           </div>
         </Section>
       </div>
+
+      {isManager && <Section title="تنظیمات فاکتور" icon="🧾">
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-slate-200">نمایش فیلدهای خلاصه مالی</p>
+          <label className="flex items-center gap-3 text-sm text-slate-300"><input type="checkbox" checked={invoiceCfg.show_discount_field} onChange={e => setInvoiceCfg(prev => ({ ...prev, show_discount_field: e.target.checked }))} className="h-4 w-4 accent-blue-500" /> نمایش فیلد تخفیف</label>
+          <label className="flex items-center gap-3 text-sm text-slate-300"><input type="checkbox" checked={invoiceCfg.show_tax_field} onChange={e => setInvoiceCfg(prev => ({ ...prev, show_tax_field: e.target.checked }))} className="h-4 w-4 accent-blue-500" /> نمایش فیلد مالیات</label>
+          <F label="حداقل مبلغ فاکتور برای محاسبهٔ واریزی (تومان)">
+            <input type="number" min="0" step="100000" className={inp}
+              value={invoiceCfg.office_card_fee_threshold}
+              onChange={(event) => setInvoiceCfg((prev) => ({ ...prev, office_card_fee_threshold: event.target.value }))} />
+          </F>
+          <p className="text-xs text-slate-400">اگر کارت پرداخت «کارت دفتر» باشد و جمع خدمات از این مبلغ بیشتر شود، ردیف واریزی با نرخ ۱۰٬۰۰۰ تومان به‌ازای هر یک‌میلیون تومان (۱٪) خودکار ثبت می‌شود. صفر یعنی غیرفعال.</p>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={handleSaveInvoiceConfig} disabled={invoiceCfgSaving}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50">{invoiceCfgSaving ? 'در حال ذخیره...' : 'ذخیره تنظیمات فاکتور'}</button>
+            {invoiceCfgMsg && <span role="status" className="text-xs text-slate-300">{invoiceCfgMsg}</span>}
+          </div>
+        </div>
+      </Section>}
 
       {/* Invoice Footer */}
       <Section title="متن پاورقی فاکتور" icon="📄">

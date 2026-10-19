@@ -9,14 +9,24 @@ const fmt = (n) => new Intl.NumberFormat('fa-IR').format(Number(n) || 0);
 // ── Mini Bar Chart (revenue vs expense) ──
 const BarChart = ({ data }) => {
   const maxVal = Math.max(...data.map(d => Math.max(d.revenue || 0, d.expense || 0)), 1);
+  const compactAmount = (value) => new Intl.NumberFormat('fa-IR', { notation: 'compact', maximumFractionDigits: 1 }).format(value || 0);
+  const monthLabel = (month) => {
+    const [year, number] = (month.month || '').split('-').map(Number);
+    if (!year || !number) return month.label;
+    return new Intl.DateTimeFormat('fa-IR-u-ca-persian', { month: 'short' }).format(new Date(year, number - 1, 15));
+  };
   return (
-    <div className="flex items-end gap-3 h-40">
+    <div className="relative">
+      <div className="absolute inset-x-0 top-0 bottom-7 flex flex-col justify-between pointer-events-none">
+        {[1, 0.66, 0.33, 0].map((tick, index) => <div key={index} className="flex items-center gap-2"><span className="w-10 text-left text-[10px] text-slate-500">{compactAmount(maxVal * tick)}</span><span className="h-px flex-1 border-t border-dashed border-slate-700/70" /></div>)}
+      </div>
+      <div className="relative flex items-end gap-3 h-48 pl-12 pb-7">
       {data.map((month, i) => {
         const revPct = Math.max(((month.revenue || 0) / maxVal) * 100, 2);
         const expPct = Math.max(((month.expense || 0) / maxVal) * 100, 2);
         return (
           <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
-            <div className="relative w-full flex items-end gap-0.5" style={{ height: '120px' }}>
+            <div className="relative w-full flex items-end gap-1" style={{ height: '170px' }}>
               {/* Tooltip */}
               <div className="absolute -top-10 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity
                 bg-slate-700 text-white text-[10px] rounded-lg px-2 py-1.5 whitespace-nowrap z-10 pointer-events-none leading-relaxed">
@@ -25,16 +35,17 @@ const BarChart = ({ data }) => {
                 <span className="text-green-300">سود: {fmt(month.profit)}</span>
               </div>
               {/* Revenue bar */}
-              <div className="flex-1 rounded-t-md bg-gradient-to-t from-blue-600 to-indigo-400 group-hover:from-indigo-600 group-hover:to-blue-300 transition-all duration-300"
+              <div title={`درآمد ${fmt(month.revenue)}`} className="flex-1 rounded-t-md bg-gradient-to-t from-blue-600 to-indigo-400 group-hover:from-indigo-600 group-hover:to-blue-300 transition-all duration-300"
                 style={{ height: `${revPct}%` }} />
               {/* Expense bar */}
-              <div className="flex-1 rounded-t-md bg-gradient-to-t from-red-600/60 to-red-400/60 group-hover:from-red-500 group-hover:to-red-300 transition-all duration-300"
+              <div title={`هزینه ${fmt(month.expense)}`} className="flex-1 rounded-t-md bg-gradient-to-t from-red-600/60 to-red-400/60 group-hover:from-red-500 group-hover:to-red-300 transition-all duration-300"
                 style={{ height: `${expPct}%` }} />
             </div>
-            <span className="text-slate-500 text-xs">{month.label}</span>
+            <span className="text-slate-400 text-xs">{monthLabel(month)}</span>
           </div>
         );
       })}
+      </div>
     </div>
   );
 };
@@ -83,10 +94,13 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    dashboardAPI.stats()
+    const refresh = () => dashboardAPI.stats()
       .then(res => setStats(res.data))
       .catch(console.error)
       .finally(() => setLoading(false));
+    refresh();
+    window.addEventListener('mohaseb:data-changed', refresh);
+    return () => window.removeEventListener('mohaseb:data-changed', refresh);
   }, []);
 
   const handleMarkPaid = async (id) => {

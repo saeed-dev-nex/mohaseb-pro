@@ -3,11 +3,18 @@
   "name": "محاسب پرو - صدور فاکتور سریع",
   "short_name": "محاسب پرو",
   "description": "پنجره مستقل و جابه‌جاپذیر برای صدور سریع فاکتور بدون مراجعه به داشبورد.",
-  "version": "1.1.0",
+  "version": "1.1.4",
   "browser_specific_settings": {
     "gecko": {
       "id": "mohaseb-pro@invoice.local",
-      "strict_min_version": "91.0"
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "authenticationInfo",
+          "personallyIdentifyingInfo",
+          "financialAndPaymentInfo"
+        ]
+      }
     }
   },
   "icons": {
@@ -28,7 +35,6 @@
   },
   "permissions": [
     "storage",
-    "windows",
-    "http://localhost:8000/*"
+    "http://localhost/*"
   ]
 }

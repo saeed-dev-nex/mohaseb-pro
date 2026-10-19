@@ -47,18 +47,25 @@ browser.browserAction.onClicked.addListener(() => {
   toggleQuickInvoiceWindow().catch((error) => console.error('Quick invoice window error:', error));
 });
 
-browser.windows.onBoundsChanged.addListener(async (changedWindow) => {
-  if (changedWindow.state === 'minimized') return;
+browser.windows.onFocusChanged.addListener(async (focusedWindowId) => {
   const stored = await browser.storage.local.get(WINDOW_ID_KEY);
-  if (stored[WINDOW_ID_KEY] !== changedWindow.id) return;
-  await browser.storage.local.set({
-    [WINDOW_BOUNDS_KEY]: {
-      left: changedWindow.left,
-      top: changedWindow.top,
-      width: changedWindow.width,
-      height: changedWindow.height,
-    },
-  });
+  const windowId = stored[WINDOW_ID_KEY];
+  if (typeof windowId !== 'number' || focusedWindowId === windowId) return;
+
+  try {
+    const invoiceWindow = await browser.windows.get(windowId);
+    if (invoiceWindow.state === 'minimized') return;
+    await browser.storage.local.set({
+      [WINDOW_BOUNDS_KEY]: {
+        left: invoiceWindow.left,
+        top: invoiceWindow.top,
+        width: invoiceWindow.width,
+        height: invoiceWindow.height,
+      },
+    });
+  } catch {
+    // The invoice window may have closed while focus was changing.
+  }
 });
 
 browser.windows.onRemoved.addListener(async (windowId) => {

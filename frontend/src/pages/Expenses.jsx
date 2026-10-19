@@ -97,6 +97,7 @@ const Expenses = () => {
 
   useEffect(() => {
     load();
+    window.addEventListener('mohaseb:data-changed', load);
     // Seed default categories if empty
     expenseCategoriesAPI.list().then(({ data }) => {
       const list = data.results || data;
@@ -105,6 +106,7 @@ const Expenses = () => {
           .then(() => load());
       }
     });
+    return () => window.removeEventListener('mohaseb:data-changed', load);
   }, []);
 
   const handleSave = async (form) => {

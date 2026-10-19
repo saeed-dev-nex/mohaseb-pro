@@ -124,7 +124,12 @@ const Services = () => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => { dispatch(fetchServices()); }, [dispatch]);
+  useEffect(() => {
+    const refresh = () => dispatch(fetchServices());
+    refresh();
+    window.addEventListener('mohaseb:data-changed', refresh);
+    return () => window.removeEventListener('mohaseb:data-changed', refresh);
+  }, [dispatch]);
 
   const handleSave = async (form) => {
     setSaving(true);

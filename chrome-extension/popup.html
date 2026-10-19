@@ -23,6 +23,7 @@
         <label>🔒 رمز عبور</label>
         <input type="password" id="login-password" placeholder="••••••••" />
       </div>
+      <label class="remember-row"><input type="checkbox" id="remember-me" checked /> <span>مرا به خاطر بسپار و ورود خودکار</span></label>
     </div>
     <div id="login-error" class="error-msg" style="display:none;"></div>
     <button id="login-btn" class="btn-primary btn-gradient">ورود به حساب</button>
@@ -106,6 +107,13 @@
       </div>
     </div>
 
+
+    <!-- Status -->
+    <div class="glass-card">
+      <label class="form-group">کارت پرداخت
+        <select id="card-payment-source"><option value="customer">کارت مشتری</option><option value="office">کارت دفتر</option></select>
+      </label>
+    </div>
 
     <!-- Status -->
     <div class="section">

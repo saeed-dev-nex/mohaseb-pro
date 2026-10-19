@@ -22,19 +22,33 @@ const storage = {
     chrome.storage.local.remove([key], resolve);
   }),
 };
+const sessionStorage = {
+  get: (key) => new Promise(resolve => chrome.storage.session.get([key], (r) => resolve(r[key]))),
+  set: (key, val) => new Promise(resolve => chrome.storage.session.set({ [key]: val }, resolve)),
+  remove: (key) => new Promise(resolve => chrome.storage.session.remove([key], resolve)),
+};
+const authStorage = {
+  get: async (key) => (await storage.get(key)) ?? sessionStorage.get(key),
+  set: async (key, val, remember) => {
+    await Promise.all([storage.remove(key), sessionStorage.remove(key)]);
+    await (remember ? storage : sessionStorage).set(key, val);
+  },
+  setRefreshedAccess: async (val) => authStorage.set('access_token', val, Boolean(await storage.get('refresh_token'))),
+  remove: async (key) => Promise.all([storage.remove(key), sessionStorage.remove(key)]),
+};
 
 // ═══════════════════════════════════════════
 // API helpers
 // ═══════════════════════════════════════════
 async function apiRequest(endpoint, options = {}) {
-  const token = await storage.get('access_token');
+  const token = await authStorage.get('access_token');
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const resp = await fetch(API + endpoint, { ...options, headers });
 
   if (resp.status === 401) {
-    const refresh = await storage.get('refresh_token');
+    const refresh = await authStorage.get('refresh_token');
     if (refresh) {
       const refreshResp = await fetch(API + 'token/refresh/', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -42,7 +56,7 @@ async function apiRequest(endpoint, options = {}) {
       });
       if (refreshResp.ok) {
         const data = await refreshResp.json();
-        await storage.set('access_token', data.access);
+        await authStorage.setRefreshedAccess(data.access);
         headers['Authorization'] = `Bearer ${data.access}`;
         return fetch(API + endpoint, { ...options, headers }).then(r => r.json());
       }
@@ -61,6 +75,7 @@ async function apiRequest(endpoint, options = {}) {
 // State
 // ═══════════════════════════════════════════
 let services = [];
+let officeCardThreshold = 0;
 let currentStatus = 'pending';
 let searchTimeout = null;
 let svcSearchTimeout = null;
@@ -88,6 +103,7 @@ function collectFormData() {
     description: $('description').value,
     commissionTotal: $('commission-total').value,
     status: currentStatus,
+    cardPaymentSource: $('card-payment-source').value,
     items: items,
     savedAt: Date.now(),
   };
@@ -117,6 +133,7 @@ async function restoreDraft() {
   $('description').value = draft.description || '';
   $('commission-total').value = draft.commissionTotal || '';
   currentStatus = draft.status || 'pending';
+  $('card-payment-source').value = draft.cardPaymentSource || 'customer';
   updateStatusButtons();
 
   // Restore items
@@ -159,8 +176,9 @@ $('login-btn').addEventListener('click', async () => {
       return r.json();
     });
 
-    await storage.set('access_token', data.access);
-    await storage.set('refresh_token', data.refresh);
+    const remember = $('remember-me').checked;
+    await authStorage.set('access_token', data.access, remember);
+    await authStorage.set('refresh_token', data.refresh, remember);
     showInvoiceView();
   } catch (e) {
     $('login-error').textContent = '⚠️ ' + e.message;
@@ -180,8 +198,8 @@ $('login-password').addEventListener('keydown', (e) => {
 // Logout
 // ═══════════════════════════════════════════
 $('logout-btn').addEventListener('click', async () => {
-  await storage.remove('access_token');
-  await storage.remove('refresh_token');
+  await authStorage.remove('access_token');
+  await authStorage.remove('refresh_token');
   showLoginView();
 });
 
@@ -206,6 +224,10 @@ async function showInvoiceView() {
   } catch (e) {
     if (e.message === 'AUTH_EXPIRED') { showLoginView(); return; }
   }
+  try {
+    const settings = await apiRequest('invoice-settings/');
+    officeCardThreshold = Number(settings.office_card_fee_threshold) || 0;
+  } catch {}
 
   // Try to restore draft first
   const hasDraft = await restoreDraft();
@@ -215,6 +237,7 @@ async function showInvoiceView() {
     $('customer-phone').value = '';
     $('description').value = '';
     $('commission-total').value = '';
+    $('card-payment-source').value = 'customer';
     $('invoice-error').style.display = 'none';
     currentStatus = 'pending';
     updateStatusButtons();
@@ -232,6 +255,7 @@ function attachAutoSaveListeners() {
   ['customer-name', 'customer-phone', 'description', 'commission-total'].forEach(id => {
     $(id).addEventListener('input', scheduleSave);
   });
+  $('card-payment-source').onchange = () => { updateTotal(); scheduleSave(); };
 }
 
 function showSuccessView(data) {
@@ -334,6 +358,8 @@ function addItemRow(data = {}) {
     <div class="item-title-input">
       <input type="text" class="item-title" placeholder="عنوان خدمت (تایپ کنید برای جستجو)" value="${data.title || ''}" autocomplete="off" />
       <div class="svc-suggestions" style="display:none;"></div>
+      <button type="button" class="btn-outline-sm svc-picker-toggle">افزودن از لیست خدمات</button>
+      <div class="svc-picker-list" style="display:none;"></div>
     </div>
     <div class="item-prices">
       <div>
@@ -376,6 +402,26 @@ function addItemRow(data = {}) {
   // Service autocomplete
   const titleInput = row.querySelector('.item-title');
   const svcSuggestions = row.querySelector('.svc-suggestions');
+  const pickerList = row.querySelector('.svc-picker-list');
+  row.querySelector('.svc-picker-toggle').addEventListener('click', () => {
+    pickerList.replaceChildren();
+    services.filter(s => s.is_active).forEach(s => {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = 'svc-item';
+      const title = document.createElement('span'); title.textContent = s.title || '';
+      const price = document.createElement('span'); price.className = 'svc-price'; price.textContent = `${fmt(s.default_main_price)} ت`;
+      option.append(title, price);
+      option.addEventListener('click', () => {
+        titleInput.value = s.title; titleInput.dataset.serviceId = s.id;
+        row.querySelector('.item-main-price').value = (s.default_main_price || 0) / 1000;
+        row.querySelector('.item-extra-price').value = (s.default_extra_price || 0) / 1000;
+        pickerList.style.display = 'none'; updateTotal(); scheduleSave();
+      });
+      pickerList.appendChild(option);
+    });
+    pickerList.style.display = pickerList.style.display === 'none' ? 'block' : 'none';
+  });
 
   titleInput.addEventListener('input', (e) => {
     const q = e.target.value.trim().toLowerCase();
@@ -446,7 +492,9 @@ function updateTotal() {
     if (ltEl) ltEl.textContent = lineTotal > 0 ? `${fmt(lineTotal)} تومان` : '';
   });
 
-  $('total-amount').textContent = `${fmt(total)} تومان`;
+  const fee = $('card-payment-source').value === 'office' && officeCardThreshold > 0 && total > officeCardThreshold
+    ? Math.floor(total / 100) : 0;
+  $('total-amount').textContent = `${fmt(total + fee)} تومان${fee ? ` (واریزی ${fmt(fee)})` : ''}`;
 }
 
 // ═══════════════════════════════════════════
@@ -500,6 +548,7 @@ $('submit-btn').addEventListener('click', async () => {
         customer_name: customerName,
         customer_phone: customerPhone,
         status: currentStatus,
+        card_payment_source: $('card-payment-source').value,
         description: description,
         commission_total: Math.round(Number($('commission-total').value || 0) * 1000),
         items: items,
@@ -536,7 +585,7 @@ $('minimize-btn').addEventListener('click', () => {
 // Init — check if already logged in
 // ═══════════════════════════════════════════
 (async () => {
-  const token = await storage.get('access_token');
+  const token = await authStorage.get('access_token');
   if (token) {
     try {
       await apiRequest('dashboard/stats/');

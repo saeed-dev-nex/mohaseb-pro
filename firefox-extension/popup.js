@@ -24,19 +24,36 @@ const storage = {
     return browser.storage.local.remove(key);
   },
 };
+const sessionStorage = {
+  get: async (key) => {
+    const result = await browser.storage.session.get(key);
+    return result[key];
+  },
+  set: (key, val) => browser.storage.session.set({ [key]: val }),
+  remove: (key) => browser.storage.session.remove(key),
+};
+const authStorage = {
+  get: async (key) => (await storage.get(key)) ?? sessionStorage.get(key),
+  set: async (key, val, remember) => {
+    await Promise.all([storage.remove(key), sessionStorage.remove(key)]);
+    await (remember ? storage : sessionStorage).set(key, val);
+  },
+  setRefreshedAccess: async (val) => authStorage.set('access_token', val, Boolean(await storage.get('refresh_token'))),
+  remove: async (key) => Promise.all([storage.remove(key), sessionStorage.remove(key)]),
+};
 
 // ═══════════════════════════════════════════
 // API helpers
 // ═══════════════════════════════════════════
 async function apiRequest(endpoint, options = {}) {
-  const token = await storage.get('access_token');
+  const token = await authStorage.get('access_token');
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const resp = await fetch(API + endpoint, { ...options, headers });
 
   if (resp.status === 401) {
-    const refresh = await storage.get('refresh_token');
+    const refresh = await authStorage.get('refresh_token');
     if (refresh) {
       const refreshResp = await fetch(API + 'token/refresh/', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -44,7 +61,7 @@ async function apiRequest(endpoint, options = {}) {
       });
       if (refreshResp.ok) {
         const data = await refreshResp.json();
-        await storage.set('access_token', data.access);
+        await authStorage.setRefreshedAccess(data.access);
         headers['Authorization'] = `Bearer ${data.access}`;
         return fetch(API + endpoint, { ...options, headers }).then(r => r.json());
       }
@@ -63,6 +80,7 @@ async function apiRequest(endpoint, options = {}) {
 // State
 // ═══════════════════════════════════════════
 let services = [];
+let officeCardThreshold = 0;
 let currentStatus = 'pending';
 let searchTimeout = null;
 let svcSearchTimeout = null;
@@ -90,6 +108,7 @@ function collectFormData() {
     description: $('description').value,
     commissionTotal: $('commission-total').value,
     status: currentStatus,
+    cardPaymentSource: $('card-payment-source').value,
     items: items,
     savedAt: Date.now(),
   };
@@ -117,6 +136,7 @@ async function restoreDraft() {
   $('description').value = draft.description || '';
   $('commission-total').value = draft.commissionTotal || '';
   currentStatus = draft.status || 'pending';
+  $('card-payment-source').value = draft.cardPaymentSource || 'customer';
   updateStatusButtons();
 
   clearItems();
@@ -158,8 +178,9 @@ $('login-btn').addEventListener('click', async () => {
       return r.json();
     });
 
-    await storage.set('access_token', data.access);
-    await storage.set('refresh_token', data.refresh);
+    const remember = $('remember-me').checked;
+    await authStorage.set('access_token', data.access, remember);
+    await authStorage.set('refresh_token', data.refresh, remember);
     showInvoiceView();
   } catch (e) {
     $('login-error').textContent = '⚠️ ' + e.message;
@@ -178,8 +199,8 @@ $('login-password').addEventListener('keydown', (e) => {
 // Logout
 // ═══════════════════════════════════════════
 $('logout-btn').addEventListener('click', async () => {
-  await storage.remove('access_token');
-  await storage.remove('refresh_token');
+  await authStorage.remove('access_token');
+  await authStorage.remove('refresh_token');
   showLoginView();
 });
 
@@ -203,6 +224,10 @@ async function showInvoiceView() {
   } catch (e) {
     if (e.message === 'AUTH_EXPIRED') { showLoginView(); return; }
   }
+  try {
+    const settings = await apiRequest('invoice-settings/');
+    officeCardThreshold = Number(settings.office_card_fee_threshold) || 0;
+  } catch {}
 
   const hasDraft = await restoreDraft();
   if (!hasDraft) {
@@ -210,6 +235,7 @@ async function showInvoiceView() {
     $('customer-phone').value = '';
     $('description').value = '';
     $('commission-total').value = '';
+    $('card-payment-source').value = 'customer';
     $('invoice-error').style.display = 'none';
     currentStatus = 'pending';
     updateStatusButtons();
@@ -226,6 +252,7 @@ function attachAutoSaveListeners() {
   ['customer-name', 'customer-phone', 'description', 'commission-total'].forEach(id => {
     $(id).addEventListener('input', scheduleSave);
   });
+  $('card-payment-source').onchange = () => { updateTotal(); scheduleSave(); };
 }
 
 function showSuccessView(data) {
@@ -259,14 +286,19 @@ $('customer-name').addEventListener('input', (e) => {
       const data = await apiRequest(`customers/?search=${encodeURIComponent(q)}`);
       const list = data.results || data;
       const container = $('customer-suggestions');
-      container.innerHTML = '';
+      container.replaceChildren();
 
       if (list.length > 0) {
         list.slice(0, 5).forEach(c => {
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'suggestion-item';
-          btn.innerHTML = `<span>${c.name}</span><span class="suggestion-phone">${c.phone || ''}</span>`;
+          const name = document.createElement('span');
+          name.textContent = c.name || '';
+          const phone = document.createElement('span');
+          phone.className = 'suggestion-phone';
+          phone.textContent = c.phone || '';
+          btn.append(name, phone);
           btn.addEventListener('click', () => {
             $('customer-name').value = c.name;
             if (c.phone) $('customer-phone').value = c.phone;
@@ -313,46 +345,20 @@ function updateStatusButtons() {
 // Item Rows
 // ═══════════════════════════════════════════
 function clearItems() {
-  $('items-container').innerHTML = '';
+  $('items-container').replaceChildren();
 }
 
 function addItemRow(data = {}) {
   const container = $('items-container');
-  const idx = container.children.length;
-  const row = document.createElement('div');
-  row.className = 'item-row';
-
-  row.innerHTML = `
-    <span class="item-num">${idx + 1}</span>
-    <button type="button" class="item-remove" data-action="remove-row">×</button>
-    <div class="item-title-input">
-      <input type="text" class="item-title" placeholder="عنوان خدمت (تایپ کنید برای جستجو)" value="${data.title || ''}" autocomplete="off" />
-      <div class="svc-suggestions" style="display:none;"></div>
-    </div>
-    <div class="item-prices">
-      <div>
-        <span class="price-label">قیمت اصلی</span>
-        <div class="price-wrap">
-          <input type="number" class="item-main-price" placeholder="0" value="${data.mainPrice || ''}" />
-          <span class="price-unit">هزار ت</span>
-        </div>
-      </div>
-      <div>
-        <span class="price-label">قیمت اضافی</span>
-        <div class="price-wrap">
-          <input type="number" class="item-extra-price" placeholder="0" value="${data.extraPrice || ''}" />
-          <span class="price-unit">هزار ت</span>
-        </div>
-      </div>
-      <div>
-        <span class="price-label">تعداد</span>
-        <input type="number" class="item-qty" min="1" placeholder="1" value="${data.qty || 1}" />
-      </div>
-    </div>
-    <div class="item-line-total"></div>
-  `;
+  const row = document.getElementById('item-row-template').content.firstElementChild.cloneNode(true);
+  row.querySelector('.item-num').textContent = container.children.length + 1;
 
   container.appendChild(row);
+
+  row.querySelector('.item-title').value = data.title || '';
+  row.querySelector('.item-main-price').value = data.mainPrice || '';
+  row.querySelector('.item-extra-price').value = data.extraPrice || '';
+  row.querySelector('.item-qty').value = data.qty || 1;
 
   if (data.serviceId) {
     row.querySelector('.item-title').dataset.serviceId = data.serviceId;
@@ -369,6 +375,26 @@ function addItemRow(data = {}) {
   // Service autocomplete
   const titleInput = row.querySelector('.item-title');
   const svcSuggestions = row.querySelector('.svc-suggestions');
+  const pickerList = row.querySelector('.svc-picker-list');
+  row.querySelector('.svc-picker-toggle').addEventListener('click', () => {
+    pickerList.replaceChildren();
+    services.filter(s => s.is_active).forEach(s => {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = 'svc-item';
+      const title = document.createElement('span'); title.textContent = s.title || '';
+      const price = document.createElement('span'); price.className = 'svc-price'; price.textContent = `${fmt(s.default_main_price)} ت`;
+      option.append(title, price);
+      option.addEventListener('click', () => {
+        titleInput.value = s.title; titleInput.dataset.serviceId = s.id;
+        row.querySelector('.item-main-price').value = (s.default_main_price || 0) / 1000;
+        row.querySelector('.item-extra-price').value = (s.default_extra_price || 0) / 1000;
+        pickerList.style.display = 'none'; updateTotal(); scheduleSave();
+      });
+      pickerList.appendChild(option);
+    });
+    pickerList.style.display = pickerList.style.display === 'none' ? 'block' : 'none';
+  });
 
   titleInput.addEventListener('input', (e) => {
     const q = e.target.value.trim().toLowerCase();
@@ -377,13 +403,18 @@ function addItemRow(data = {}) {
     if (!q) { svcSuggestions.style.display = 'none'; return; }
     svcSearchTimeout = setTimeout(() => {
       const filtered = services.filter(s => s.is_active && s.title.toLowerCase().includes(q));
-      svcSuggestions.innerHTML = '';
+      svcSuggestions.replaceChildren();
       if (filtered.length > 0) {
         filtered.slice(0, 4).forEach(s => {
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'svc-item';
-          btn.innerHTML = `<span>${s.title}</span><span class="svc-price">${fmt(s.default_main_price)} ت</span>`;
+          const title = document.createElement('span');
+          title.textContent = s.title || '';
+          const price = document.createElement('span');
+          price.className = 'svc-price';
+          price.textContent = `${fmt(s.default_main_price)} ت`;
+          btn.append(title, price);
           btn.addEventListener('click', () => {
             titleInput.value = s.title;
             titleInput.dataset.serviceId = s.id;
@@ -438,7 +469,9 @@ function updateTotal() {
     if (ltEl) ltEl.textContent = lineTotal > 0 ? `${fmt(lineTotal)} تومان` : '';
   });
 
-  $('total-amount').textContent = `${fmt(total)} تومان`;
+  const fee = $('card-payment-source').value === 'office' && officeCardThreshold > 0 && total > officeCardThreshold
+    ? Math.floor(total / 100) : 0;
+  $('total-amount').textContent = `${fmt(total + fee)} تومان${fee ? ` (واریزی ${fmt(fee)})` : ''}`;
 }
 
 // ═══════════════════════════════════════════
@@ -492,6 +525,7 @@ $('submit-btn').addEventListener('click', async () => {
         customer_name: customerName,
         customer_phone: customerPhone,
         status: currentStatus,
+        card_payment_source: $('card-payment-source').value,
         description: description,
         commission_total: Math.round(Number($('commission-total').value || 0) * 1000),
         items: items,
@@ -532,7 +566,7 @@ $('minimize-btn').addEventListener('click', () => {
 // Init
 // ═══════════════════════════════════════════
 (async () => {
-  const token = await storage.get('access_token');
+  const token = await authStorage.get('access_token');
   if (token) {
     try {
       await apiRequest('dashboard/stats/');

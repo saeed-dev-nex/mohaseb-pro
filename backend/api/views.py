@@ -3,11 +3,14 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import BasePermission, IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.db.models import Sum, Count, Q
-from django.db import transaction
+from django.db.models import Sum, Count, Q, OuterRef, Subquery, DecimalField, Value, Case, When, F, ExpressionWrapper
+from django.db.models.functions import Coalesce
+from django.db import transaction, connection
 from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 from datetime import timedelta, date
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
+from django.core.paginator import Paginator, EmptyPage
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.models import User
 import json, calendar, os, shutil
@@ -15,21 +18,45 @@ import json, calendar, os, shutil
 from .models import (
     Customer, Service, Invoice, InvoiceEditRequest, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
-    Cheque
+    Cheque, InvoiceSettings
 )
 from .serializers import (
     CustomerListSerializer, CustomerDetailSerializer,
     ServiceSerializer, InvoiceSerializer, DocumentSerializer,
     BusinessProfileSerializer, ExpenseCategorySerializer,
     ExpenseSerializer, StaffSerializer, VehicleTypeSerializer,
-    UserSerializer, BackupConfigSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer
+    UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer
 )
-from .audit import snapshot, record_audit
+from .audit import snapshot, record_audit, is_invoice_content_version
 
 
 class IsSuperuser(BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated and request.user.is_superuser)
+
+
+class IsManagerOrAdmin(BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def database_revision(request):
+    """Return a cheap revision token that changes after committed SQLite writes."""
+    if connection.vendor == 'sqlite':
+        database_path = connection.settings_dict['NAME']
+        paths = (database_path, f'{database_path}-wal')
+        revision = []
+        for path in paths:
+            try:
+                stat = os.stat(path)
+                revision.append((stat.st_mtime_ns, stat.st_size))
+            except OSError:
+                revision.append(None)
+        return Response({'revision': revision})
+    # Other database backends can use this endpoint without a schema change.
+    return Response({'revision': timezone.now().timestamp()})
 
 
 class CustomerViewSet(viewsets.ModelViewSet):
@@ -138,7 +165,14 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied('ویرایش فاکتور پرداخت‌شده نیاز به تأیید درخواست ویرایش توسط مدیر دارد.')
         before = snapshot(invoice)
-        serializer.save()
+        was_paid = invoice.status == 'paid'
+        updated_invoice = serializer.save()
+        if updated_invoice.status == 'paid' and not was_paid:
+            updated_invoice.paid_by = self.request.user
+            updated_invoice.save(update_fields=['paid_by', 'updated_at'])
+        elif updated_invoice.status != 'paid' and was_paid:
+            updated_invoice.paid_by = None
+            updated_invoice.save(update_fields=['paid_by', 'updated_at'])
         if edit_request:
             edit_request.status = 'used'
             edit_request.used_at = timezone.now()
@@ -146,7 +180,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         record_audit(user=self.request.user, instance=invoice, action='update', before=before, after=snapshot(invoice))
 
     def perform_create(self, serializer):
-        invoice = serializer.save(created_by=self.request.user)
+        invoice = serializer.save(
+            created_by=self.request.user,
+            paid_by=self.request.user if serializer.validated_data.get('status') == 'paid' else None,
+        )
         record_audit(user=self.request.user, instance=invoice, action='create', after=snapshot(invoice))
 
     def perform_destroy(self, instance):
@@ -155,18 +192,36 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         instance.delete()
 
     def get_queryset(self):
-        qs = Invoice.objects.select_related('customer', 'created_by').prefetch_related('items__service', 'payments', 'edit_requests')
+        qs = Invoice.objects.select_related('customer', 'created_by', 'paid_by').prefetch_related('items__service', 'payments', 'edit_requests')
         status_filter = self.request.query_params.get('status', '')
         customer_id = self.request.query_params.get('customer', '')
+        customer_name = self.request.query_params.get('customer_name', '')
+        payment_source = self.request.query_params.get('payment_source', '')
+        vehicle_plate = self.request.query_params.get('vehicle_plate', '')
         search = self.request.query_params.get('search', '')
         date_from = self.request.query_params.get('date_from', '')
         date_to = self.request.query_params.get('date_to', '')
         overdue_only = self.request.query_params.get('overdue', '')
+        payer = self.request.query_params.get('paid_by', '')
+        issuer = self.request.query_params.get('created_by', '')
+        paid_min = self.request.query_params.get('amount_min', self.request.query_params.get('paid_min', ''))
+        paid_max = self.request.query_params.get('amount_max', self.request.query_params.get('paid_max', ''))
 
         if status_filter:
-            qs = qs.filter(status=status_filter)
+            if status_filter == 'commission_paid':
+                qs = qs.filter(commission_paid=True)
+            else:
+                qs = qs.filter(status=status_filter)
+                if status_filter == 'pending':
+                    qs = qs.filter(commission_paid=False)
         if customer_id:
             qs = qs.filter(customer_id=customer_id)
+        if customer_name:
+            qs = qs.filter(Q(customer__name__icontains=customer_name) | Q(green_card_owner_name__icontains=customer_name))
+        if payment_source in ('customer', 'office'):
+            qs = qs.filter(card_payment_source=payment_source)
+        if vehicle_plate:
+            qs = qs.filter(vehicle_plate__icontains=vehicle_plate)
         if search:
             qs = qs.filter(
                 Q(invoice_number__icontains=search) |
@@ -178,16 +233,79 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             qs = qs.filter(date__date__gte=date_from)
         if date_to:
             qs = qs.filter(date__date__lte=date_to)
+        if payer:
+            qs = qs.filter(Q(paid_by_id=payer) | Q(payments__created_by_id=payer)).distinct()
+        if issuer:
+            qs = qs.filter(created_by_id=issuer)
+        if paid_min or paid_max:
+            invoice_total = ExpressionWrapper(
+                F('total_amount') + (F('total_amount') * F('tax') / Value(100)) - F('discount') + F('commission_total'),
+                output_field=DecimalField(max_digits=18, decimal_places=2),
+            )
+            if paid_min:
+                qs = qs.annotate(_invoice_total=invoice_total).filter(_invoice_total__gte=paid_min)
+            if paid_max:
+                qs = qs.annotate(_invoice_total=invoice_total).filter(_invoice_total__lte=paid_max)
         if overdue_only == 'true':
             today = date.today()
             qs = qs.filter(status='pending', due_date__lt=today)
         return qs.order_by('-created_at', '-id')
+
+    def list(self, request, *args, **kwargs):
+        # Keep the legacy array response for existing screens; the invoice page opts into paging.
+        if 'page' not in request.query_params:
+            return super().list(request, *args, **kwargs)
+        queryset = self.filter_queryset(self.get_queryset())
+        paginator = Paginator(queryset, 10)
+        if paginator.count == 0:
+            return Response({'count': 0, 'next': None, 'previous': None, 'results': []})
+        try:
+            page = paginator.page(max(1, int(request.query_params.get('page', 1))))
+        except (ValueError, EmptyPage):
+            page = paginator.page(paginator.num_pages)
+        return Response({
+            'count': paginator.count,
+            'next': page.number + 1 if page.has_next() else None,
+            'previous': page.number - 1 if page.has_previous() else None,
+            'results': self.get_serializer(page.object_list, many=True).data,
+        })
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        counts = {row['status']: row['total'] for row in Invoice.objects.values('status').annotate(total=Count('id'))}
+        commission_paid = Invoice.objects.filter(commission_paid=True).count()
+        return Response({'all': sum(counts.values()), 'paid': counts.get('paid', 0), 'pending': counts.get('pending', 0) - Invoice.objects.filter(status='pending', commission_paid=True).count(), 'commission_paid': commission_paid})
+
+    @action(detail=True, methods=['post'])
+    @transaction.atomic
+    def mark_commission_paid(self, request, pk=None):
+        invoice = Invoice.objects.select_for_update().get(pk=self.get_object().pk)
+        before = snapshot(invoice)
+        invoice.commission_paid = request.data.get('commission_paid', True) is True
+        invoice.save(update_fields=['commission_paid', 'updated_at'])
+        record_audit(user=request.user, instance=invoice, action='payment', before=before, after=snapshot(invoice))
+        return Response(self.get_serializer(invoice).data)
+
+    @action(detail=False, methods=['get'])
+    def filter_options(self, request):
+        def users_for(field):
+            rows = Invoice.objects.exclude(**{f'{field}__isnull': True}).values_list(
+                f'{field}_id', f'{field}__first_name', f'{field}__last_name', f'{field}__username'
+            ).distinct().order_by(f'{field}__username')
+            return [{'id': row[0], 'name': (' '.join(part for part in row[1:3] if part).strip() or row[3])} for row in rows]
+        payer_ids = set(Invoice.objects.exclude(paid_by__isnull=True).values_list('paid_by_id', flat=True))
+        payer_ids.update(InvoicePayment.objects.exclude(created_by__isnull=True).values_list('created_by_id', flat=True))
+        payer_users = User.objects.filter(id__in=payer_ids).order_by('username')
+        payers = [{'id': user.id, 'name': user.get_full_name() or user.username} for user in payer_users]
+        can_see_issuers = request.user.is_staff or request.user.is_superuser
+        return Response({'issuers': users_for('created_by') if can_see_issuers else [], 'payers': payers})
 
     @action(detail=True, methods=['post'])
     @transaction.atomic
     def mark_paid(self, request, pk=None):
         invoice = Invoice.objects.select_for_update().get(pk=self.get_object().pk)
         before = snapshot(invoice)
+        was_paid = invoice.status == 'paid'
         amount_paid = invoice.payments.aggregate(total=Sum('amount'))['total']
         already_paid = amount_paid if amount_paid is not None else (invoice.final_amount if invoice.status == 'paid' else 0)
         balance = max(0, int(invoice.final_amount - already_paid))
@@ -195,6 +313,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if balance:
             payment = InvoicePayment.objects.create(invoice=invoice, amount=balance, method='other', note='ثبت پرداخت کامل از صفحه فاکتورها', created_by=request.user)
         invoice.status = 'paid'
+        if not was_paid:
+            invoice.paid_by = request.user
         invoice.save()
         record_audit(user=request.user, instance=invoice, action='payment', before=before, after={**snapshot(invoice), 'payment': InvoicePaymentSerializer(payment).data if payment else None})
         return Response({'status': 'paid', 'message': 'فاکتور به عنوان پرداخت شده ثبت شد'})
@@ -220,6 +340,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
             before = snapshot(invoice)
+            was_paid = invoice.status == 'paid'
             recorded = invoice.payments.aggregate(total=Sum('amount'))['total']
             already_paid = recorded if recorded is not None else (invoice.final_amount if invoice.status == 'paid' else 0)
             remaining = max(0, int(invoice.final_amount - already_paid))
@@ -231,7 +352,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             new_paid_total = int(already_paid) + amount
             if new_paid_total >= invoice.final_amount:
                 invoice.status = 'paid'
-                invoice.save(update_fields=['status', 'updated_at'])
+                if not was_paid:
+                    invoice.paid_by = request.user
+                invoice.save(update_fields=['status', 'paid_by', 'updated_at'])
             record_audit(user=request.user, instance=invoice, action='payment', before=before, after={**snapshot(invoice), 'payment': InvoicePaymentSerializer(payment).data})
         return Response(InvoicePaymentSerializer(payment).data, status=201)
 
@@ -243,6 +366,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 return Response({'detail': 'اپراتور اجازهٔ تغییر پرداخت‌های فاکتور پرداخت‌شده را ندارد.'}, status=status.HTTP_403_FORBIDDEN)
             payment = get_object_or_404(InvoicePayment.objects.select_for_update(), pk=payment_id, invoice=invoice)
             before_invoice = snapshot(invoice)
+            was_paid = invoice.status == 'paid'
             before_payment = InvoicePaymentSerializer(payment).data
 
             if request.method == 'DELETE':
@@ -266,7 +390,11 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             if invoice.status not in ['cancelled', 'draft']:
                 total_paid = invoice.payments.aggregate(total=Sum('amount'))['total'] or 0
                 invoice.status = 'paid' if total_paid >= invoice.final_amount else 'pending'
-                invoice.save(update_fields=['status', 'updated_at'])
+                if invoice.status == 'paid' and not was_paid:
+                    invoice.paid_by = request.user
+                elif invoice.status != 'paid':
+                    invoice.paid_by = None
+                invoice.save(update_fields=['status', 'paid_by', 'updated_at'])
 
             record_audit(
                 user=request.user,
@@ -283,9 +411,81 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def history(self, request, pk=None):
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response({'detail': 'مشاهدهٔ تاریخچهٔ فاکتور فقط برای مدیر یا ادمین مجاز است.'}, status=403)
         invoice = self.get_object()
         logs = AuditLog.objects.filter(object_type='invoice', object_id=str(invoice.pk))
-        return Response(AuditLogSerializer(logs, many=True).data)
+        data = AuditLogSerializer(logs, many=True).data
+        restorable_ids = {
+            event.id for event in logs if is_invoice_content_version(event)
+        }
+        for item in data:
+            item['is_invoice_version'] = item['id'] in restorable_ids
+        return Response(data)
+
+    @action(detail=True, methods=['post'], url_path='restore-version')
+    @transaction.atomic
+    def restore_version(self, request, pk=None):
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response({'detail': 'بازیابی نسخهٔ فاکتور فقط برای مدیر یا ادمین مجاز است.'}, status=403)
+
+        invoice = Invoice.objects.select_for_update().get(pk=self.get_object().pk)
+        event = get_object_or_404(
+            AuditLog.objects.select_for_update(),
+            pk=request.data.get('audit_id'),
+            object_type='invoice',
+            object_id=str(invoice.pk),
+        )
+        if not is_invoice_content_version(event):
+            return Response({'detail': 'نسخهٔ قابل بازیابی برای این رویداد وجود ندارد.'}, status=400)
+
+        from .models import InvoiceItem, Service, Staff
+
+        before = snapshot(invoice)
+        previous = event.changes['before']
+        invoice_fields = (
+            'date', 'due_date', 'description', 'total_amount', 'commission_total',
+            'commission_paid', 'discount', 'tax', 'status', 'paper_size', 'vehicle_plate',
+            'vehicle_vin', 'vehicle_model', 'vehicle_type', 'vehicle_year',
+            'green_card_owner_name', 'green_card_owner_national_id',
+            'custom_fields', 'tags',
+            'card_payment_source',
+        )
+        for field in invoice_fields:
+            if field in previous:
+                value = previous[field]
+                if field == 'date' and isinstance(value, str):
+                    value = parse_datetime(value) or value
+                elif field == 'due_date' and isinstance(value, str):
+                    value = parse_date(value) or value
+                setattr(invoice, field, value)
+        if invoice.status == 'paid' and before.get('status') != 'paid':
+            invoice.paid_by = request.user
+        elif invoice.status != 'paid':
+            invoice.paid_by = None
+        customer_id = previous.get('customer')
+        invoice.customer_id = customer_id if Customer.objects.filter(pk=customer_id).exists() else None
+        invoice.save()
+
+        invoice.items.all().delete()
+        for old_item in previous['items']:
+            service_id = old_item.get('service')
+            staff_id = old_item.get('staff')
+            InvoiceItem.objects.create(
+                invoice=invoice,
+                service_id=service_id if Service.objects.filter(pk=service_id).exists() else None,
+                staff_id=staff_id if Staff.objects.filter(pk=staff_id).exists() else None,
+                service_title_snapshot=old_item.get('title') or '',
+                quantity=old_item.get('quantity') or 1,
+                main_price=old_item.get('main_price') or 0,
+                extra_price=old_item.get('extra_price') or 0,
+                commission=old_item.get('commission') or 0,
+                notes=old_item.get('notes') or '',
+                is_office_card_fee=old_item.get('is_office_card_fee', False),
+            )
+
+        record_audit(user=request.user, instance=invoice, action='update', before=before, after=snapshot(invoice))
+        return Response(self.get_serializer(invoice).data)
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
@@ -308,8 +508,13 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if new_status not in valid:
             return Response({'error': 'وضعیت نامعتبر'}, status=400)
         before = snapshot(invoice)
+        was_paid = invoice.status == 'paid'
         invoice.status = new_status
-        invoice.save()
+        if new_status == 'paid' and not was_paid:
+            invoice.paid_by = request.user
+        elif new_status != 'paid':
+            invoice.paid_by = None
+        invoice.save(update_fields=['status', 'paid_by', 'updated_at'])
         record_audit(user=request.user, instance=invoice, action='update', before=before, after=snapshot(invoice))
         serializer = self.get_serializer(invoice)
         return Response(serializer.data)
@@ -377,51 +582,155 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def report(self, request):
-        """Financial report with date filtering"""
+        """Financial report with date filtering and useful business breakdowns."""
         date_from = request.query_params.get('date_from', '')
         date_to = request.query_params.get('date_to', '')
-        qs = Invoice.objects.all()
+        status_filter = request.query_params.get('status', '')
+        customer_search = request.query_params.get('customer_name', '')
+        qs = Invoice.objects.select_related('customer').prefetch_related('payments', 'items__service').all()
         if date_from:
             qs = qs.filter(date__date__gte=date_from)
         if date_to:
             qs = qs.filter(date__date__lte=date_to)
-
-        total_revenue = 0
-        total_commission = 0
-        for invoice in qs.prefetch_related('payments'):
-            paid_total = sum(int(payment.amount) for payment in invoice.payments.all())
-            if paid_total:
-                total_revenue += paid_total
-            elif invoice.status == 'paid':
-                # Legacy paid invoices predate individual payment records.
-                total_revenue += int(invoice.final_amount)
-            if invoice.status == 'paid':
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        if customer_search:
+            qs = qs.filter(customer__name__icontains=customer_search)
+        invoice_rows = list(qs.order_by('-date'))
+        total_revenue = total_commission = pending_amount = invoice_amount = 0
+        by_month, customer_totals, service_totals, payment_methods = {}, {}, {}, {}
+        for invoice in invoice_rows:
+            payments = list(invoice.payments.all())
+            paid_total = sum(int(payment.amount) for payment in payments)
+            if not paid_total and invoice.status == 'paid':
+                paid_total = int(invoice.final_amount)  # legacy records without payment rows
+            total_revenue += paid_total
+            if invoice.status == 'paid' or invoice.commission_paid:
                 total_commission += int(invoice.commission_total)
-        pending_amount = 0
-        for invoice in qs.filter(status='pending').prefetch_related('payments'):
-            paid_total = sum(int(payment.amount) for payment in invoice.payments.all())
-            pending_amount += max(0, int(invoice.final_amount) - paid_total)
-
+            if invoice.status == 'pending':
+                pending_amount += max(0, int(invoice.final_amount) - paid_total)
+            if invoice.status != 'cancelled':
+                invoice_amount += int(invoice.final_amount)
+            month = invoice.date.strftime('%Y-%m') if invoice.date else 'نامشخص'
+            by_month.setdefault(month, {'count': 0, 'amount': 0, 'received': 0})
+            by_month[month]['count'] += 1
+            by_month[month]['amount'] += int(invoice.final_amount)
+            by_month[month]['received'] += paid_total
+            if invoice.customer_id:
+                customer = customer_totals.setdefault(invoice.customer_id, {'name': invoice.customer.name, 'count': 0, 'amount': 0})
+                customer['count'] += 1
+                customer['amount'] += int(invoice.final_amount)
+            for item in invoice.items.all():
+                title = item.service_title_snapshot or (item.service.title if item.service else 'سایر')
+                service_totals[title] = service_totals.get(title, 0) + int(item.line_total)
+            for payment in payments:
+                payment_methods[payment.get_method_display()] = payment_methods.get(payment.get_method_display(), 0) + int(payment.amount)
         by_status = {}
         for s, label in Invoice.STATUS_CHOICES:
-            status_invoices = qs.filter(status=s).prefetch_related('payments')
-            count = status_invoices.count()
-            if s == 'pending':
-                amount = sum(max(0, int(inv.final_amount) - sum(int(payment.amount) for payment in inv.payments.all())) for inv in status_invoices)
-            else:
-                amount = sum(int(inv.final_amount) for inv in status_invoices)
-            by_status[s] = {'label': label, 'count': count, 'amount': int(amount)}
+            status_invoices = [inv for inv in invoice_rows if inv.status == s]
+            amount = sum((max(0, int(inv.final_amount) - sum(int(p.amount) for p in inv.payments.all())) if s == 'pending' else int(inv.final_amount)) for inv in status_invoices)
+            by_status[s] = {'label': label, 'count': len(status_invoices), 'amount': amount}
 
-        invoices = self.get_serializer(qs.order_by('-date')[:100], many=True).data
+        expenses = Expense.objects.select_related('category').all()
+        if date_from:
+            expenses = expenses.filter(date__gte=date_from)
+        if date_to:
+            expenses = expenses.filter(date__lte=date_to)
+        expense_total = expenses.aggregate(total=Sum('amount'))['total'] or 0
+        expense_categories = list(expenses.values('category__name').annotate(total=Sum('amount')).order_by('-total'))
+        invoice_serializer_rows = self.get_serializer(invoice_rows[:100], many=True).data
 
         return Response({
             'total_revenue': int(total_revenue),
             'total_commission': int(total_commission),
             'pending_amount': int(pending_amount),
-            'total_count': qs.count(),
+            'total_count': len(invoice_rows),
+            'invoice_amount': invoice_amount,
+            'expense_total': int(expense_total),
+            'net_profit': int(total_commission - expense_total),
             'by_status': by_status,
-            'invoices': invoices,
+            'monthly': [{'month': month, **values} for month, values in sorted(by_month.items())],
+            'top_customers': sorted(customer_totals.values(), key=lambda item: item['amount'], reverse=True)[:10],
+            'top_services': [{'name': name, 'amount': amount} for name, amount in sorted(service_totals.items(), key=lambda row: row[1], reverse=True)[:10]],
+            'payment_methods': [{'name': name, 'amount': amount} for name, amount in sorted(payment_methods.items(), key=lambda row: row[1], reverse=True)],
+            'expense_categories': [{'name': row['category__name'] or 'بدون دسته', 'amount': int(row['total'] or 0)} for row in expense_categories],
+            'invoices': invoice_serializer_rows,
         })
+
+    @action(detail=False, methods=['get'])
+    def export_excel(self, request):
+        """Create a dependency-free, valid Excel workbook for the selected date range."""
+        import io
+        import zipfile
+        from xml.sax.saxutils import escape
+
+        date_from, date_to = request.query_params.get('date_from', ''), request.query_params.get('date_to', '')
+        status_filter, customer_search = request.query_params.get('status', ''), request.query_params.get('customer_name', '')
+        invoices = Invoice.objects.select_related('customer', 'created_by', 'paid_by').prefetch_related('payments').order_by('-date')
+        expenses = Expense.objects.select_related('category').order_by('-date')
+        for field, value in (('date__date__gte', date_from), ('date__date__lte', date_to)):
+            if value: invoices = invoices.filter(**{field: value})
+        if status_filter: invoices = invoices.filter(status=status_filter)
+        if customer_search: invoices = invoices.filter(customer__name__icontains=customer_search)
+        for field, value in (('date__gte', date_from), ('date__lte', date_to)):
+            if value: expenses = expenses.filter(**{field: value})
+        invoice_rows = list(invoices)
+        expense_rows = list(expenses)
+        paid_amounts = {inv.id: (sum(int(p.amount) for p in inv.payments.all()) or (int(inv.final_amount) if inv.status == 'paid' else 0)) for inv in invoice_rows}
+        received = sum(paid_amounts.values())
+        commission = sum(int(inv.commission_total) for inv in invoice_rows if inv.status == 'paid' or inv.commission_paid)
+        expense_total = sum(int(item.amount) for item in expense_rows)
+
+        sheets = [
+            ('خلاصه', [
+                ['شاخص', 'مقدار'], ['از تاریخ', date_from or 'همه'], ['تا تاریخ', date_to or 'امروز'],
+                ['تعداد فاکتور', len(invoice_rows)], ['مبلغ دریافت‌شده', received], ['کارمزد فاکتورهای پرداخت‌شده', commission],
+                ['مبلغ هزینه‌ها', expense_total], ['سود خالص', commission - expense_total],
+            ]),
+            ('فاکتورها', [['شماره فاکتور', 'مشتری', 'تاریخ', 'وضعیت', 'مبلغ کل', 'کارمزد', 'مبلغ نهایی', 'مبلغ پرداخت‌شده', 'مانده', 'پرداخت‌کننده', 'صادرکننده']] + [
+                [inv.invoice_number, inv.customer.name if inv.customer else '', inv.date.strftime('%Y-%m-%d') if inv.date else '', inv.get_status_display(), int(inv.total_amount), int(inv.commission_total), int(inv.final_amount), paid_amounts[inv.id], max(0, int(inv.final_amount) - paid_amounts[inv.id]), inv.paid_by.get_full_name() or inv.paid_by.username if inv.paid_by else '', inv.created_by.get_full_name() or inv.created_by.username if inv.created_by else ''] for inv in invoice_rows
+            ]),
+            ('هزینه‌ها', [['عنوان', 'دسته', 'تاریخ', 'مبلغ', 'توضیحات']] + [[item.title, item.category.name if item.category else 'بدون دسته', item.date.isoformat(), int(item.amount), item.description] for item in expense_rows]),
+            ('پرداخت‌ها', [['شماره فاکتور', 'مشتری', 'تاریخ پرداخت', 'روش پرداخت', 'مبلغ', 'ثبت‌کننده', 'توضیحات']] + [[p.invoice.invoice_number, p.invoice.customer.name if p.invoice.customer else '', p.paid_at.strftime('%Y-%m-%d %H:%M') if p.paid_at else '', p.get_method_display(), int(p.amount), p.created_by.get_full_name() or p.created_by.username if p.created_by else '', p.note] for inv in invoice_rows for p in inv.payments.all()]),
+        ]
+
+        def col_name(index):
+            result = ''
+            while index:
+                index, rem = divmod(index - 1, 26)
+                result = chr(65 + rem) + result
+            return result
+
+        def worksheet_xml(rows):
+            row_xml = []
+            for r, row in enumerate(rows, 1):
+                cells = []
+                for c, value in enumerate(row, 1):
+                    cell = f'{col_name(c)}{r}'
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        cells.append(f'<c r="{cell}"><v>{value}</v></c>')
+                    else:
+                        safe_text = ''.join(char for char in str(value if value is not None else '') if char in '\t\n\r' or ord(char) >= 32)
+                        cells.append(f'<c r="{cell}" t="inlineStr"><is><t>{escape(safe_text)}</t></is></c>')
+                row_xml.append(f'<row r="{r}">{"".join(cells)}</row>')
+            return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' + ''.join(row_xml) + '</sheetData></worksheet>'
+
+        content_types = ['<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>', '<Default Extension="xml" ContentType="application/xml"/>', '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>']
+        rels, names = [], []
+        for index, (name, _) in enumerate(sheets, 1):
+            content_types.append(f'<Override PartName="/xl/worksheets/sheet{index}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>')
+            rels.append(f'<Relationship Id="rId{index}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{index}.xml"/>')
+            names.append(f'<sheet name="{escape(name)}" sheetId="{index}" r:id="rId{index}"/>')
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as workbook:
+            workbook.writestr('[Content_Types].xml', f'<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">{"".join(content_types)}</Types>')
+            workbook.writestr('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')
+            workbook.writestr('xl/workbook.xml', f'<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>{"".join(names)}</sheets></workbook>')
+            workbook.writestr('xl/_rels/workbook.xml.rels', f'<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{"".join(rels)}</Relationships>')
+            for index, (_, rows) in enumerate(sheets, 1): workbook.writestr(f'xl/worksheets/sheet{index}.xml', worksheet_xml(rows))
+        response = HttpResponse(buffer.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = 'attachment; filename="financial_report.xlsx"'
+        return response
 
     @action(detail=False, methods=['get'])
     def export_csv(self, request):
@@ -431,10 +740,16 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         qs = Invoice.objects.select_related('customer').all().order_by('-date')
         date_from = request.query_params.get('date_from', '')
         date_to = request.query_params.get('date_to', '')
+        status_filter = request.query_params.get('status', '')
+        customer_search = request.query_params.get('customer_name', '')
         if date_from:
             qs = qs.filter(date__date__gte=date_from)
         if date_to:
             qs = qs.filter(date__date__lte=date_to)
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        if customer_search:
+            qs = qs.filter(customer__name__icontains=customer_search)
 
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
         response['Content-Disposition'] = 'attachment; filename="invoices.csv"'
@@ -504,6 +819,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             customer=customer,
             created_by=request.user,
             status=data.get('status', 'pending'),
+            paid_by=request.user if data.get('status', 'pending') == 'paid' else None,
             description=data.get('description', ''),
             discount=int(data.get('discount', 0)),
             tax=float(data.get('tax', 0)),
@@ -515,6 +831,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             vehicle_model=data.get('vehicle_model', ''),
             vehicle_type=data.get('vehicle_type', ''),
             tags=data.get('tags', []),
+            card_payment_source=data.get('card_payment_source') if data.get('card_payment_source') in ('customer', 'office') else 'customer',
         )
 
         # Create items
@@ -542,6 +859,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 notes=item.get('notes', ''),
             )
 
+        invoice_serializer = InvoiceSerializer()
+        invoice_serializer._sync_office_card_fee(invoice, total)
+
         record_audit(user=request.user, instance=invoice, action='create', after=snapshot(invoice))
         serializer = self.get_serializer(invoice)
         return Response({
@@ -565,8 +885,11 @@ class DocumentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Document.objects.all().order_by('-uploaded_at')
         customer_id = self.request.query_params.get('customer', '')
+        invoice_id = self.request.query_params.get('invoice', '')
         if customer_id:
             qs = qs.filter(customer_id=customer_id)
+        if invoice_id:
+            qs = qs.filter(invoice_id=invoice_id)
         return qs
 
     def get_serializer_context(self):
@@ -595,19 +918,21 @@ class DocumentViewSet(viewsets.ModelViewSet):
         try:
             profile = BusinessProfile.load()
             base_path = profile.customer_documents_path
-            if not base_path or not os.path.isdir(base_path):
+            if not base_path:
                 return
             customer = doc.customer
-            # folder name: {id}_{name}
-            folder_name = f"{customer.id}_{customer.name}".replace('/', '_').replace('\\', '_')
-            folder_path = os.path.join(base_path, folder_name)
+            safe = lambda value: ''.join('_' if ch in '<>:"/\\|?*' or ord(ch) < 32 else ch for ch in str(value)).strip(' .') or 'بدون نام'
+            folder_name = f"{customer.id}_{safe(customer.name)}"
+            owner = doc.invoice.green_card_owner_name.strip() if doc.invoice_id and doc.invoice else ''
+            child_name = safe(owner or (doc.invoice.invoice_number if doc.invoice_id and doc.invoice else doc.title))
+            folder_path = os.path.join(base_path, folder_name, child_name)
             os.makedirs(folder_path, exist_ok=True)
             if doc.file and hasattr(doc.file, 'path') and os.path.exists(doc.file.path):
                 dest = os.path.join(folder_path, os.path.basename(doc.file.name))
-                if not os.path.exists(dest):
+                if os.path.abspath(doc.file.path) != os.path.abspath(dest) and not os.path.exists(dest):
                     shutil.copy2(doc.file.path, dest)
                 doc.file_path = dest
-                Document.objects.filter(pk=doc.pk).update(file_path=dest)
+                doc.save(update_fields=['file_path'])
         except Exception:
             pass
 
@@ -623,13 +948,15 @@ class DocumentViewSet(viewsets.ModelViewSet):
             base_path = profile.customer_documents_path
             if not base_path:
                 return Response({'files': [], 'folder': ''})
-            folder_name = f"{customer.id}_{customer.name}".replace('/', '_').replace('\\', '_')
+            safe_name = ''.join('_' if ch in '<>:"/\\|?*' or ord(ch) < 32 else ch for ch in customer.name).strip(' .') or 'بدون نام'
+            folder_name = f"{customer.id}_{safe_name}"
             folder_path = os.path.join(base_path, folder_name)
             if not os.path.isdir(folder_path):
                 return Response({'files': [], 'folder': folder_path})
             files = []
-            for f in os.listdir(folder_path):
-                fp = os.path.join(folder_path, f)
+            for root, _, filenames in os.walk(folder_path):
+              for f in filenames:
+                fp = os.path.join(root, f)
                 if os.path.isfile(fp):
                     files.append({
                         'name': f,
@@ -640,6 +967,21 @@ class DocumentViewSet(viewsets.ModelViewSet):
             return Response({'files': files, 'folder': folder_path})
         except Customer.DoesNotExist:
             return Response({'error': 'customer not found'}, status=404)
+
+
+class InvoiceSettingsViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        return Response(InvoiceSettingsSerializer(InvoiceSettings.load()).data)
+
+    @action(detail=False, methods=['put', 'patch'], permission_classes=[IsManagerOrAdmin])
+    def update_config(self, request):
+        settings_obj = InvoiceSettings.load()
+        serializer = InvoiceSettingsSerializer(settings_obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 class BackupConfigViewSet(viewsets.ViewSet):
@@ -740,40 +1082,11 @@ class BackupConfigViewSet(viewsets.ViewSet):
         cfg.save()
         return Response({'saved': True, 'path': dest, 'filename': filename})
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def check_auto(self, request):
-        """Check if auto backup is due and run it"""
-        if not request.user.is_superuser:
-            return Response({'ran': False, 'reason': 'admin only'}, status=403)
-        cfg = BackupConfig.load()
-        if not cfg.auto_backup or not cfg.backup_path:
-            return Response({'ran': False, 'reason': 'auto backup disabled or path not set'})
-
-        now = timezone.localtime()
-        if now.hour < cfg.backup_hour:
-            return Response({'ran': False, 'reason': f'waiting for backup hour ({cfg.backup_hour})'})
-        if cfg.backup_frequency == 'weekly' and now.weekday() != 0:
-            return Response({'ran': False, 'reason': 'weekly backup runs on Monday'})
-        if not os.path.isdir(cfg.backup_path):
-            # A scheduled check is a status poll. A missing destination means
-            # no backup ran, but it is not a malformed API request.
-            return Response({'ran': False, 'reason': 'backup path does not exist'})
-
-        # Check if already backed up today
-        if cfg.last_backup_at:
-            last_local = timezone.localtime(cfg.last_backup_at)
-            if cfg.backup_frequency == 'weekly':
-                same_week = last_local.isocalendar()[:2] == now.isocalendar()[:2]
-                if same_week:
-                    return Response({'ran': False, 'reason': 'already backed up this week'})
-            elif last_local.date() == now.date():
-                return Response({'ran': False, 'reason': 'already backed up today'})
-
-        # Run backup
-        from .backup_utils import build_backup
-        json_str = json.dumps(build_backup(), ensure_ascii=False, indent=2, default=str)
-        filename = f"mohaseb_backup_{timezone.now().strftime('%Y%m%d_%H%M%S')}.json"
-        return self._save_backup_to_path(cfg, cfg.backup_path, filename, json_str)
+        """Run a due backup as a browser-side fallback to the server worker."""
+        from .scheduler import run_due_backup
+        return Response(run_due_backup())
 
 
 class BusinessProfileViewSet(viewsets.ViewSet):
@@ -959,7 +1272,7 @@ class DashboardViewSet(viewsets.ViewSet):
 
         total_customers = Customer.objects.count()
         total_invoices = Invoice.objects.count()
-        total_revenue = Invoice.objects.filter(status='paid').aggregate(
+        total_revenue = Invoice.objects.filter(Q(status='paid') | Q(commission_paid=True)).aggregate(
             total=Sum('commission_total')
         )['total'] or 0
         total_commission = total_revenue
@@ -988,15 +1301,16 @@ class DashboardViewSet(viewsets.ViewSet):
         # Monthly revenue (last 6 months)
         monthly_revenue = []
         for i in range(5, -1, -1):
-            month_date = now - timedelta(days=30 * i)
-            month_start = month_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            if month_date.month == 12:
-                month_end = month_date.replace(year=month_date.year + 1, month=1, day=1)
-            else:
-                month_end = month_date.replace(month=month_date.month + 1, day=1)
+            absolute_month = now.year * 12 + now.month - 1 - i
+            month_year, month_zero_indexed = divmod(absolute_month, 12)
+            month_number = month_zero_indexed + 1
+            month_start = now.replace(year=month_year, month=month_number, day=1, hour=0, minute=0, second=0, microsecond=0)
+            next_absolute_month = absolute_month + 1
+            next_year, next_zero_indexed = divmod(next_absolute_month, 12)
+            month_end = month_start.replace(year=next_year, month=next_zero_indexed + 1)
 
             revenue = Invoice.objects.filter(
-                status='paid',
+                Q(status='paid') | Q(commission_paid=True),
                 date__gte=month_start,
                 date__lt=month_end
             ).aggregate(total=Sum('commission_total'))['total'] or 0
@@ -1007,8 +1321,8 @@ class DashboardViewSet(viewsets.ViewSet):
             ).aggregate(total=Sum('amount'))['total'] or 0
 
             monthly_revenue.append({
-                'month': month_date.strftime('%Y-%m'),
-                'label': f'{month_date.month}/{month_date.year}',
+                'month': f'{month_year:04d}-{month_number:02d}',
+                'label': f'{month_number}/{month_year}',
                 'revenue': int(revenue),
                 'expense': int(expense),
                 'profit': int(revenue) - int(expense),
@@ -1024,7 +1338,7 @@ class DashboardViewSet(viewsets.ViewSet):
 
         # Top customers
         top_customers = list(
-            Invoice.objects.filter(status='paid')
+            Invoice.objects.filter(Q(status='paid') | Q(commission_paid=True))
             .values('customer__name')
             .annotate(total=Sum('total_amount'), count=Count('id'))
             .order_by('-total')[:5]
