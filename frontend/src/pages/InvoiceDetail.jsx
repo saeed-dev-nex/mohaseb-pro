@@ -124,7 +124,12 @@ const InvoiceDetail = () => {
   const [invoice, setInvoice] = useState(null);
   const [paperSize, setPaperSize] = useState('a5');
   const [profile, setProfile] = useState(null);
-  const [invoiceFields, setInvoiceFields] = useState({ show_discount_field: true, show_tax_field: true });
+  const [invoiceFields, setInvoiceFields] = useState({
+    show_discount_field: true,
+    show_tax_field: true,
+    show_seller_signature: true,
+    show_buyer_signature: true,
+  });
   const [loading, setLoading] = useState(true);
   const [statusChanging, setStatusChanging] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
@@ -152,6 +157,8 @@ const InvoiceDetail = () => {
     invoiceSettingsAPI.get().then(({ data }) => setInvoiceFields({
       show_discount_field: data.show_discount_field !== false,
       show_tax_field: data.show_tax_field !== false,
+      show_seller_signature: data.show_seller_signature !== false,
+      show_buyer_signature: data.show_buyer_signature !== false,
     })).catch(() => {});
   }, []);
 
@@ -888,16 +895,16 @@ const InvoiceDetail = () => {
         </div>
 
         {/* Seller seal and buyer signature */}
-        <div className="grid grid-cols-2 gap-4 border-t border-slate-700/50 p-5 print-seller-signature">
-          <div className="flex min-h-28 flex-col justify-between rounded-xl border border-dashed border-slate-500/60 p-3">
+        {(invoiceFields.show_seller_signature || invoiceFields.show_buyer_signature) && <div className={`grid ${invoiceFields.show_seller_signature && invoiceFields.show_buyer_signature ? 'grid-cols-2' : 'grid-cols-1'} gap-4 border-t border-slate-700/50 p-5 print-seller-signature`}>
+          {invoiceFields.show_seller_signature && <div className="flex min-h-28 flex-col justify-between rounded-xl border border-dashed border-slate-500/60 p-3">
             <span className="text-xs font-semibold text-slate-300">مهر و امضای فروشنده</span>
             <span className="text-center text-[10px] text-slate-500">محل مهر و امضا</span>
-          </div>
-          <div className="flex min-h-28 flex-col justify-between rounded-xl border border-dashed border-slate-500/60 p-3">
+          </div>}
+          {invoiceFields.show_buyer_signature && <div className="flex min-h-28 flex-col justify-between rounded-xl border border-dashed border-slate-500/60 p-3">
             <span className="text-xs font-semibold text-slate-300">امضای خریدار</span>
             <span className="text-center text-[10px] text-slate-500">نام و امضا</span>
-          </div>
-        </div>
+          </div>}
+        </div>}
 
         {/* Print Footer */}
         <div className="hidden print:block text-center text-sm font-semibold text-gray-600 mt-4 pt-2 border-t border-gray-200">
@@ -1168,16 +1175,16 @@ const InvoiceDetail = () => {
         </div>
 
         {/* Seller seal and buyer signature */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '14px' }}>
-          <div style={{ height: '88px', border: '1px dashed #9ca3af', borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        {(invoiceFields.show_seller_signature || invoiceFields.show_buyer_signature) && <div style={{ display: 'grid', gridTemplateColumns: invoiceFields.show_seller_signature && invoiceFields.show_buyer_signature ? '1fr 1fr' : '1fr', gap: '12px', marginTop: '14px' }}>
+          {invoiceFields.show_seller_signature && <div style={{ height: '88px', border: '1px dashed #9ca3af', borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <strong style={{ fontSize: '11px' }}>مهر و امضای فروشنده</strong>
             <span style={{ textAlign: 'center', color: '#6b7280', fontSize: '9px' }}>محل مهر و امضا</span>
-          </div>
-          <div style={{ height: '88px', border: '1px dashed #9ca3af', borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          </div>}
+          {invoiceFields.show_buyer_signature && <div style={{ height: '88px', border: '1px dashed #9ca3af', borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <strong style={{ fontSize: '11px' }}>امضای خریدار</strong>
             <span style={{ textAlign: 'center', color: '#6b7280', fontSize: '9px' }}>نام و امضا</span>
-          </div>
-        </div>
+          </div>}
+        </div>}
 
         {/* Export Footer */}
         <div style={{ textAlign: 'center', borderTop: '1px solid #e5e7eb', marginTop: '16px', paddingTop: '8px', fontSize: '12px', fontWeight: 600, color: '#6b7280' }}>

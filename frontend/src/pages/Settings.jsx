@@ -48,7 +48,7 @@ const Settings = () => {
   const [backupSaving, setBackupSaving] = useState(false);
   const [backupRunning, setBackupRunning] = useState(false);
   const [backupMsg, setBackupMsg] = useState('');
-  const [invoiceCfg, setInvoiceCfg] = useState({ office_card_fee_threshold: 0, show_discount_field: true, show_tax_field: true });
+  const [invoiceCfg, setInvoiceCfg] = useState({ office_card_fee_threshold: 0, show_discount_field: true, show_tax_field: true, show_seller_signature: true, show_buyer_signature: true });
   const [invoiceCfgSaving, setInvoiceCfgSaving] = useState(false);
   const [invoiceCfgMsg, setInvoiceCfgMsg] = useState('');
   const [welcomeCfg, setWelcomeCfg] = useState({ enabled: false, global_message: '' });
@@ -214,6 +214,8 @@ const Settings = () => {
         office_card_fee_threshold: Number(invoiceCfg.office_card_fee_threshold) || 0,
         show_discount_field: Boolean(invoiceCfg.show_discount_field),
         show_tax_field: Boolean(invoiceCfg.show_tax_field),
+        show_seller_signature: Boolean(invoiceCfg.show_seller_signature),
+        show_buyer_signature: Boolean(invoiceCfg.show_buyer_signature),
       });
       setInvoiceCfg((prev) => ({ ...prev, ...data }));
       setInvoiceCfgMsg('✅ تنظیمات واریزی ذخیره شد');
@@ -452,6 +454,9 @@ const Settings = () => {
           <p className="text-sm font-medium text-slate-200">نمایش فیلدهای خلاصه مالی</p>
           <label className="flex items-center gap-3 text-sm text-slate-300"><input type="checkbox" checked={invoiceCfg.show_discount_field} onChange={e => setInvoiceCfg(prev => ({ ...prev, show_discount_field: e.target.checked }))} className="h-4 w-4 accent-blue-500" /> نمایش فیلد تخفیف</label>
           <label className="flex items-center gap-3 text-sm text-slate-300"><input type="checkbox" checked={invoiceCfg.show_tax_field} onChange={e => setInvoiceCfg(prev => ({ ...prev, show_tax_field: e.target.checked }))} className="h-4 w-4 accent-blue-500" /> نمایش فیلد مالیات</label>
+          <p className="border-t border-slate-700/50 pt-3 text-sm font-medium text-slate-200">بخش مهر و امضا در فاکتور</p>
+          <label className="flex items-center gap-3 text-sm text-slate-300"><input type="checkbox" checked={invoiceCfg.show_seller_signature} onChange={e => setInvoiceCfg(prev => ({ ...prev, show_seller_signature: e.target.checked }))} className="h-4 w-4 accent-blue-500" /> نمایش مهر و امضای فروشنده</label>
+          <label className="flex items-center gap-3 text-sm text-slate-300"><input type="checkbox" checked={invoiceCfg.show_buyer_signature} onChange={e => setInvoiceCfg(prev => ({ ...prev, show_buyer_signature: e.target.checked }))} className="h-4 w-4 accent-blue-500" /> نمایش امضای خریدار</label>
           <F label="حداقل مبلغ فاکتور برای محاسبهٔ واریزی (تومان)">
             <input type="number" min="0" step="100000" className={inp}
               value={invoiceCfg.office_card_fee_threshold}

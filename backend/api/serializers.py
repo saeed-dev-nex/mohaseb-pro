@@ -89,7 +89,10 @@ class InvoiceSettingsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = InvoiceSettings
-        fields = ['office_card_fee_threshold', 'show_discount_field', 'show_tax_field']
+        fields = [
+            'office_card_fee_threshold', 'show_discount_field', 'show_tax_field',
+            'show_seller_signature', 'show_buyer_signature',
+        ]
 
 
 class ChatMessageSerializer(serializers.ModelSerializer):

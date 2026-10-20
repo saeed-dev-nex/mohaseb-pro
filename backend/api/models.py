@@ -339,6 +339,8 @@ class InvoiceSettings(models.Model):
     )
     show_discount_field = models.BooleanField(default=True, verbose_name='نمایش فیلد تخفیف در فاکتور')
     show_tax_field = models.BooleanField(default=True, verbose_name='نمایش فیلد مالیات در فاکتور')
+    show_seller_signature = models.BooleanField(default=True, verbose_name='نمایش مهر و امضای فروشنده')
+    show_buyer_signature = models.BooleanField(default=True, verbose_name='نمایش امضای خریدار')
 
     class Meta:
         verbose_name = 'تنظیمات فاکتور'
