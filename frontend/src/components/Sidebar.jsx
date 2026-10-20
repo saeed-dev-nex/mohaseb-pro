@@ -100,7 +100,7 @@ const Sidebar = ({ isOpen, onClose, isCollapsed = false, onToggleCollapse }) => 
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 right-0 h-full ${isCollapsed ? 'lg:w-20' : 'w-64'} w-64 z-30 flex flex-col
+        className={`app-sidebar fixed top-0 right-0 h-full ${isCollapsed ? 'lg:w-20' : 'w-64'} w-64 z-30 flex flex-col
           bg-gradient-to-b from-slate-900 to-slate-800
           border-l border-slate-700/50 shadow-2xl
           transform transition-transform duration-300

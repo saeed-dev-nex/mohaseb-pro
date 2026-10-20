@@ -100,6 +100,34 @@
 [data-theme="light"] ::-webkit-scrollbar-thumb { background: #b6c2d2; }
 [data-theme="light"] .glass { background: rgba(255,255,255,.8); border-color: #dce3ed; }
 
+/* Sidebar needs its own light palette: utility substring overrides above also
+   match hover:bg-* classes and otherwise make every navigation row look active. */
+[data-theme="light"] .app-sidebar {
+  background: linear-gradient(180deg, #ffffff 0%, #f5f7fb 100%) !important;
+  border-color: #d6deea !important;
+  box-shadow: 0 12px 32px rgba(30, 41, 59, .08) !important;
+}
+[data-theme="light"] .app-sidebar > div:first-child,
+[data-theme="light"] .app-sidebar > div:last-child { border-color: #d6deea !important; }
+[data-theme="light"] .app-sidebar nav a:not([aria-current="page"]) {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: #526176 !important;
+  box-shadow: none !important;
+}
+[data-theme="light"] .app-sidebar nav a:not([aria-current="page"]):hover {
+  background: #eaf0f7 !important;
+  color: #172033 !important;
+}
+[data-theme="light"] .app-sidebar nav a[aria-current="page"] {
+  background: #e7efff !important;
+  border-color: #bfd2f2 !important;
+  color: #155e9a !important;
+  box-shadow: none !important;
+}
+[data-theme="light"] .app-sidebar nav a[aria-current="page"] span { color: inherit !important; }
+[data-theme="light"] .app-sidebar button:hover { color: #172033; }
+
 /* The chat uses WhatsApp-inspired colors in dark mode; adapt its surfaces with the site theme. */
 [data-theme="light"] .chat-page { background: #fff !important; border-color: #d6deea !important; }
 [data-theme="light"] .chat-page aside,
