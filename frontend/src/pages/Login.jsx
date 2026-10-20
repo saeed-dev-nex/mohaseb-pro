@@ -26,11 +26,12 @@ const Login = () => {
       const response = await axios.post(`${API_BASE_URL}token/`, {
         username,
         password,
-      });
-      
+      }, { withCredentials: true, headers: { 'X-Client-Type': 'web' } });
+
+      // For the web client the backend returns no refresh token in the body;
+      // it is stored in an httpOnly cookie instead.
       dispatch(setTokens({
         access: response.data.access,
-        refresh: response.data.refresh,
       }));
 
       // Fetch current user info (role, etc.)

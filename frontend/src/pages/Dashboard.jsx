@@ -91,6 +91,7 @@ const DonutChart = ({ data, total }) => {
 
 const Dashboard = () => {
   const [stats, setStats] = useState(null);
+  const [reminders, setReminders] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -98,6 +99,7 @@ const Dashboard = () => {
       .then(res => setStats(res.data))
       .catch(console.error)
       .finally(() => setLoading(false));
+    dashboardAPI.reminders(7).then(res => setReminders(res.data)).catch(() => {});
     refresh();
     window.addEventListener('mohaseb:data-changed', refresh);
     return () => window.removeEventListener('mohaseb:data-changed', refresh);
@@ -184,6 +186,33 @@ const Dashboard = () => {
                 <span className="text-slate-200">{item.invoice_number} · {item.customer_name}</span>
                 <span className="text-slate-500 text-xs">سررسید {toJalali(item.due_date)}</span>
                 <span className="font-medium text-orange-500">{formatPrice(item.remaining_amount)}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {reminders && (reminders.totals.due_soon_invoices_count > 0 || reminders.totals.cheques_due_count > 0 || reminders.totals.bounced_cheques_count > 0) && (
+        <section className="rounded-2xl border border-sky-500/25 bg-sky-500/5 p-5 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-semibold text-sky-400">یادآوری سررسید (۷ روز آینده)</h3>
+            {reminders.totals.bounced_cheques_count > 0 && (
+              <span className="text-xs text-red-400">⚠️ {fmt(reminders.totals.bounced_cheques_count)} چک برگشتی نیازمند پیگیری ({formatPrice(reminders.totals.bounced_cheques_amount)})</span>
+            )}
+          </div>
+          <div className="divide-y divide-sky-500/10">
+            {reminders.due_soon_invoices.slice(0, 5).map((item) => (
+              <Link key={`inv-${item.id}`} to={`/invoices/${item.id}`} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm hover:bg-sky-500/5">
+                <span className="text-slate-200">فاکتور {item.invoice_number} · {item.customer_name}</span>
+                <span className="text-slate-500 text-xs">{fmt(item.days)} روز مانده · {toJalali(item.due_date)}</span>
+                <span className="font-medium text-sky-400">{formatPrice(item.remaining_amount)}</span>
+              </Link>
+            ))}
+            {reminders.cheques_due.slice(0, 5).map((item) => (
+              <Link key={`chq-${item.id}`} to="/cheques" className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm hover:bg-sky-500/5">
+                <span className="text-slate-200">چک {item.cheque_number} · {item.bank_name} · {item.customer_name}</span>
+                <span className="text-slate-500 text-xs">{fmt(item.days)} روز مانده · {toJalali(item.due_date)}</span>
+                <span className="font-medium text-sky-400">{formatPrice(item.amount)}</span>
               </Link>
             ))}
           </div>
