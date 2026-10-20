@@ -48,6 +48,8 @@ const Settings = () => {
   const [backupSaving, setBackupSaving] = useState(false);
   const [backupRunning, setBackupRunning] = useState(false);
   const [backupMsg, setBackupMsg] = useState('');
+  const [backupPassphrase, setBackupPassphrase] = useState('');
+  const [restorePassphrase, setRestorePassphrase] = useState('');
   const [invoiceCfg, setInvoiceCfg] = useState({ office_card_fee_threshold: 0, show_discount_field: true, show_tax_field: true, show_seller_signature: true, show_buyer_signature: true });
   const [invoiceCfgSaving, setInvoiceCfgSaving] = useState(false);
   const [invoiceCfgMsg, setInvoiceCfgMsg] = useState('');
@@ -273,7 +275,7 @@ const Settings = () => {
     try {
       if (saveToPath && backupCfg.backup_path) {
         // Save to disk
-        const { data } = await backupConfigAPI.runBackup({ path: backupCfg.backup_path });
+        const { data } = await backupConfigAPI.runBackup({ path: backupCfg.backup_path, passphrase: backupPassphrase || undefined });
         if (data.saved) {
           setBackupCfg((prev) => ({ ...prev, last_backup_path: data.path, last_backup_at: new Date().toISOString() }));
           setBackupMsg(`✅ بکاپ در مسیر ذخیره شد: ${data.path}`);
@@ -298,7 +300,7 @@ const Settings = () => {
           }
         }
 
-        const response = await backupConfigAPI.runBackupDownload({});
+        const response = await backupConfigAPI.runBackupDownload({ passphrase: backupPassphrase || undefined });
         const blob = new Blob([response.data]);
         const cd = response.headers?.['content-disposition'] || '';
         const fnMatch = cd.match(/filename="?([^"]+)"?/);
@@ -338,7 +340,7 @@ const Settings = () => {
     setRestorePhrase('');
     try {
       const rawBackup = await file.text();
-      const { data } = await backupAPI.restore({ backup_json: rawBackup, confirm_replace: false });
+      const { data } = await backupAPI.restore({ backup_json: rawBackup, confirm_replace: false, passphrase: restorePassphrase || undefined });
       setRestoreBackup(rawBackup);
       setRestoreCounts(data.counts);
       setBackupMsg('✅ فایل پشتیبان سالم است و برای بازیابی آماده است.');
@@ -351,7 +353,7 @@ const Settings = () => {
     if (!restoreBackup || !isRestoreConfirmed) return;
     setRestoreBusy(true);
     try {
-      await backupAPI.restore({ backup_json: restoreBackup, confirm_replace: true });
+      await backupAPI.restore({ backup_json: restoreBackup, confirm_replace: true, passphrase: restorePassphrase || undefined });
       setBackupMsg('✅ بازیابی انجام شد؛ برنامه در حال بارگذاری مجدد است.');
       window.setTimeout(() => window.location.reload(), 1200);
     } catch (error) {
@@ -653,6 +655,13 @@ const Settings = () => {
             </div>
           )}
 
+          {/* Optional backup encryption */}
+          <F label="🔐 گذرواژهٔ رمزنگاری بکاپ (اختیاری)">
+            <input type="password" className={inp} value={backupPassphrase} onChange={(e) => setBackupPassphrase(e.target.value)}
+              placeholder="خالی = بکاپ بدون رمزنگاری؛ دست‌کم ۸ نویسه" autoComplete="new-password" dir="ltr" />
+            <p className="text-slate-600 text-xs mt-1">اگر گذرواژه بگذارید، فایل بکاپ با AES-256 رمزنگاری می‌شود و هنگام بازیابی همین گذرواژه لازم است. گذرواژه هیچ‌جا ذخیره نمی‌شود؛ اگر فراموش شود، بکاپ قابل بازیابی نیست.</p>
+          </F>
+
           {/* Action buttons */}
           <div className="flex flex-wrap gap-3">
             <button
@@ -693,6 +702,8 @@ const Settings = () => {
             <div className="space-y-3 border-t border-slate-700/30 pt-4">
               <h4 className="font-medium text-white">بازیابی از نسخهٔ پشتیبان</h4>
               <p className="text-xs leading-relaxed text-amber-600">بازیابی اطلاعات فعلی را با اطلاعات نسخهٔ پشتیبان جایگزین می‌کند. فایل ابتدا از نظر ساختار و صحت بررسی می‌شود؛ فایل‌های فیزیکی مدارک مشتریان باید در مسیر ذخیره‌سازی موجود باشند.</p>
+              <input type="password" className={inp} value={restorePassphrase} onChange={(e) => setRestorePassphrase(e.target.value)}
+                placeholder="گذرواژهٔ بکاپ (فقط اگر فایل رمزنگاری شده است)" autoComplete="off" dir="ltr" />
               <input type="file" accept=".json,application/json" onChange={(e) => handleSelectRestoreFile(e.target.files?.[0])} className="block w-full text-sm text-slate-400 file:ml-3 file:rounded-lg file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-slate-200" />
               {restoreCounts && (
                 <div className="rounded-xl border border-slate-700/50 bg-slate-900/30 p-3 text-xs text-slate-400">

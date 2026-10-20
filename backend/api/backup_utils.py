@@ -10,6 +10,72 @@ from django.core.serializers import deserialize, serialize
 from django.utils import timezone
 
 
+ENCRYPTED_BACKUP_FORMAT = 'mohaseb-backup-encrypted-v1'
+_PBKDF2_ITERATIONS = 600_000
+
+
+def is_encrypted_backup(payload):
+    """True when *payload* is an encrypted backup envelope, not a plain backup."""
+    return isinstance(payload, dict) and payload.get('format') == ENCRYPTED_BACKUP_FORMAT
+
+
+def _derive_backup_key(passphrase, salt, iterations):
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=iterations)
+    return kdf.derive(passphrase.encode('utf-8'))
+
+
+def encrypt_backup(plain_text, passphrase):
+    """Encrypt a plain backup JSON string with a user passphrase (AES-256-GCM).
+
+    Backups contain every record plus password hashes, so an encrypted
+    envelope is the safe way to store or move them. The passphrase itself is
+    never stored; losing it makes the backup unrecoverable by design.
+    """
+    if not passphrase or len(passphrase) < 8:
+        raise ValueError('گذرواژهٔ بکاپ باید دست‌کم ۸ نویسه باشد.')
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    salt = os.urandom(16)
+    nonce = os.urandom(12)
+    key = _derive_backup_key(passphrase, salt, _PBKDF2_ITERATIONS)
+    ciphertext = AESGCM(key).encrypt(nonce, plain_text.encode('utf-8'), ENCRYPTED_BACKUP_FORMAT.encode('utf-8'))
+    return {
+        'format': ENCRYPTED_BACKUP_FORMAT,
+        'kdf': 'pbkdf2-sha256',
+        'iterations': _PBKDF2_ITERATIONS,
+        'salt': base64.b64encode(salt).decode('ascii'),
+        'nonce': base64.b64encode(nonce).decode('ascii'),
+        'ciphertext': base64.b64encode(ciphertext).decode('ascii'),
+    }
+
+
+def decrypt_backup(envelope, passphrase):
+    """Decrypt an encrypted backup envelope back to the plain backup dict."""
+    if not is_encrypted_backup(envelope):
+        raise ValueError('این فایل، بکاپ رمزنگاری‌شده نیست.')
+    if not passphrase:
+        raise ValueError('این بکاپ رمزنگاری شده است؛ گذرواژهٔ بکاپ را وارد کنید.')
+    from cryptography.exceptions import InvalidTag
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    try:
+        salt = base64.b64decode(envelope['salt'], validate=True)
+        nonce = base64.b64decode(envelope['nonce'], validate=True)
+        ciphertext = base64.b64decode(envelope['ciphertext'], validate=True)
+        iterations = int(envelope.get('iterations') or _PBKDF2_ITERATIONS)
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError('ساختار فایل بکاپ رمزنگاری‌شده معتبر نیست.') from error
+    key = _derive_backup_key(passphrase, salt, iterations)
+    try:
+        plain_text = AESGCM(key).decrypt(nonce, ciphertext, ENCRYPTED_BACKUP_FORMAT.encode('utf-8'))
+    except InvalidTag as error:
+        raise ValueError('گذرواژهٔ بکاپ اشتباه است یا فایل آسیب دیده است.') from error
+    return json.loads(plain_text.decode('utf-8'))
+
+
 USER_MODEL_LABEL = 'auth.user'
 MODEL_ORDER = [
     'api.expensecategory', 'api.service', 'api.staff', 'api.vehicletype',
