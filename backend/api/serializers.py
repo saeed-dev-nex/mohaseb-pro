@@ -6,7 +6,7 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from .models import (
     Customer, Service, Invoice, InvoiceItem, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
-    Cheque, InvoiceSettings, ChatMessage
+    Cheque, InvoiceSettings, ChatMessage, SocialNetwork
 )
 
 
@@ -467,15 +467,32 @@ class DashboardStatsSerializer(serializers.Serializer):
     recent_invoices = serializers.ListField(child=serializers.DictField())
 
 
+class SocialNetworkSerializer(serializers.ModelSerializer):
+    logo = serializers.ImageField(required=False, allow_null=True)
+    logo_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SocialNetwork
+        fields = ['id', 'name', 'url', 'logo', 'logo_url']
+        read_only_fields = ['id', 'logo_url']
+
+    def get_logo_url(self, obj):
+        if not obj.logo:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.logo.url) if request else obj.logo.url
+
+
 class BusinessProfileSerializer(serializers.ModelSerializer):
     logo_url = serializers.SerializerMethodField()
+    social_links = SocialNetworkSerializer(many=True, read_only=True)
 
     class Meta:
         model = BusinessProfile
         fields = [
             'name', 'subtitle', 'logo', 'logo_url', 'phone', 'mobile',
             'address', 'website', 'instagram', 'telegram',
-            'footer_text', 'tax_id', 'customer_documents_path'
+            'footer_text', 'tax_id', 'customer_documents_path', 'social_links'
         ]
 
     def get_logo_url(self, obj):

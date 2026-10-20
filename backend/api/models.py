@@ -421,6 +421,21 @@ class BusinessProfile(models.Model):
         return obj
 
 
+class SocialNetwork(models.Model):
+    profile = models.ForeignKey(BusinessProfile, related_name='social_links', on_delete=models.CASCADE)
+    name = models.CharField(max_length=80, verbose_name='نام شبکه اجتماعی')
+    url = models.URLField(max_length=500, verbose_name='نشانی شبکه اجتماعی')
+    logo = models.ImageField(upload_to='social_networks/', blank=True, null=True, verbose_name='لوگوی شبکه اجتماعی')
+
+    class Meta:
+        ordering = ['id']
+        verbose_name = 'شبکه اجتماعی'
+        verbose_name_plural = 'شبکه‌های اجتماعی'
+
+    def __str__(self):
+        return self.name
+
+
 class ExpenseCategory(models.Model):
     """Categories for expenses (rent, salary, utilities, etc.)"""
     name = models.CharField(max_length=100, verbose_name='نام دسته')

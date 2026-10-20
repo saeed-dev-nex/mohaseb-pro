@@ -121,6 +121,12 @@ export const profileAPI = {
   }),
 };
 
+export const socialNetworksAPI = {
+  create: (formData) => api.post('social-networks/', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  update: (id, formData) => api.patch(`social-networks/${id}/`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  delete: (id) => api.delete(`social-networks/${id}/`),
+};
+
 // ---- Expense Categories ----
 export const expenseCategoriesAPI = {
   list: () => api.get('expense-categories/'),

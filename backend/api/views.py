@@ -23,14 +23,14 @@ from .models import (
     Customer, Service, Invoice, InvoiceEditRequest, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
     Cheque, InvoiceSettings, ChatMessage, ChatNotification, ChatPresence,
-    WelcomeSettings, UserWelcomeMessage, WelcomeMessageShown
+    WelcomeSettings, UserWelcomeMessage, WelcomeMessageShown, SocialNetwork
 )
 from .serializers import (
     CustomerListSerializer, CustomerDetailSerializer,
     ServiceSerializer, InvoiceSerializer, DocumentSerializer,
     BusinessProfileSerializer, ExpenseCategorySerializer,
     ExpenseSerializer, StaffSerializer, VehicleTypeSerializer,
-    UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer
+    UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
 from .audit import snapshot, record_audit, is_invoice_content_version
 
@@ -1280,6 +1280,30 @@ class BusinessProfileViewSet(viewsets.ViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class SocialNetworkViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = SocialNetworkSerializer
+    queryset = SocialNetwork.objects.select_related('profile').all()
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get_queryset(self):
+        return super().get_queryset().filter(profile_id=1)
+
+    def perform_create(self, serializer):
+        serializer.save(profile=BusinessProfile.load())
+
+    def perform_update(self, serializer):
+        old_logo = self.get_object().logo
+        network = serializer.save()
+        if old_logo and old_logo.name != getattr(network.logo, 'name', None):
+            old_logo.delete(save=False)
+
+    def perform_destroy(self, instance):
+        if instance.logo:
+            instance.logo.delete(save=False)
+        instance.delete()
 
 
 class ExpenseCategoryViewSet(viewsets.ModelViewSet):

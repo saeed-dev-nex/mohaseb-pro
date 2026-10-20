@@ -883,10 +883,28 @@ const InvoiceDetail = () => {
           </div>
         </div>
 
+        {/* Seller seal and buyer signature */}
+        <div className="grid grid-cols-2 gap-4 border-t border-slate-700/50 p-5 print-seller-signature">
+          <div className="flex min-h-28 flex-col justify-between rounded-xl border border-dashed border-slate-500/60 p-3">
+            <span className="text-xs font-semibold text-slate-300">مهر و امضای فروشنده</span>
+            <span className="text-center text-[10px] text-slate-500">محل مهر و امضا</span>
+          </div>
+          <div className="flex min-h-28 flex-col justify-between rounded-xl border border-dashed border-slate-500/60 p-3">
+            <span className="text-xs font-semibold text-slate-300">امضای خریدار</span>
+            <span className="text-center text-[10px] text-slate-500">نام و امضا</span>
+          </div>
+        </div>
+
         {/* Print Footer */}
         <div className="hidden print:block text-center text-sm font-semibold text-gray-600 mt-4 pt-2 border-t border-gray-200">
           {profile?.footer_text || 'این فاکتور توسط سیستم محاسب پرو صادر شده است'}
           {profile?.website && <span className="mr-2">| {profile.website}</span>}
+          {!!profile?.social_links?.length && <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 font-normal">
+            {profile.social_links.map((item) => <span key={item.id} className="inline-flex items-center gap-1.5" dir="ltr">
+              {item.logo_url && <img src={item.logo_url} alt="" crossOrigin="anonymous" className="h-4 w-4 object-contain" />}
+              <span>{item.name}: {item.url}</span>
+            </span>)}
+          </div>}
         </div>
       </div>
       {isManager && showPriorSnapshot && priorSnapshot && (
@@ -1145,10 +1163,28 @@ const InvoiceDetail = () => {
           </div>
         </div>
 
+        {/* Seller seal and buyer signature */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '14px' }}>
+          <div style={{ height: '88px', border: '1px dashed #9ca3af', borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <strong style={{ fontSize: '11px' }}>مهر و امضای فروشنده</strong>
+            <span style={{ textAlign: 'center', color: '#6b7280', fontSize: '9px' }}>محل مهر و امضا</span>
+          </div>
+          <div style={{ height: '88px', border: '1px dashed #9ca3af', borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <strong style={{ fontSize: '11px' }}>امضای خریدار</strong>
+            <span style={{ textAlign: 'center', color: '#6b7280', fontSize: '9px' }}>نام و امضا</span>
+          </div>
+        </div>
+
         {/* Export Footer */}
         <div style={{ textAlign: 'center', borderTop: '1px solid #e5e7eb', marginTop: '16px', paddingTop: '8px', fontSize: '12px', fontWeight: 600, color: '#6b7280' }}>
           {profile?.footer_text || 'این فاکتور توسط سیستم محاسب پرو صادر شده است'}
           {profile?.website && <span style={{ marginRight: '8px' }}>| {profile.website}</span>}
+          {!!profile?.social_links?.length && <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', columnGap: '16px', rowGap: '6px', marginTop: '8px', fontWeight: 400 }}>
+            {profile.social_links.map((item) => <span key={item.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', direction: 'ltr' }}>
+              {item.logo_url && <img src={item.logo_url} alt="" crossOrigin="anonymous" style={{ width: '14px', height: '14px', objectFit: 'contain' }} />}
+              <span>{item.name}: {item.url}</span>
+            </span>)}
+          </div>}
         </div>
       </div>
     </>

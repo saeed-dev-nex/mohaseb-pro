@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
-import { profileAPI, backupConfigAPI, backupAPI, invoiceSettingsAPI, welcomeAPI } from '../services/api';
+import { profileAPI, socialNetworksAPI, backupConfigAPI, backupAPI, invoiceSettingsAPI, welcomeAPI } from '../services/api';
 
 const inp = 'w-full px-3 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all';
 const RESTORE_CONFIRMATION_PHRASE = 'تایید';
@@ -27,7 +27,7 @@ const Settings = () => {
   const isManager = useSelector((state) => !!(state.auth.currentUser?.is_staff || state.auth.currentUser?.is_superuser));
   const [form, setForm] = useState({
     name: '', subtitle: '', phone: '', mobile: '', address: '',
-    website: '', instagram: '', telegram: '', footer_text: '', tax_id: '',
+    website: '', footer_text: '', tax_id: '',
     customer_documents_path: '',
   });
   const [logoPreview, setLogoPreview] = useState(null);
@@ -59,6 +59,11 @@ const Settings = () => {
   const [welcomeSaving, setWelcomeSaving] = useState(false);
   const [welcomeMsg, setWelcomeMsg] = useState('');
   const [personalSaving, setPersonalSaving] = useState(false);
+  const [socialLinks, setSocialLinks] = useState([]);
+  const [socialForm, setSocialForm] = useState({ id: null, name: '', url: '', logo: null });
+  const [socialSaving, setSocialSaving] = useState(false);
+  const [socialError, setSocialError] = useState('');
+  const socialLogoInputRef = useRef(null);
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [folderPickerTarget, setFolderPickerTarget] = useState('backup');
   const [folderPickerData, setFolderPickerData] = useState(null);
@@ -85,10 +90,10 @@ const Settings = () => {
           name: profile.name || '', subtitle: profile.subtitle || '',
           phone: profile.phone || '', mobile: profile.mobile || '',
           address: profile.address || '', website: profile.website || '',
-          instagram: profile.instagram || '', telegram: profile.telegram || '',
           footer_text: profile.footer_text || '', tax_id: profile.tax_id || '',
           customer_documents_path: profile.customer_documents_path || '',
         });
+        setSocialLinks(profile.social_links || []);
         if (profile.logo_url) setLogoPreview(profile.logo_url);
       }
       if (bRes.data && Object.keys(bRes.data).length) {
@@ -126,6 +131,48 @@ const Settings = () => {
   const handleLogoChange = (e) => {
     const file = e.target.files[0];
     if (file) { setLogoFile(file); setLogoPreview(URL.createObjectURL(file)); }
+  };
+
+  const handleSocialSubmit = async (event) => {
+    event.preventDefault();
+    if (!socialForm.name.trim() || !socialForm.url.trim()) return;
+    setSocialSaving(true);
+    setSocialError('');
+    const body = new FormData();
+    body.append('name', socialForm.name.trim());
+    body.append('url', socialForm.url.trim());
+    if (socialForm.logo) body.append('logo', socialForm.logo);
+    try {
+      const { data } = socialForm.id
+        ? await socialNetworksAPI.update(socialForm.id, body)
+        : await socialNetworksAPI.create(body);
+      setSocialLinks((previous) => socialForm.id
+        ? previous.map((item) => item.id === data.id ? data : item)
+        : [...previous, data]);
+      setSocialForm({ id: null, name: '', url: '', logo: null });
+      if (socialLogoInputRef.current) socialLogoInputRef.current.value = '';
+    } catch (error) {
+      setSocialError(error.response?.data?.url?.[0] || error.response?.data?.name?.[0] || error.response?.data?.logo?.[0] || 'ذخیره شبکهٔ اجتماعی انجام نشد.');
+    } finally {
+      setSocialSaving(false);
+    }
+  };
+
+  const handleSocialEdit = (item) => {
+    setSocialForm({ id: item.id, name: item.name, url: item.url, logo: null });
+    if (socialLogoInputRef.current) socialLogoInputRef.current.value = '';
+  };
+  const handleSocialDelete = async (id) => {
+    try {
+      await socialNetworksAPI.delete(id);
+      setSocialLinks((previous) => previous.filter((item) => item.id !== id));
+      if (socialForm.id === id) {
+        setSocialForm({ id: null, name: '', url: '', logo: null });
+        if (socialLogoInputRef.current) socialLogoInputRef.current.value = '';
+      }
+    } catch {
+      setSocialError('حذف شبکهٔ اجتماعی انجام نشد.');
+    }
   };
 
   const handleSave = async () => {
@@ -375,9 +422,26 @@ const Settings = () => {
             </div>
             <F label="آدرس"><textarea className={inp} rows={2} value={form.address} onChange={(e) => set('address', e.target.value)} placeholder="آدرس مجموعه" /></F>
             <F label="وب‌سایت"><input className={inp} value={form.website} onChange={(e) => set('website', e.target.value)} placeholder="https://example.com" /></F>
-            <div className="grid grid-cols-2 gap-3">
-              <F label="اینستاگرام"><input className={inp} value={form.instagram} onChange={(e) => set('instagram', e.target.value)} placeholder="@username" /></F>
-              <F label="تلگرام"><input className={inp} value={form.telegram} onChange={(e) => set('telegram', e.target.value)} placeholder="@username" /></F>
+            <div className="space-y-3 border-t border-slate-700/50 pt-4">
+              <div><h4 className="text-sm font-semibold text-slate-200">شبکه‌های اجتماعی</h4><p className="mt-1 text-xs text-slate-400">نام، نشانی و لوگوی دلخواهتان را اضافه کنید؛ این موارد در نسخهٔ چاپی فاکتور نیز نمایش داده می‌شوند.</p></div>
+              {socialLinks.length > 0 && <div className="space-y-2">
+                {socialLinks.map((item) => <div key={item.id} className="flex items-center gap-3 rounded-xl border border-slate-700/50 bg-slate-700/15 p-3">
+                  {item.logo_url ? <img src={item.logo_url} alt={`لوگوی ${item.name}`} className="h-9 w-9 shrink-0 rounded-lg border border-slate-600/50 bg-white object-contain p-1" /> : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-700 text-lg">🌐</span>}
+                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-slate-200">{item.name}</p><a href={item.url} target="_blank" rel="noreferrer" dir="ltr" className="block truncate text-left text-xs text-blue-400 hover:underline">{item.url}</a></div>
+                  <button type="button" onClick={() => handleSocialEdit(item)} className="rounded-lg px-2 py-1 text-xs text-blue-400 hover:bg-blue-500/10">ویرایش</button>
+                  <button type="button" onClick={() => handleSocialDelete(item.id)} className="rounded-lg px-2 py-1 text-xs text-rose-400 hover:bg-rose-500/10">حذف</button>
+                </div>)}
+              </div>}
+              <form onSubmit={handleSocialSubmit} className="grid gap-3 rounded-xl border border-dashed border-slate-600/60 p-3 sm:grid-cols-2">
+                <F label={socialForm.id ? 'ویرایش نام شبکه' : 'نام شبکهٔ اجتماعی'}><input className={inp} maxLength={80} required value={socialForm.name} onChange={(event) => setSocialForm((previous) => ({ ...previous, name: event.target.value }))} placeholder="مثلاً لینکدین یا وبلاگ" /></F>
+                <F label="نشانی کامل"><input className={`${inp} text-left`} dir="ltr" type="url" maxLength={500} required value={socialForm.url} onChange={(event) => setSocialForm((previous) => ({ ...previous, url: event.target.value }))} placeholder="https://example.com/your-page" /></F>
+                <F label="لوگو (تصویر اختیاری)"><input ref={socialLogoInputRef} type="file" accept="image/*" onChange={(event) => setSocialForm((previous) => ({ ...previous, logo: event.target.files?.[0] || null }))} className="block w-full text-xs text-slate-400 file:ml-2 file:rounded-lg file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-slate-200" /><span className="text-[11px] text-slate-500">در ویرایش، خالی گذاشتن این مورد لوگوی فعلی را نگه می‌دارد.</span></F>
+                <div className="flex items-end gap-2">
+                  <button type="submit" disabled={socialSaving || !socialForm.name.trim() || !socialForm.url.trim()} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">{socialSaving ? 'در حال ذخیره…' : socialForm.id ? 'ذخیره تغییرات' : 'افزودن شبکه'}</button>
+                  {socialForm.id && <button type="button" onClick={() => { setSocialForm({ id: null, name: '', url: '', logo: null }); if (socialLogoInputRef.current) socialLogoInputRef.current.value = ''; }} className="rounded-xl border border-slate-600 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700/50">انصراف</button>}
+                </div>
+                {socialError && <p role="alert" className="text-xs text-rose-400 sm:col-span-2">{socialError}</p>}
+              </form>
             </div>
           </div>
         </Section>
