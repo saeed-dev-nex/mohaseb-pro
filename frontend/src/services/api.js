@@ -168,6 +168,16 @@ export const invoiceSettingsAPI = {
   update: (data) => api.patch('invoice-settings/update_config/', data),
 };
 
+export const welcomeAPI = {
+  getConfig: () => api.get('welcome-settings/config/'),
+  updateConfig: (data) => api.patch('welcome-settings/config/', data),
+  users: () => api.get('welcome-settings/users/'),
+  personal: () => api.get('welcome-settings/personal/'),
+  savePersonal: (data) => api.post('welcome-settings/personal/', data),
+  removePersonal: (user_id) => api.delete('welcome-settings/personal/', { data: { user_id } }),
+  today: () => api.post('welcome-settings/today/'),
+};
+
 export const chatAPI = {
   list: (params = {}) => api.get('chat/', { params }),
   create: (formData) => api.post('chat/', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),

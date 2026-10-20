@@ -17,11 +17,13 @@ from django.contrib.auth.models import User
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 import json, calendar, os, shutil
+from zoneinfo import ZoneInfo
 
 from .models import (
     Customer, Service, Invoice, InvoiceEditRequest, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
-    Cheque, InvoiceSettings, ChatMessage, ChatNotification, ChatPresence
+    Cheque, InvoiceSettings, ChatMessage, ChatNotification, ChatPresence,
+    WelcomeSettings, UserWelcomeMessage, WelcomeMessageShown
 )
 from .serializers import (
     CustomerListSerializer, CustomerDetailSerializer,
@@ -1087,6 +1089,70 @@ class InvoiceSettingsViewSet(viewsets.ViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class WelcomeSettingsViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['get', 'patch'], permission_classes=[IsManagerOrAdmin])
+    def config(self, request):
+        settings_obj = WelcomeSettings.load()
+        if request.method == 'PATCH':
+            settings_obj.enabled = bool(request.data.get('enabled', settings_obj.enabled))
+            settings_obj.global_message = str(request.data.get('global_message', settings_obj.global_message))[:5000]
+            settings_obj.save(update_fields=['enabled', 'global_message'])
+        return Response({'enabled': settings_obj.enabled, 'global_message': settings_obj.global_message})
+
+    @action(detail=False, methods=['get'], permission_classes=[IsManagerOrAdmin])
+    def users(self, request):
+        users = User.objects.filter(is_active=True).order_by('first_name', 'last_name', 'username')
+        return Response([{
+            'id': user.id,
+            'name': user.get_full_name().strip() or user.username,
+        } for user in users])
+
+    @action(detail=False, methods=['get', 'post', 'delete'], permission_classes=[IsManagerOrAdmin])
+    def personal(self, request):
+        if request.method == 'GET':
+            messages = UserWelcomeMessage.objects.select_related('user').order_by('user__first_name', 'user__last_name', 'user__username')
+            return Response([{
+                'user_id': item.user_id,
+                'name': item.user.get_full_name().strip() or item.user.username,
+                'message': item.message,
+            } for item in messages])
+
+        user_id = request.data.get('user_id')
+        if not user_id:
+            return Response({'user_id': ['انتخاب کاربر الزامی است.']}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user = User.objects.get(pk=user_id, is_active=True)
+        except (User.DoesNotExist, TypeError, ValueError):
+            return Response({'user_id': ['کاربر انتخاب‌شده معتبر نیست.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        if request.method == 'DELETE':
+            UserWelcomeMessage.objects.filter(user=user).delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        message = str(request.data.get('message', '')).strip()
+        if not message:
+            return Response({'message': ['متن پیام را وارد کنید.']}, status=status.HTTP_400_BAD_REQUEST)
+        if len(message) > 5000:
+            return Response({'message': ['حداکثر طول پیام ۵۰۰۰ نویسه است.']}, status=status.HTTP_400_BAD_REQUEST)
+        item, _ = UserWelcomeMessage.objects.update_or_create(user=user, defaults={'message': message})
+        return Response({'user_id': user.id, 'message': item.message})
+
+    @action(detail=False, methods=['post'])
+    def today(self, request):
+        settings_obj = WelcomeSettings.load()
+        if not settings_obj.enabled:
+            return Response({'show': False})
+        personal = UserWelcomeMessage.objects.filter(user=request.user).values_list('message', flat=True).first()
+        message = personal or settings_obj.global_message
+        if not message.strip():
+            return Response({'show': False})
+        local_day = timezone.localtime(timezone.now(), ZoneInfo('Asia/Tehran')).date()
+        _, created = WelcomeMessageShown.objects.get_or_create(user=request.user, date=local_day)
+        return Response({'show': created, 'message': message if created else ''})
 
 
 class BackupConfigViewSet(viewsets.ViewSet):

@@ -354,6 +354,40 @@ class InvoiceSettings(models.Model):
         return obj
 
 
+class WelcomeSettings(models.Model):
+    enabled = models.BooleanField(default=False, verbose_name='نمایش پیام خوش‌آمدگویی')
+    global_message = models.TextField(blank=True, default='', verbose_name='پیام خوش‌آمدگویی عمومی')
+
+    class Meta:
+        verbose_name = 'تنظیمات پیام خوش‌آمدگویی'
+        verbose_name_plural = 'تنظیمات پیام خوش‌آمدگویی'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class UserWelcomeMessage(models.Model):
+    user = models.OneToOneField(User, related_name='welcome_message', on_delete=models.CASCADE)
+    message = models.TextField(verbose_name='پیام شخصی خوش‌آمدگویی')
+
+    def __str__(self):
+        return f'پیام خوش‌آمدگویی برای {self.user.username}'
+
+
+class WelcomeMessageShown(models.Model):
+    user = models.ForeignKey(User, related_name='welcome_messages_shown', on_delete=models.CASCADE)
+    date = models.DateField()
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['user', 'date'], name='unique_welcome_shown_per_user_day')]
+
+
 class BusinessProfile(models.Model):
     """Singleton model for business/brand settings"""
     name = models.CharField(max_length=255, default='محاسب پرو', verbose_name='نام مجموعه')

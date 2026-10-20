@@ -5,7 +5,8 @@ import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 import QuickInvoiceModal from './QuickInvoiceModal';
 import InvoiceEditRequestAlerts from './InvoiceEditRequestAlerts';
-import { backupConfigAPI, chatAPI, chatSocketProtocols, chatSocketURL } from '../services/api';
+import WelcomeModal from './WelcomeModal';
+import { backupConfigAPI, chatAPI, chatSocketProtocols, chatSocketURL, welcomeAPI } from '../services/api';
 import api from '../services/api';
 
 const ChatRealtimeBridge = () => {
@@ -110,7 +111,15 @@ const Layout = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true');
   const [quickInvoice, setQuickInvoice] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
+  const [welcomeMessage, setWelcomeMessage] = useState('');
   const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
+
+  React.useEffect(() => {
+    if (!isAuthenticated) return;
+    welcomeAPI.today().then(({ data }) => {
+      if (data.show && data.message) setWelcomeMessage(data.message);
+    }).catch(() => {});
+  }, [isAuthenticated]);
 
   React.useEffect(() => {
     let active = true;
@@ -174,6 +183,7 @@ const Layout = () => {
       <Sidebar isOpen={sidebarOpen} isCollapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed(value => { localStorage.setItem('sidebar-collapsed', String(!value)); return !value; })} onClose={() => setSidebarOpen(false)} />
       <ChatRealtimeBridge />
       <InvoiceEditRequestAlerts />
+      {welcomeMessage && <WelcomeModal message={welcomeMessage} onClose={() => setWelcomeMessage('')} />}
 
       {/* Main content - offset for sidebar on desktop */}
       <div className={`${sidebarCollapsed ? 'lg:mr-20' : 'lg:mr-64'} flex flex-col min-h-screen transition-[margin] duration-300`}>

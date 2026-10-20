@@ -853,8 +853,8 @@ const InvoiceDetail = () => {
                 </div>
                 {Number(invoice.commission_total) > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-yellow-400/80">💼 <span className="print:hidden">کارمزد (درآمد شما)</span><span className="hidden print:inline">کارمزد</span></span>
-                    <span className="text-yellow-400">+{fmt(invoice.commission_total)}</span>
+                    <span className="text-gray-400/80">💼 <span className="print:hidden">کارمزد (درآمد شما)</span><span className="hidden print:inline">کارمزد</span></span>
+                    <span className="text-gray-400">+{fmt(invoice.commission_total)}</span>
                   </div>
                 )}
                 {invoiceFields.show_tax_field && Number(invoice.tax) > 0 && (

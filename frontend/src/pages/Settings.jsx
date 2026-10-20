@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
-import { profileAPI, backupConfigAPI, backupAPI, invoiceSettingsAPI } from '../services/api';
+import { profileAPI, backupConfigAPI, backupAPI, invoiceSettingsAPI, welcomeAPI } from '../services/api';
 
 const inp = 'w-full px-3 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all';
 const RESTORE_CONFIRMATION_PHRASE = 'تایید';
@@ -51,6 +51,14 @@ const Settings = () => {
   const [invoiceCfg, setInvoiceCfg] = useState({ office_card_fee_threshold: 0, show_discount_field: true, show_tax_field: true });
   const [invoiceCfgSaving, setInvoiceCfgSaving] = useState(false);
   const [invoiceCfgMsg, setInvoiceCfgMsg] = useState('');
+  const [welcomeCfg, setWelcomeCfg] = useState({ enabled: false, global_message: '' });
+  const [welcomeUsers, setWelcomeUsers] = useState([]);
+  const [personalGreetings, setPersonalGreetings] = useState([]);
+  const [personalUserId, setPersonalUserId] = useState('');
+  const [personalMessage, setPersonalMessage] = useState('');
+  const [welcomeSaving, setWelcomeSaving] = useState(false);
+  const [welcomeMsg, setWelcomeMsg] = useState('');
+  const [personalSaving, setPersonalSaving] = useState(false);
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [folderPickerTarget, setFolderPickerTarget] = useState('backup');
   const [folderPickerData, setFolderPickerData] = useState(null);
@@ -67,7 +75,10 @@ const Settings = () => {
       profileAPI.get(),
       backupConfigAPI.get().catch(() => ({ data: {} })),
       invoiceSettingsAPI.get().catch(() => ({ data: {} })),
-    ]).then(([pRes, bRes, iRes]) => {
+      isManager ? welcomeAPI.getConfig().catch(() => ({ data: {} })) : Promise.resolve({ data: {} }),
+      isManager ? welcomeAPI.users().catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+      isManager ? welcomeAPI.personal().catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+    ]).then(([pRes, bRes, iRes, wRes, wuRes, wpRes]) => {
       const profile = Array.isArray(pRes.data) ? pRes.data[0] : pRes.data;
       if (profile) {
         setForm({
@@ -84,8 +95,11 @@ const Settings = () => {
         setBackupCfg((prev) => ({ ...prev, ...bRes.data }));
       }
       if (iRes.data && Object.keys(iRes.data).length) setInvoiceCfg((prev) => ({ ...prev, ...iRes.data }));
+      setWelcomeCfg((prev) => ({ ...prev, ...wRes.data }));
+      setWelcomeUsers(wuRes.data || []);
+      setPersonalGreetings(wpRes.data || []);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  }, [isManager]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const setBcfg = (k, v) => setBackupCfg((f) => ({ ...f, [k]: v }));
@@ -161,6 +175,46 @@ const Settings = () => {
     } finally {
       setInvoiceCfgSaving(false);
       setTimeout(() => setInvoiceCfgMsg(''), 4000);
+    }
+  };
+
+  const handleSaveWelcomeConfig = async () => {
+    setWelcomeSaving(true);
+    try {
+      const { data } = await welcomeAPI.updateConfig(welcomeCfg);
+      setWelcomeCfg(data);
+      setWelcomeMsg('تنظیمات پیام خوش‌آمدگویی ذخیره شد.');
+    } catch (error) {
+      setWelcomeMsg(error.response?.data?.detail || 'ذخیره تنظیمات انجام نشد.');
+    } finally {
+      setWelcomeSaving(false);
+      window.setTimeout(() => setWelcomeMsg(''), 4000);
+    }
+  };
+
+  const handleSavePersonalGreeting = async () => {
+    if (!personalUserId || !personalMessage.trim()) return;
+    setPersonalSaving(true);
+    try {
+      await welcomeAPI.savePersonal({ user_id: Number(personalUserId), message: personalMessage.trim() });
+      const { data } = await welcomeAPI.personal();
+      setPersonalGreetings(data);
+      setPersonalMessage('');
+      setWelcomeMsg('پیام شخصی ذخیره شد.');
+    } catch (error) {
+      setWelcomeMsg(error.response?.data?.message?.[0] || 'ذخیره پیام شخصی انجام نشد.');
+    } finally {
+      setPersonalSaving(false);
+      window.setTimeout(() => setWelcomeMsg(''), 4000);
+    }
+  };
+
+  const handleRemovePersonalGreeting = async (userId) => {
+    try {
+      await welcomeAPI.removePersonal(userId);
+      setPersonalGreetings((previous) => previous.filter((item) => item.user_id !== userId));
+    } catch {
+      setWelcomeMsg('حذف پیام شخصی انجام نشد.');
     }
   };
 
@@ -345,6 +399,43 @@ const Settings = () => {
               className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50">{invoiceCfgSaving ? 'در حال ذخیره...' : 'ذخیره تنظیمات فاکتور'}</button>
             {invoiceCfgMsg && <span role="status" className="text-xs text-slate-300">{invoiceCfgMsg}</span>}
           </div>
+        </div>
+      </Section>}
+
+      {isManager && <Section title="پیام خوش‌آمدگویی روزانه" icon="🎉">
+        <div className="space-y-5">
+          <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-700/50 bg-slate-700/20 p-4">
+            <span><span className="block text-sm font-medium text-slate-100">نمایش پیام در اولین ورود روزانه</span><span className="mt-1 block text-xs text-slate-400">پس از نمایش، پیام تا روز بعد دوباره به همان کاربر نشان داده نمی‌شود.</span></span>
+            <input type="checkbox" checked={welcomeCfg.enabled} onChange={(event) => setWelcomeCfg((previous) => ({ ...previous, enabled: event.target.checked }))} className="h-5 w-5 accent-blue-600" />
+          </label>
+          <F label="پیام عمومی برای همهٔ کاربران">
+            <textarea className={inp} rows={3} maxLength={5000} value={welcomeCfg.global_message} onChange={(event) => setWelcomeCfg((previous) => ({ ...previous, global_message: event.target.value }))} placeholder="مثلاً: روز خوبی داشته باشید و پرانرژی شروع کنید!" />
+          </F>
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={handleSaveWelcomeConfig} disabled={welcomeSaving} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60">{welcomeSaving ? 'در حال ذخیره…' : 'ذخیره پیام عمومی'}</button>
+            <span role="status" className="text-xs text-slate-500">پیام شخصی کاربر، در صورت ثبت، جایگزین پیام عمومی او می‌شود.</span>
+          </div>
+
+          <div className="border-t border-slate-700/50 pt-5">
+            <h4 className="mb-3 text-sm font-semibold text-slate-100">پیام شخصی برای یک کاربر</h4>
+            <div className="grid gap-3 sm:grid-cols-[minmax(10rem,1fr)_2fr_auto] sm:items-end">
+              <F label="کاربر">
+                <select className={inp} value={personalUserId} onChange={(event) => setPersonalUserId(event.target.value)}>
+                  <option value="">انتخاب کاربر…</option>
+                  {welcomeUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                </select>
+              </F>
+              <F label="متن پیام شخصی"><textarea className={inp} rows={2} maxLength={5000} value={personalMessage} onChange={(event) => setPersonalMessage(event.target.value)} placeholder="پیام مخصوص این کاربر" /></F>
+              <button type="button" onClick={handleSavePersonalGreeting} disabled={personalSaving || !personalUserId || !personalMessage.trim()} className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{personalSaving ? 'در حال ذخیره…' : 'ذخیره پیام شخصی'}</button>
+            </div>
+            {personalGreetings.length > 0 && <ul className="mt-4 space-y-2">
+              {personalGreetings.map((item) => <li key={item.user_id} className="flex items-start justify-between gap-3 rounded-xl border border-slate-700/50 bg-slate-700/15 px-3 py-2.5">
+                <div className="min-w-0"><p className="text-sm font-medium text-slate-200">{item.name}</p><p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-400">{item.message}</p></div>
+                <button type="button" onClick={() => handleRemovePersonalGreeting(item.user_id)} className="shrink-0 rounded-lg px-2 py-1 text-xs text-rose-400 hover:bg-rose-500/10">حذف</button>
+              </li>)}
+            </ul>}
+          </div>
+          {welcomeMsg && <p role="status" className="text-sm text-emerald-600">{welcomeMsg}</p>}
         </div>
       </Section>}
 
