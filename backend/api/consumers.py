@@ -44,6 +44,9 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
     async def chat_presence(self, event):
         await self.send_json({'type': 'presence', 'user_id': event['user_id']})
 
+    async def chat_deleted(self, event):
+        await self.send_json({'type': 'deleted', 'message_id': event['message_id']})
+
     async def receive_json(self, content, **kwargs):
         if content.get('type') == 'heartbeat':
             await self.touch_presence(self.user_id)

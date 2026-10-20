@@ -972,7 +972,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
             return Response({'error': 'customer not found'}, status=404)
 
 
-class ChatMessageViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin, viewsets.mixins.CreateModelMixin):
+class ChatMessageViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin, viewsets.mixins.CreateModelMixin, viewsets.mixins.DestroyModelMixin):
     permission_classes = [IsAuthenticated]
     serializer_class = ChatMessageSerializer
     queryset = ChatMessage.objects.select_related('sender', 'recipient').all()
@@ -1016,6 +1016,21 @@ class ChatMessageViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin
                 'type': 'chat.message',
                 'payload': ChatMessageSerializer(message, context={'request': self.request}).data,
             })
+
+    def destroy(self, request, *args, **kwargs):
+        message = self.get_object()
+        if message.sender_id != request.user.id:
+            return Response({'detail': 'فقط فرستنده می‌تواند پیام را حذف کند.'}, status=status.HTTP_403_FORBIDDEN)
+        message_id = message.id
+        if message.file:
+            message.file.delete(save=False)
+        self.perform_destroy(message)
+        layer = get_channel_layer()
+        if layer:
+            async_to_sync(layer.group_send)('chat_room', {
+                'type': 'chat.deleted', 'message_id': message_id,
+            })
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=['get'])
     def users(self, request):

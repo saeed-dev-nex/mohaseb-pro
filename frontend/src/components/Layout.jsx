@@ -36,6 +36,7 @@ const ChatRealtimeBridge = () => {
       socket.onopen = () => {
         reconnectDelay = 1000;
         setConnection(true);
+        window.dispatchEvent(new CustomEvent('mohaseb:chat-presence'));
         refreshUnread();
         heartbeatTimer = window.setInterval(() => {
           if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'heartbeat' }));
@@ -46,6 +47,10 @@ const ChatRealtimeBridge = () => {
         try { payload = JSON.parse(event.data); } catch { return; }
         if (payload.type === 'presence') {
           window.dispatchEvent(new CustomEvent('mohaseb:chat-presence'));
+          return;
+        }
+        if (payload.type === 'deleted') {
+          window.dispatchEvent(new CustomEvent('mohaseb:chat-deleted', { detail: { id: payload.message_id } }));
           return;
         }
         if (payload.type !== 'message' || !payload.message) return;

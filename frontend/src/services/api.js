@@ -171,6 +171,7 @@ export const invoiceSettingsAPI = {
 export const chatAPI = {
   list: (params = {}) => api.get('chat/', { params }),
   create: (formData) => api.post('chat/', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  remove: (id) => api.delete(`chat/${id}/`),
   users: () => api.get('chat/users/'),
   unread: () => api.get('chat/unread/'),
   markRead: () => api.post('chat/mark_read/'),

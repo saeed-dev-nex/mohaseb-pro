@@ -98,3 +98,26 @@
 [data-theme="light"] ::-webkit-scrollbar-track { background: #e7ecf4; }
 [data-theme="light"] ::-webkit-scrollbar-thumb { background: #b6c2d2; }
 [data-theme="light"] .glass { background: rgba(255,255,255,.8); border-color: #dce3ed; }
+
+/* The chat uses WhatsApp-inspired colors in dark mode; adapt its surfaces with the site theme. */
+[data-theme="light"] .chat-page { background: #fff !important; border-color: #d6deea !important; }
+[data-theme="light"] .chat-page aside,
+[data-theme="light"] .chat-page header,
+[data-theme="light"] .chat-page form,
+[data-theme="light"] .chat-page [class*="bg-[#0b141a]"],
+[data-theme="light"] .chat-page [class*="bg-[#111b21]"],
+[data-theme="light"] .chat-page [class*="bg-[#202c33]"],
+[data-theme="light"] .chat-page [class*="bg-[#182229]"] { background-color: #fff !important; }
+[data-theme="light"] .chat-page [class*="bg-[#2a3942]"] { background-color: #eef2f7 !important; }
+[data-theme="light"] .chat-page [class*="bg-[#005c4b]"] { background-color: #d9f4e8 !important; color: #172033 !important; }
+[data-theme="light"] .chat-page [class*="bg-[#202c33]"] { color: #172033 !important; }
+[data-theme="light"] .chat-page [class*="border-slate-700"] { border-color: #d6deea !important; }
+[data-theme="light"] .chat-page [class*="text-slate-300"] { color: #526176 !important; }
+[data-theme="light"] .chat-page [class*="text-slate-200"] { color: #344256 !important; }
+[data-theme="light"] .chat-page [class*="text-white"] { color: #172033 !important; }
+[data-theme="light"] .chat-page [class*="text-sky-100"] { color: #155e9a !important; }
+[data-theme="light"] .chat-page [class*="text-sky-300"] { color: #1769aa !important; }
+[data-theme="light"] .chat-page [class*="text-emerald-400"] { color: #087a50 !important; }
+[data-theme="light"] .chat-page [class*="text-emerald-300"] { color: #087a50 !important; }
+[data-theme="light"] .chat-page [class*="text-rose-300"] { color: #be123c !important; }
+[data-theme="light"] .chat-page [class*="placeholder-slate-400"]::placeholder { color: #64748b !important; }
