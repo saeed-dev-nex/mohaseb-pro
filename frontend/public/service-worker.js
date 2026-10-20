@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mohaseb-pro-shell-v3.0.1';
+const CACHE_NAME = 'mohaseb-pro-shell-v3.0.1-asset-guard';
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -12,8 +12,24 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
-  event.respondWith(fetch(request).then((response) => {
-    if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+  const isNavigation = request.mode === 'navigate';
+  const isBuildAsset = new URL(request.url).pathname.startsWith('/assets/');
+  event.respondWith(fetch(request).then(async (response) => {
+    const contentType = response.headers.get('content-type') || '';
+    // Vite's SPA fallback may return index.html with HTTP 200 for a missing JS chunk.
+    // Never cache or serve that HTML as a module or stylesheet.
+    if (isBuildAsset && contentType.includes('text/html')) {
+      return new Response('Build asset not found', { status: 404, statusText: 'Not Found' });
+    }
+    if (response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone());
+    }
     return response;
-  }).catch(async () => (await caches.match(request)) || caches.match('/index.html')));
+  }).catch(async () => {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    if (isNavigation) return (await caches.match('/index.html')) || Response.error();
+    return new Response('', { status: 503, statusText: 'Service Unavailable' });
+  }));
 });

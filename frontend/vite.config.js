@@ -16,5 +16,8 @@ export default defineConfig({
   preview: {
     host: '0.0.0.0',  // Listen on all network interfaces (LAN)
     port: 4173,
+    headers: {
+      'Cache-Control': 'no-cache',
+    },
   },
 })

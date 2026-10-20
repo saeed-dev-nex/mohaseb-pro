@@ -37,27 +37,17 @@ echo [INFO] Server IP Address: %LOCAL_IP%
 echo [INFO] Client access: http://%LOCAL_IP%:4173
 echo.
 
-:: ?? Smart Build: hash src + package.json to detect changes ??
+:: Smart Build: hash source, public assets, and build configuration.
 echo [INFO] Checking if rebuild is needed...
 
-:: Compute hash of src directory + package.json + vite.config
-set "HASH_SRC="
-for /f "skip=1 tokens=1" %%h in ('certutil -hashfile "%FRONTEND%\package.json" SHA1 2^>nul') do (
-    if "!HASH_SRC!"=="" set "HASH_SRC=%%h"
+:: Hash file contents, so same-size edits and service-worker changes trigger a rebuild.
+set "COMBINED_HASH="
+for /f "usebackq delims=" %%h in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\frontend_build_hash.ps1" -FrontendPath "%FRONTEND%"`) do set "COMBINED_HASH=%%h"
+if not defined COMBINED_HASH (
+    echo [ERROR] Could not calculate the frontend build hash.
+    pause
+    exit /b 1
 )
-
-:: Also fold in vite config hash if exists
-if exist "%FRONTEND%\vite.config.js" (
-    for /f "skip=1 tokens=1" %%h in ('certutil -hashfile "%FRONTEND%\vite.config.js" SHA1 2^>nul') do (
-        if defined HASH_SRC set "HASH_SRC=!HASH_SRC!%%h"
-    )
-)
-
-:: Fold in the size+timestamp of the whole src folder as a proxy
-for /f "tokens=3" %%s in ('dir /s /a-d "%FRONTEND%\src" 2^>nul ^| findstr /i "File(s)"') do (
-    set "SRC_STATS=%%s"
-)
-set "COMBINED_HASH=%HASH_SRC%%SRC_STATS%"
 
 :: Read previously stored hash
 set "OLD_HASH="
