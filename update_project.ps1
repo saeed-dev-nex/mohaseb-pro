@@ -8,8 +8,21 @@ function Invoke-Git([string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "Git command failed: git $($Arguments -join ' ')" }
 }
 
-if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Git is not installed or is not on PATH.' }
-Invoke-Git @('rev-parse', '--is-inside-work-tree') | Out-Null
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Output '[INFO] Automatic update skipped: Git is not installed. Starting with the local version.'
+    exit 0
+}
+$gitRoot = & git -C $projectRoot rev-parse --show-toplevel 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($gitRoot | Out-String).Trim())) {
+    Write-Output '[INFO] Automatic update skipped: this folder is not a Git checkout (release/archive installs cannot self-update). Starting with the local version.'
+    exit 0
+}
+$gitRootPath = (Resolve-Path -LiteralPath ($gitRoot | Out-String).Trim()).Path
+$projectRootPath = (Resolve-Path -LiteralPath $projectRoot).Path
+if (-not [string]::Equals($gitRootPath.TrimEnd('\\'), $projectRootPath.TrimEnd('\\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+    Write-Output '[INFO] Automatic update skipped: run this script from the Git repository root. Starting with the local version.'
+    exit 0
+}
 $changes = & git -C $projectRoot status --porcelain
 if ($LASTEXITCODE -ne 0) { throw 'Could not read the Git working tree.' }
 if ($changes) {
