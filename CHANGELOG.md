@@ -6,6 +6,18 @@
 
 ## [Unreleased] — در دست انتشار (پیشنهاد: 3.1.0)
 
+### افزوده‌شده (مرحلهٔ ۵)
+- **اجرای Production واقعی روی ویندوز:** اسکریپت `run_production.bat` —
+  یک پردازهٔ Daphne روی یک پورت، هم‌زمان فرانت‌اند (بیلد)، API و وب‌سوکت
+  را سرو می‌کند (دیگر `runserver` و `vite preview` لازم نیست)؛ کلید
+  `SECRET_KEY` پایدار در `backend\.secret_key` (خارج از گیت) ساخته و
+  نگه‌داری می‌شود تا ری‌استارت، کاربران را بیرون نیندازد.
+- **سخت‌سازی امنیتی جنگو (محیط‌محور):** هدرهای `nosniff` و
+  `Referrer-Policy` و `X-Frame-Options: SAMEORIGIN` همیشه فعال؛ کوکی‌های
+  Secure، ریدایرکت HTTPS و HSTS فقط با `DJANGO_HTTPS=true` و اعتماد به
+  هدرهای پروکسی با `DJANGO_BEHIND_PROXY=true` — تا استقرار معمول LAN
+  روی HTTP ساده نشکند. راهنما: `docs/production-windows.md`.
+
 ### افزوده‌شده (مرحلهٔ ۴)
 - یادآوری سررسید: Endpoint ‏`/api/dashboard/reminders/`‎ (فاکتورهای معوق و
   نزدیک‌سررسید، چک‌های در جریان و برگشتی) + بخش «یادآوری سررسید» در داشبورد +

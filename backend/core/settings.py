@@ -202,3 +202,42 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': False,
 }
+
+
+# --- Production security & single-process serving -------------------------
+# Transport security stays opt-in: the app usually runs over plain HTTP on
+# a trusted LAN, where Secure cookies or an SSL redirect would break access.
+# Set DJANGO_HTTPS=true when the app is exposed over HTTPS (directly or
+# behind a TLS-terminating reverse proxy) to switch them on.
+#
+# Behind such a proxy also set DJANGO_BEHIND_PROXY=true so Django trusts
+# X-Forwarded-Proto/Host; among other things this makes the refresh-token
+# cookie (secure=request.is_secure()) come out Secure on proxied HTTPS.
+
+def _env_flag(name):
+    return os.environ.get(name, 'false').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+HTTPS_ENABLED = _env_flag('DJANGO_HTTPS')
+BEHIND_PROXY = _env_flag('DJANGO_BEHIND_PROXY')
+if BEHIND_PROXY:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = True
+SECURE_SSL_REDIRECT = HTTPS_ENABLED
+SESSION_COOKIE_SECURE = HTTPS_ENABLED
+CSRF_COOKIE_SECURE = HTTPS_ENABLED
+SECURE_HSTS_SECONDS = 31_536_000 if HTTPS_ENABLED else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = HTTPS_ENABLED
+SECURE_HSTS_PRELOAD = False
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'SAMEORIGIN'
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+# When true (and the frontend build exists), core.asgi serves the built
+# frontend and the uploaded media on the same port as the API, so a single
+# Daphne process runs the whole app in production (see run_production.bat).
+SERVE_FRONTEND = _env_flag('DJANGO_SERVE_FRONTEND')
+FRONTEND_DIST = Path(os.environ.get('DJANGO_FRONTEND_DIST', BASE_DIR.parent / 'frontend' / 'dist'))
