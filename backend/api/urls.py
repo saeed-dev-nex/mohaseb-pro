@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from .auth_views import ThrottledTokenObtainPairView, ThrottledTokenRefreshView, TokenLogoutView
 from .views import (
     CustomerViewSet, ServiceViewSet, InvoiceViewSet,
     DocumentViewSet, DashboardViewSet,
@@ -36,10 +36,11 @@ router.register(r'social-networks', SocialNetworkViewSet, basename='social-netwo
 
 urlpatterns = [
     path('changes/', database_revision, name='database_revision'),
-    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/logout/', TokenLogoutView.as_view(), name='token_logout'),
     path(
         'token/refresh/',
-        TokenRefreshView.as_view(serializer_class=SafeTokenRefreshSerializer),
+        ThrottledTokenRefreshView.as_view(serializer_class=SafeTokenRefreshSerializer),
         name='token_refresh',
     ),
     path('', include(router.urls)),

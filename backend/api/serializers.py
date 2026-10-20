@@ -8,6 +8,7 @@ from .models import (
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
     Cheque, InvoiceSettings, ChatMessage, SocialNetwork
 )
+from .validators import validate_customer_identifier, validate_national_code_field, validate_tax_id
 
 
 class SafeTokenRefreshSerializer(TokenRefreshSerializer):
@@ -173,10 +174,10 @@ class CustomerListSerializer(serializers.ModelSerializer):
         return total
 
     def validate_national_id(self, value):
-        """Convert empty string to None to avoid duplicate-empty-string issues"""
+        """Normalize empty to None, then verify کد ملی checksum / شناسه ملی format."""
         if value == '':
             return None
-        return value
+        return validate_customer_identifier(value)
 
     def validate_phone(self, value):
         """Convert empty string to None"""
@@ -230,7 +231,7 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
     def validate_national_id(self, value):
         if value == '':
             return None
-        return value
+        return validate_customer_identifier(value)
 
     def validate_phone(self, value):
         if value == '':
@@ -459,6 +460,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
         self._sync_office_card_fee(instance, items_total)
         return instance
 
+    def validate_green_card_owner_national_id(self, value):
+        return validate_national_code_field(value)
 
 class DashboardStatsSerializer(serializers.Serializer):
     total_customers = serializers.IntegerField()
@@ -506,6 +509,8 @@ class BusinessProfileSerializer(serializers.ModelSerializer):
             return obj.logo.url
         return None
 
+    def validate_tax_id(self, value):
+        return validate_tax_id(value)
 
 class ExpenseCategorySerializer(serializers.ModelSerializer):
     class Meta:
