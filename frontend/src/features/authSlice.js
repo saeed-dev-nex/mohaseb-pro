@@ -19,10 +19,12 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     setTokens: (state, action) => {
-      const { access, refresh } = action.payload;
-      // Use sameSite: 'lax' and no secure flag for LAN HTTP compatibility
+      const { access } = action.payload;
+      // Use sameSite: 'lax' and no secure flag for LAN HTTP compatibility.
+      // The refresh token is NOT stored here anymore: the backend keeps it
+      // in an httpOnly cookie that scripts cannot read.
       Cookies.set('access_token', access, { sameSite: 'lax' });
-      if (refresh) Cookies.set('refresh_token', refresh, { sameSite: 'lax' });
+      Cookies.remove('refresh_token'); // clean up tokens stored by older versions
       state.accessToken = access;
       state.isAuthenticated = true;
     },

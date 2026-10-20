@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../features/authSlice';
-import { invoicesAPI, chatAPI } from '../services/api';
+import { invoicesAPI, chatAPI, authAPI } from '../services/api';
 
 const BASE_NAV_GROUPS = [
   {
@@ -83,7 +83,10 @@ const Sidebar = ({ isOpen, onClose, isCollapsed = false, onToggleCollapse }) => 
 
   const navGroups = [...BASE_NAV_GROUPS, systemGroup];
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Blacklist the refresh token server-side and clear its httpOnly cookie;
+    // local cleanup happens either way so the user is never stuck logged in.
+    try { await authAPI.logout(); } catch { /* Offline or expired session. */ }
     dispatch(logout());
     navigate('/login');
   };
