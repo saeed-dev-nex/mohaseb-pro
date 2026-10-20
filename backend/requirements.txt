@@ -5,7 +5,7 @@
 # README), whereas Django 6.x requires Python 3.12+. Upgrade deliberately,
 # run the test suite (python manage.py test), then update the pins here.
 # Dependabot (.github/dependabot.yml) proposes updates as pull requests.
-Django==5.2.18
+Django==6.1.2
 channels[daphne]==4.3.2
 daphne==4.2.3
 djangorestframework==3.18.3
