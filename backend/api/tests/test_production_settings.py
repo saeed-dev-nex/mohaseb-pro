@@ -1,0 +1,35 @@
+"""Production must refuse to start without a stable secret key.
+
+A random per-process key would invalidate every JWT/session on restart,
+so settings.py raises ImproperlyConfigured when DEBUG is off and
+DJANGO_SECRET_KEY is missing. This runs a real subprocess to prove it.
+"""
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+from django.test import SimpleTestCase
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+class ProductionSecretKeyTests(SimpleTestCase):
+    def run_check(self, **env_overrides):
+        env = dict(os.environ)
+        env.pop('DJANGO_SECRET_KEY', None)
+        env.update(env_overrides)
+        return subprocess.run(
+            [sys.executable, 'manage.py', 'check'],
+            cwd=BACKEND_DIR, env=env, capture_output=True, text=True, timeout=120,
+        )
+
+    def test_production_without_secret_key_fails_fast(self):
+        result = self.run_check(DJANGO_DEBUG='false')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('DJANGO_SECRET_KEY', result.stderr + result.stdout)
+
+    def test_production_with_secret_key_starts(self):
+        result = self.run_check(DJANGO_DEBUG='false', DJANGO_SECRET_KEY='test-secret-for-ci')
+        self.assertEqual(result.returncode, 0, result.stderr)
