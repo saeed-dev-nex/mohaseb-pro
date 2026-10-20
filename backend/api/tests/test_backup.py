@@ -8,9 +8,10 @@ from django.test import TestCase
 from rest_framework.test import APITestCase
 
 from api.backup_utils import (
-    build_backup, decrypt_backup, encrypt_backup, is_encrypted_backup, validate_backup,
+    build_backup, decrypt_backup, encrypt_backup, is_encrypted_backup, restore_backup,
+    validate_backup,
 )
-from api.models import Customer
+from api.models import Customer, Invoice, InvoiceNumberCounter
 
 
 class BackupTests(TestCase):
@@ -85,3 +86,32 @@ class EncryptedBackupApiTests(APITestCase):
         self.assertEqual(checked.status_code, 200, checked.content)
         self.assertTrue(checked.data['valid'])
         self.assertGreaterEqual(checked.data['counts']['api.customer'], 1)
+
+
+class BackupRestoreCounterTests(TestCase):
+    """Regression: restoring a backup must re-sync the invoice-number
+    counter. If invoices were created locally before the restore, the
+    counter lags behind the restored INV numbers and every new invoice
+    used to fail with a duplicate-number integrity error."""
+
+    def test_restore_resyncs_invoice_number_counter(self):
+        user = User.objects.create_user(username='counter-user', password='x')
+        customer = Customer.objects.create(name='مشتری شمارنده', phone='09120000000')
+        # Backup source state: two invoices, INV-00001 and INV-00002.
+        Invoice.objects.create(customer=customer, total_amount=1000, status='pending')
+        Invoice.objects.create(customer=customer, total_amount=2000, status='pending')
+        payload = build_backup()
+        # Pre-restore local state: only one local invoice was ever created,
+        # so the counter sits at 1 while the backup already uses INV-00002.
+        Invoice.objects.all().delete()
+        Invoice.objects.create(customer=customer, total_amount=500, status='pending')
+        InvoiceNumberCounter.objects.update_or_create(pk=1, defaults={'last_number': 1})
+
+        restore_backup(payload, fallback_user_id=user.id)
+
+        counter = InvoiceNumberCounter.objects.get(pk=1)
+        self.assertGreaterEqual(counter.last_number, 2)
+        new_invoice = Invoice.objects.create(
+            customer=customer, total_amount=3000, status='pending'
+        )
+        self.assertEqual(new_invoice.invoice_number, 'INV-00003')

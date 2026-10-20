@@ -252,6 +252,18 @@ def restore_backup(backup, fallback_user_id=None):
                 )
                 deserialized = next(deserialize('json', json.dumps([fixture], ensure_ascii=False)))
                 deserialized.save()
+        # The invoice-number counter is not part of the backup. If invoices
+        # were created in this database before the restore, the counter can
+        # lag behind the restored numbers and the next invoice would collide
+        # with a restored INV number, so re-sync it with the restored data.
+        counter_model = apps.get_model('api', 'invoicenumbercounter')
+        highest = counter_model.highest_existing_number()
+        counter, _created = counter_model.objects.get_or_create(
+            pk=1, defaults={'last_number': highest}
+        )
+        if counter.last_number < highest:
+            counter.last_number = highest
+            counter.save(update_fields=['last_number'])
         restore_media_files(backup.get('media_files', {}))
     return counts
 
