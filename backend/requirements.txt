@@ -1,16 +1,6 @@
-# Mohaseb Pro backend dependencies — pinned for reproducible installs.
-#
-# Direct dependencies are pinned to exact versions. Django is pinned to the
-# 5.2 LTS line on purpose: it supports Python 3.10+ (as promised in the
-# README), whereas Django 6.x requires Python 3.12+. Upgrade deliberately,
-# run the test suite (python manage.py test), then update the pins here.
-# Dependabot (.github/dependabot.yml) proposes updates as pull requests.
-Django==6.1.2
-channels[daphne]==4.3.2
-daphne==4.2.3
-djangorestframework==3.18.3
-djangorestframework-simplejwt==5.5.1
-django-cors-headers==4.9.0
-Pillow==13.0.0
-cryptography==50.0.2
-openpyxl==3.1.5
+Django>=4.2
+channels[daphne]>=4.2,<5
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+Pillow

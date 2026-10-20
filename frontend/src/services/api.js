@@ -15,38 +15,28 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor - handle 401 with refresh.
-// The refresh token lives in an httpOnly cookie set by the backend, so the
-// refresh call is credentialed and sends no token from JavaScript storage.
+// Response interceptor - handle 401 with refresh
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401 && !error.config?.url?.includes('token/') && !error.config?._retriedAfterRefresh) {
-      error.config._retriedAfterRefresh = true;
-      try {
-        const res = await axios.post(
-          `${API_BASE_URL}token/refresh/`,
-          {},
-          { withCredentials: true, headers: { 'X-Client-Type': 'web' } }
-        );
-        Cookies.set('access_token', res.data.access, { sameSite: 'lax' });
-        error.config.headers.Authorization = `Bearer ${res.data.access}`;
-        return api.request(error.config);
-      } catch {
-        Cookies.remove('access_token');
-        Cookies.remove('refresh_token');
-        window.location.href = '/login';
+    if (error.response?.status === 401) {
+      const refreshToken = Cookies.get('refresh_token');
+      if (refreshToken) {
+        try {
+          const res = await axios.post(`${API_BASE_URL}token/refresh/`, { refresh: refreshToken });
+          Cookies.set('access_token', res.data.access, { sameSite: 'lax' });
+          error.config.headers.Authorization = `Bearer ${res.data.access}`;
+          return api.request(error.config);
+        } catch {
+          Cookies.remove('access_token');
+          Cookies.remove('refresh_token');
+          window.location.href = '/login';
+        }
       }
     }
     return Promise.reject(error);
   }
 );
-
-// ---- Auth ----
-export const authAPI = {
-  // Blacklists the refresh token on the server and clears its httpOnly cookie.
-  logout: () => api.post('token/logout/', {}, { withCredentials: true, headers: { 'X-Client-Type': 'web' } }),
-};
 
 // ---- Customers ----
 export const customersAPI = {

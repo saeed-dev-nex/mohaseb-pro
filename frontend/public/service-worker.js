@@ -1,5 +1,5 @@
-const CACHE_NAME = 'mohaseb-pro-shell-v3.1.0';
-const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/fonts/vazirmatn-1.woff2', '/fonts/vazirmatn-2.woff2', '/fonts/vazirmatn-3.woff2'];
+const CACHE_NAME = 'mohaseb-pro-shell-v3.0.1-asset-guard';
+const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));

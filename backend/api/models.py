@@ -1,6 +1,4 @@
-import re
-
-from django.db import models, transaction
+from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 
@@ -20,10 +18,6 @@ class Customer(models.Model):
         ordering = ['-created_at']
         verbose_name = 'مشتری'
         verbose_name_plural = 'مشتریان'
-        indexes = [
-            models.Index(fields=['phone'], name='customer_phone_idx'),
-            models.Index(fields=['name'], name='customer_name_idx'),
-        ]
 
     def __str__(self):
         return self.name
@@ -63,40 +57,6 @@ class Service(models.Model):
 
     def __str__(self):
         return self.title
-
-
-class InvoiceNumberCounter(models.Model):
-    """Singleton row that allocates sequential invoice numbers atomically.
-
-    Replaces the previous ``last invoice id + 1`` scheme, which could hand
-    the same number to two invoices created at the same time and could
-    reissue the number of a deleted invoice.
-    """
-
-    last_number = models.PositiveBigIntegerField(default=0, verbose_name='آخرین شمارهٔ فاکتور')
-
-    class Meta:
-        verbose_name = 'شمارندهٔ شماره فاکتور'
-        verbose_name_plural = 'شمارندهٔ شماره فاکتور'
-
-    def __str__(self):
-        return f'InvoiceNumberCounter(last_number={self.last_number})'
-
-    @classmethod
-    def highest_existing_number(cls):
-        """Largest numeric suffix among existing ``INV-#####`` numbers.
-
-        Used once, when the counter is first created on a database that
-        already has invoices, so numbering continues where it left off.
-        The invoice primary key is considered too because legacy numbers
-        were derived from it.
-        """
-        highest = Invoice.objects.order_by('-id').values_list('id', flat=True).first() or 0
-        for number in Invoice.objects.exclude(invoice_number='').values_list('invoice_number', flat=True):
-            match = re.fullmatch(r'INV-(\d+)', number or '')
-            if match:
-                highest = max(highest, int(match.group(1)))
-        return highest
 
 
 class Invoice(models.Model):
@@ -152,32 +112,12 @@ class Invoice(models.Model):
         ordering = ['-date']
         verbose_name = 'فاکتور'
         verbose_name_plural = 'فاکتورها'
-        indexes = [
-            models.Index(fields=['status', 'date'], name='invoice_status_date_idx'),
-            models.Index(fields=['due_date'], name='invoice_due_date_idx'),
-        ]
 
     def save(self, *args, **kwargs):
         if not self.invoice_number:
-            # Allocate the number from the singleton counter inside a
-            # transaction. The old ``last.id + 1`` scheme raced when two
-            # users issued invoices at the same time and reused numbers
-            # after the newest invoice was deleted.
-            with transaction.atomic():
-                counter, created = (
-                    InvoiceNumberCounter.objects.select_for_update()
-                    .get_or_create(pk=1, defaults={'last_number': 0})
-                )
-                if created:
-                    counter.last_number = InvoiceNumberCounter.highest_existing_number()
-                counter.last_number += 1
-                counter.save(update_fields=['last_number'])
-                self.invoice_number = f'INV-{counter.last_number:05d}'
-                update_fields = kwargs.get('update_fields')
-                if update_fields is not None and 'invoice_number' not in update_fields:
-                    kwargs['update_fields'] = list(update_fields) + ['invoice_number']
-                super().save(*args, **kwargs)
-            return
+            last = Invoice.objects.order_by('-id').first()
+            next_id = (last.id + 1) if last else 1
+            self.invoice_number = f'INV-{next_id:05d}'
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -591,9 +531,6 @@ class Cheque(models.Model):
         ordering = ['due_date']
         verbose_name = 'چک'
         verbose_name_plural = 'چک‌ها'
-        indexes = [
-            models.Index(fields=['status', 'due_date'], name='cheque_status_due_idx'),
-        ]
 
     def __str__(self):
         return f"چک {self.cheque_number} - {self.bank_name} ({self.get_type_display()})"

@@ -1,6 +1,4 @@
-/* Vazirmatn is self-hosted (src/fonts.css + public/fonts/) so the app and
-   its PWA shell work fully offline and no request leaves for Google Fonts. */
-@import './fonts.css';
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;

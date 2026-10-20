@@ -587,30 +587,153 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def report(self, request):
-        """Financial report; computation lives in api.services.reports."""
-        from .services.reports import build_report_data
+        """Financial report with date filtering and useful business breakdowns."""
+        date_from = request.query_params.get('date_from', '')
+        date_to = request.query_params.get('date_to', '')
+        status_filter = request.query_params.get('status', '')
+        customer_search = request.query_params.get('customer_name', '')
+        qs = Invoice.objects.select_related('customer').prefetch_related('payments', 'items__service').all()
+        if date_from:
+            qs = qs.filter(date__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__date__lte=date_to)
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        if customer_search:
+            qs = qs.filter(customer__name__icontains=customer_search)
+        invoice_rows = list(qs.order_by('-date'))
+        total_revenue = total_commission = pending_amount = invoice_amount = 0
+        by_month, customer_totals, service_totals, payment_methods = {}, {}, {}, {}
+        for invoice in invoice_rows:
+            payments = list(invoice.payments.all())
+            paid_total = sum(int(payment.amount) for payment in payments)
+            if not paid_total and invoice.status == 'paid':
+                paid_total = int(invoice.final_amount)  # legacy records without payment rows
+            total_revenue += paid_total
+            if invoice.status == 'paid' or invoice.commission_paid:
+                total_commission += int(invoice.commission_total)
+            if invoice.status == 'pending':
+                pending_amount += max(0, int(invoice.final_amount) - paid_total)
+            if invoice.status != 'cancelled':
+                invoice_amount += int(invoice.final_amount)
+            month = invoice.date.strftime('%Y-%m') if invoice.date else 'نامشخص'
+            by_month.setdefault(month, {'count': 0, 'amount': 0, 'received': 0})
+            by_month[month]['count'] += 1
+            by_month[month]['amount'] += int(invoice.final_amount)
+            by_month[month]['received'] += paid_total
+            if invoice.customer_id:
+                customer = customer_totals.setdefault(invoice.customer_id, {'name': invoice.customer.name, 'count': 0, 'amount': 0})
+                customer['count'] += 1
+                customer['amount'] += int(invoice.final_amount)
+            for item in invoice.items.all():
+                title = item.service_title_snapshot or (item.service.title if item.service else 'سایر')
+                service_totals[title] = service_totals.get(title, 0) + int(item.line_total)
+            for payment in payments:
+                payment_methods[payment.get_method_display()] = payment_methods.get(payment.get_method_display(), 0) + int(payment.amount)
+        by_status = {}
+        for s, label in Invoice.STATUS_CHOICES:
+            status_invoices = [inv for inv in invoice_rows if inv.status == s]
+            amount = sum((max(0, int(inv.final_amount) - sum(int(p.amount) for p in inv.payments.all())) if s == 'pending' else int(inv.final_amount)) for inv in status_invoices)
+            by_status[s] = {'label': label, 'count': len(status_invoices), 'amount': amount}
 
-        data, invoice_rows = build_report_data(
-            date_from=request.query_params.get('date_from', ''),
-            date_to=request.query_params.get('date_to', ''),
-            status_filter=request.query_params.get('status', ''),
-            customer_search=request.query_params.get('customer_name', ''),
-        )
-        data['invoices'] = self.get_serializer(invoice_rows[:100], many=True).data
-        return Response(data)
+        expenses = Expense.objects.select_related('category').all()
+        if date_from:
+            expenses = expenses.filter(date__gte=date_from)
+        if date_to:
+            expenses = expenses.filter(date__lte=date_to)
+        expense_total = expenses.aggregate(total=Sum('amount'))['total'] or 0
+        expense_categories = list(expenses.values('category__name').annotate(total=Sum('amount')).order_by('-total'))
+        invoice_serializer_rows = self.get_serializer(invoice_rows[:100], many=True).data
+
+        return Response({
+            'total_revenue': int(total_revenue),
+            'total_commission': int(total_commission),
+            'pending_amount': int(pending_amount),
+            'total_count': len(invoice_rows),
+            'invoice_amount': invoice_amount,
+            'expense_total': int(expense_total),
+            'net_profit': int(total_commission - expense_total),
+            'by_status': by_status,
+            'monthly': [{'month': month, **values} for month, values in sorted(by_month.items())],
+            'top_customers': sorted(customer_totals.values(), key=lambda item: item['amount'], reverse=True)[:10],
+            'top_services': [{'name': name, 'amount': amount} for name, amount in sorted(service_totals.items(), key=lambda row: row[1], reverse=True)[:10]],
+            'payment_methods': [{'name': name, 'amount': amount} for name, amount in sorted(payment_methods.items(), key=lambda row: row[1], reverse=True)],
+            'expense_categories': [{'name': row['category__name'] or 'بدون دسته', 'amount': int(row['total'] or 0)} for row in expense_categories],
+            'invoices': invoice_serializer_rows,
+        })
 
     @action(detail=False, methods=['get'])
     def export_excel(self, request):
-        """Download the financial report as a real .xlsx workbook (openpyxl)."""
-        from .services.reports import build_excel_bytes
+        """Create a dependency-free, valid Excel workbook for the selected date range."""
+        import io
+        import zipfile
+        from xml.sax.saxutils import escape
 
-        content = build_excel_bytes(
-            date_from=request.query_params.get('date_from', ''),
-            date_to=request.query_params.get('date_to', ''),
-            status_filter=request.query_params.get('status', ''),
-            customer_search=request.query_params.get('customer_name', ''),
-        )
-        response = HttpResponse(content, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        date_from, date_to = request.query_params.get('date_from', ''), request.query_params.get('date_to', '')
+        status_filter, customer_search = request.query_params.get('status', ''), request.query_params.get('customer_name', '')
+        invoices = Invoice.objects.select_related('customer', 'created_by', 'paid_by').prefetch_related('payments').order_by('-date')
+        expenses = Expense.objects.select_related('category').order_by('-date')
+        for field, value in (('date__date__gte', date_from), ('date__date__lte', date_to)):
+            if value: invoices = invoices.filter(**{field: value})
+        if status_filter: invoices = invoices.filter(status=status_filter)
+        if customer_search: invoices = invoices.filter(customer__name__icontains=customer_search)
+        for field, value in (('date__gte', date_from), ('date__lte', date_to)):
+            if value: expenses = expenses.filter(**{field: value})
+        invoice_rows = list(invoices)
+        expense_rows = list(expenses)
+        paid_amounts = {inv.id: (sum(int(p.amount) for p in inv.payments.all()) or (int(inv.final_amount) if inv.status == 'paid' else 0)) for inv in invoice_rows}
+        received = sum(paid_amounts.values())
+        commission = sum(int(inv.commission_total) for inv in invoice_rows if inv.status == 'paid' or inv.commission_paid)
+        expense_total = sum(int(item.amount) for item in expense_rows)
+
+        sheets = [
+            ('خلاصه', [
+                ['شاخص', 'مقدار'], ['از تاریخ', date_from or 'همه'], ['تا تاریخ', date_to or 'امروز'],
+                ['تعداد فاکتور', len(invoice_rows)], ['مبلغ دریافت‌شده', received], ['کارمزد فاکتورهای پرداخت‌شده', commission],
+                ['مبلغ هزینه‌ها', expense_total], ['سود خالص', commission - expense_total],
+            ]),
+            ('فاکتورها', [['شماره فاکتور', 'مشتری', 'تاریخ', 'وضعیت', 'مبلغ کل', 'کارمزد', 'مبلغ نهایی', 'مبلغ پرداخت‌شده', 'مانده', 'پرداخت‌کننده', 'صادرکننده']] + [
+                [inv.invoice_number, inv.customer.name if inv.customer else '', inv.date.strftime('%Y-%m-%d') if inv.date else '', inv.get_status_display(), int(inv.total_amount), int(inv.commission_total), int(inv.final_amount), paid_amounts[inv.id], max(0, int(inv.final_amount) - paid_amounts[inv.id]), inv.paid_by.get_full_name() or inv.paid_by.username if inv.paid_by else '', inv.created_by.get_full_name() or inv.created_by.username if inv.created_by else ''] for inv in invoice_rows
+            ]),
+            ('هزینه‌ها', [['عنوان', 'دسته', 'تاریخ', 'مبلغ', 'توضیحات']] + [[item.title, item.category.name if item.category else 'بدون دسته', item.date.isoformat(), int(item.amount), item.description] for item in expense_rows]),
+            ('پرداخت‌ها', [['شماره فاکتور', 'مشتری', 'تاریخ پرداخت', 'روش پرداخت', 'مبلغ', 'ثبت‌کننده', 'توضیحات']] + [[p.invoice.invoice_number, p.invoice.customer.name if p.invoice.customer else '', p.paid_at.strftime('%Y-%m-%d %H:%M') if p.paid_at else '', p.get_method_display(), int(p.amount), p.created_by.get_full_name() or p.created_by.username if p.created_by else '', p.note] for inv in invoice_rows for p in inv.payments.all()]),
+        ]
+
+        def col_name(index):
+            result = ''
+            while index:
+                index, rem = divmod(index - 1, 26)
+                result = chr(65 + rem) + result
+            return result
+
+        def worksheet_xml(rows):
+            row_xml = []
+            for r, row in enumerate(rows, 1):
+                cells = []
+                for c, value in enumerate(row, 1):
+                    cell = f'{col_name(c)}{r}'
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        cells.append(f'<c r="{cell}"><v>{value}</v></c>')
+                    else:
+                        safe_text = ''.join(char for char in str(value if value is not None else '') if char in '\t\n\r' or ord(char) >= 32)
+                        cells.append(f'<c r="{cell}" t="inlineStr"><is><t>{escape(safe_text)}</t></is></c>')
+                row_xml.append(f'<row r="{r}">{"".join(cells)}</row>')
+            return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' + ''.join(row_xml) + '</sheetData></worksheet>'
+
+        content_types = ['<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>', '<Default Extension="xml" ContentType="application/xml"/>', '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>']
+        rels, names = [], []
+        for index, (name, _) in enumerate(sheets, 1):
+            content_types.append(f'<Override PartName="/xl/worksheets/sheet{index}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>')
+            rels.append(f'<Relationship Id="rId{index}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{index}.xml"/>')
+            names.append(f'<sheet name="{escape(name)}" sheetId="{index}" r:id="rId{index}"/>')
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as workbook:
+            workbook.writestr('[Content_Types].xml', f'<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">{"".join(content_types)}</Types>')
+            workbook.writestr('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')
+            workbook.writestr('xl/workbook.xml', f'<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>{"".join(names)}</sheets></workbook>')
+            workbook.writestr('xl/_rels/workbook.xml.rels', f'<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{"".join(rels)}</Relationships>')
+            for index, (_, rows) in enumerate(sheets, 1): workbook.writestr(f'xl/worksheets/sheet{index}.xml', worksheet_xml(rows))
+        response = HttpResponse(buffer.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         response['Content-Disposition'] = 'attachment; filename="financial_report.xlsx"'
         return response
 
@@ -1090,22 +1213,11 @@ class BackupConfigViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'])
     def run_backup(self, request):
-        """Save to an explicit server path or return a downloadable backup.
-
-        An optional ``passphrase`` encrypts the backup (AES-256-GCM) both for
-        download and for server-path saves; scheduled backups stay plain and
-        rely on the secrecy of the server path.
-        """
+        """Save to an explicit server path or return a downloadable backup."""
         cfg = BackupConfig.load()
         backup_path = (request.data.get('path') or '').strip()
-        from .backup_utils import build_backup, encrypt_backup
+        from .backup_utils import build_backup
         json_str = json.dumps(build_backup(), ensure_ascii=False, indent=2, default=str)
-        passphrase = (request.data.get('passphrase') or '').strip()
-        if passphrase:
-            try:
-                json_str = json.dumps(encrypt_backup(json_str, passphrase), ensure_ascii=False, indent=2)
-            except ValueError as error:
-                return Response({'detail': str(error)}, status=status.HTTP_400_BAD_REQUEST)
         filename = f"mohaseb_backup_{timezone.now().strftime('%Y%m%d_%H%M%S')}.json"
 
         if backup_path:
@@ -1314,19 +1426,12 @@ class BackupViewSet(viewsets.ViewSet):
     """Backup and restore all data"""
     permission_classes = [IsSuperuser]
 
-    @action(detail=False, methods=['get', 'post'])
+    @action(detail=False, methods=['get'])
     def download(self, request):
-        """Download full backup as JSON; POST with ``passphrase`` encrypts it."""
-        from .backup_utils import build_backup, encrypt_backup
+        """Download full backup as JSON"""
+        from .backup_utils import build_backup
         from django.http import HttpResponse
         json_str = json.dumps(build_backup(), ensure_ascii=False, indent=2, default=str)
-        passphrase = (request.data.get('passphrase') or '').strip() if request.method == 'POST' else ''
-        if passphrase:
-            try:
-                envelope = encrypt_backup(json_str, passphrase)
-            except ValueError as error:
-                return Response({'detail': str(error)}, status=400)
-            json_str = json.dumps(envelope, ensure_ascii=False, indent=2)
         response = HttpResponse(
             json_str,
             content_type='application/json; charset=utf-8'
@@ -1342,9 +1447,7 @@ class BackupViewSet(viewsets.ViewSet):
         try:
             if request.data.get('backup_json'):
                 backup = json.loads(request.data['backup_json'])
-            from .backup_utils import decrypt_backup, is_encrypted_backup, restore_backup, validate_backup
-            if is_encrypted_backup(backup):
-                backup = decrypt_backup(backup, (request.data.get('passphrase') or '').strip())
+            from .backup_utils import restore_backup, validate_backup
             counts = validate_backup(backup)
             if request.data.get('confirm_replace') is not True:
                 return Response({'valid': True, 'counts': counts, 'requires_confirmation': True})

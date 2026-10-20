@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client';
 import { Provider } from 'react-redux';
 import { store } from './store';
 import App from './App';
-import ErrorBoundary from './components/ErrorBoundary';
 import './index.css';
 
 const CHUNK_RELOAD_KEY = 'mohaseb:stale-chunk-reload-at';
@@ -32,10 +31,8 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <ErrorBoundary>
-      <Provider store={store}>
-        <App />
-      </Provider>
-    </ErrorBoundary>
+    <Provider store={store}>
+      <App />
+    </Provider>
   </React.StrictMode>
 );
