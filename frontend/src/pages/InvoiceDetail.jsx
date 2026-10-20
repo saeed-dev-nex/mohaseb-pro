@@ -94,8 +94,12 @@ const buildPrintCSS = (size) => {
         top: 0;
         left: 0;
         right: 0;
-        width: 100%;
-        margin: 0 auto;
+        /* With RTL, left + right + width:100% is over-constrained. Chrome
+           resolves that conflict differently while applying custom print scale. */
+        width: auto;
+        max-width: 100%;
+        box-sizing: border-box;
+        margin: 0;
         background: white; color: #111;
         padding: 0;
         font-family: Vazirmatn, sans-serif;
