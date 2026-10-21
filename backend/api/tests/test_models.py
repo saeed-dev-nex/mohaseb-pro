@@ -34,6 +34,15 @@ class InvoiceAmountTests(TestCase):
         invoice = make_invoice(total_amount=Decimal('250000'), tax=Decimal('9'))
         self.assertEqual(invoice.final_amount, Decimal('272500'))
 
+    def test_final_amount_with_int_fields_and_decimal_commission(self):
+        # Regression: a freshly-built instance can still hold plain ints
+        # (e.g. serializer defaults before a DB round-trip); int/int
+        # division used to produce a float that crashed against the
+        # Decimal commission when creating an invoice via the API.
+        invoice = Invoice(total_amount=450000, tax=0, discount=0,
+                          commission_total=Decimal('50000'))
+        self.assertEqual(invoice.final_amount, Decimal('500000'))
+
 
 class InvoiceItemTests(TestCase):
     def setUp(self):
@@ -110,6 +119,11 @@ class CustomerTotalsTests(TestCase):
     def test_total_paid_is_zero_without_invoices(self):
         self.assertEqual(self.customer.total_paid, 0)
 
+    def test_total_paid_counts_full_final_for_settled_invoice_with_partial_records(self):
+        invoice = make_invoice(customer=self.customer, total_amount=Decimal('50000'), status='paid')
+        InvoicePayment.objects.create(invoice=invoice, amount=Decimal('20000'))
+        self.assertEqual(self.customer.total_paid, Decimal('50000'))
+
 
 class InvoiceSerializerPaymentTests(TestCase):
     """paid_amount / remaining_amount exposed by the API.
@@ -156,3 +170,26 @@ class InvoiceSerializerPaymentTests(TestCase):
         data = self.serialize(invoice)
         self.assertEqual(data['paid_amount'], 0)
         self.assertEqual(data['remaining_amount'], 50000)
+
+    def test_settled_after_partial_payments_reports_full_paid_amount(self):
+        # Regression: an invoice settled after staged payments must show
+        # the full final amount as paid, not just the recorded sum.
+        invoice = make_invoice(total_amount=Decimal('50000'), status='paid')
+        InvoicePayment.objects.create(invoice=invoice, amount=Decimal('20000'))
+        data = self.serialize(invoice)
+        self.assertEqual(data['paid_amount'], 50000)
+        self.assertEqual(data['remaining_amount'], 0)
+
+    def test_status_display_paid_wins_over_commission_label(self):
+        # Regression: a fully-paid invoice reads «پرداخت شده» even when
+        # its commission was settled earlier.
+        invoice = make_invoice(status='paid', commission_paid=True)
+        self.assertEqual(self.serialize(invoice)['status_display'], 'پرداخت شده')
+
+    def test_status_display_commission_label_while_unpaid(self):
+        invoice = make_invoice(status='pending', commission_paid=True)
+        self.assertEqual(self.serialize(invoice)['status_display'], 'کارمزد پرداخت شده')
+
+    def test_status_display_plain_pending(self):
+        invoice = make_invoice(status='pending')
+        self.assertEqual(self.serialize(invoice)['status_display'], 'پرداخت نشده')

@@ -112,7 +112,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
         if status_filter:
             if status_filter == 'commission_paid':
-                qs = qs.filter(commission_paid=True)
+                # The commission bucket holds invoices whose commission is
+                # settled but which are not fully paid yet; a fully-paid
+                # invoice belongs to the paid bucket only.
+                qs = qs.filter(commission_paid=True).exclude(status='paid')
             else:
                 qs = qs.filter(status=status_filter)
                 if status_filter == 'pending':
@@ -176,7 +179,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def stats(self, request):
         counts = {row['status']: row['total'] for row in Invoice.objects.values('status').annotate(total=Count('id'))}
-        commission_paid = Invoice.objects.filter(commission_paid=True).count()
+        commission_paid = Invoice.objects.filter(commission_paid=True).exclude(status='paid').count()
         return Response({'all': sum(counts.values()), 'paid': counts.get('paid', 0), 'pending': counts.get('pending', 0) - Invoice.objects.filter(status='pending', commission_paid=True).count(), 'commission_paid': commission_paid})
 
     @action(detail=True, methods=['post'])

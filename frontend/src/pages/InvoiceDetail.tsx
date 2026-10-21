@@ -628,7 +628,7 @@ const InvoiceDetail = () => {
             </Link>
             <div className="flex items-center gap-3">
               <h2 className="text-2xl font-bold text-white">{invoice.invoice_number}</h2>
-              <StatusBadge status={invoice.commission_paid ? 'commission_paid' : invoice.status} />
+              <StatusBadge status={invoice.commission_paid && invoice.status !== 'paid' ? 'commission_paid' : invoice.status} />
             </div>
           </div>
 
@@ -782,7 +782,7 @@ const InvoiceDetail = () => {
               </div>
               <div className="text-left space-y-1">
                 <p className="text-blue-400 font-mono text-lg font-bold">{invoice.invoice_number}</p>
-                <StatusBadge status={invoice.commission_paid ? 'commission_paid' : invoice.status} />
+                <StatusBadge status={invoice.commission_paid && invoice.status !== 'paid' ? 'commission_paid' : invoice.status} />
                 <p className="text-slate-500 text-xs">تاریخ صدور: {persianDate(invoice.date)}</p>
                 {editDateText && <p className="text-slate-400 text-[10px] mt-0.5">ویرایش: {editDateText}</p>}
                 {invoice.created_at && <p className="text-slate-500 text-xs mt-1">ایجاد: {persianDate(invoice.created_at)}، {new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' }).format(new Date(invoice.created_at))}</p>}
@@ -1223,7 +1223,7 @@ const InvoiceDetail = () => {
             <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '4px' }}>تاریخ صدور: {invoice?.date && persianDate(invoice.date)}</div>
             {editDateText && <div style={{ fontSize: '9px', opacity: 0.65, marginTop: '2px' }}>ویرایش: {editDateText}</div>}
             <div style={{ display: 'inline-block', marginTop: '4px', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', background: invoice?.status === 'paid' ? '#166534' : invoice?.status === 'cancelled' ? '#991b1b' : '#713f12', color: 'white' }}>
-              {invoice?.commission_paid ? 'کارمزد پرداخت شده' : STATUS_MAP[invoice?.status]?.label || ''}
+              {invoice?.commission_paid && invoice?.status !== 'paid' ? 'کارمزد پرداخت شده' : STATUS_MAP[invoice?.status]?.label || ''}
             </div>
           </div>
         </div>

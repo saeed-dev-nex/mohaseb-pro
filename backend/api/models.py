@@ -1,4 +1,5 @@
 import re
+from decimal import Decimal
 
 from django.db import models, transaction
 from django.contrib.auth.models import User
@@ -36,11 +37,13 @@ class Customer(models.Model):
     def total_paid(self):
         total = 0
         for invoice in self.invoice_set.all().prefetch_related('payments'):
-            payments = list(invoice.payments.all())
-            if payments:
-                total += sum(payment.amount for payment in payments)
-            elif invoice.status == 'paid':
-                total += invoice.final_amount
+            recorded = sum(payment.amount for payment in invoice.payments.all())
+            if invoice.status == 'paid':
+                # Settled invoices count at their full final amount, even
+                # when only part was recorded as staged payments.
+                total += max(recorded, invoice.final_amount)
+            else:
+                total += recorded
         return total
 
 
@@ -185,8 +188,12 @@ class Invoice(models.Model):
 
     @property
     def final_amount(self):
-        tax_amount = (self.total_amount * self.tax) / 100
-        return self.total_amount + tax_amount - self.discount + self.commission_total
+        # Coerce through Decimal: on a freshly-built instance the fields
+        # can still be plain ints, and int/int division would produce a
+        # float that cannot be added to Decimal money fields.
+        total = Decimal(self.total_amount or 0)
+        tax_amount = (total * Decimal(self.tax or 0)) / Decimal(100)
+        return total + tax_amount - Decimal(self.discount or 0) + Decimal(self.commission_total or 0)
 
     @property
     def net_commission(self):

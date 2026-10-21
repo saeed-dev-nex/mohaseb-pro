@@ -377,7 +377,11 @@ class InvoiceSerializer(serializers.ModelSerializer):
       return obj.created_by.get_full_name() or obj.created_by.username
 
     def get_status_display(self, obj):
-      return 'کارمزد پرداخت شده' if obj.commission_paid else obj.get_status_display()
+      # A fully-paid invoice always reads «پرداخت شده»; the commission
+      # label only applies while the invoice itself is still unpaid.
+      if obj.status != 'paid' and obj.commission_paid:
+          return 'کارمزد پرداخت شده'
+      return obj.get_status_display()
 
     def get_paid_by_name(self, obj):
       if not obj.paid_by: return ''
@@ -399,15 +403,18 @@ class InvoiceSerializer(serializers.ModelSerializer):
       return obj.edit_requests.filter(requested_by=request.user, status='approved').exists()
 
     def get_final_amount(self, obj):
-      tax_amount = (obj.total_amount * obj.tax) / 100
-      return int(obj.total_amount + tax_amount - obj.discount + obj.commission_total)
+      return int(obj.final_amount)
 
     def get_paid_amount(self, obj):
       from django.db.models import Sum
       recorded = obj.payments.aggregate(total=Sum('amount'))['total']
-      if recorded is not None:
-          return int(recorded)
-      return int(obj.final_amount) if obj.status == 'paid' else 0
+      recorded = int(recorded) if recorded is not None else 0
+      if obj.status == 'paid':
+          # Fully paid is fully paid: once the invoice is settled, the
+          # paid amount is the full final amount even when only part of
+          # it was recorded as staged payments beforehand.
+          return max(recorded, int(obj.final_amount))
+      return recorded
 
     def get_remaining_amount(self, obj):
       return max(0, self.get_final_amount(obj) - self.get_paid_amount(obj))

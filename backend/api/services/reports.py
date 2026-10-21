@@ -49,9 +49,11 @@ def _paid_amounts(invoice_ids):
 
 def _paid_amount_with_legacy_fallback(invoice, paid_amounts):
     paid = paid_amounts.get(invoice.id, 0)
-    if not paid and invoice.status == 'paid':
-        # Legacy records marked paid without payment rows count as fully paid.
-        paid = int(invoice.final_amount)
+    if invoice.status == 'paid':
+        # Settled invoices count as fully paid: legacy records marked paid
+        # without payment rows, and invoices settled after staged payments
+        # whose rows sum to less than the final amount.
+        paid = max(paid, int(invoice.final_amount))
     return paid
 
 

@@ -64,6 +64,20 @@ class ReportTests(ReportSeed):
         self.assertEqual(data['expense_total'], 10000)
         self.assertEqual(data['net_profit'], -3000)
 
+    def test_report_settled_after_partial_payments_counts_full_amount(self):
+        # Regression: revenue follows the serializer rule — an invoice
+        # settled after staged payments counts at its full final amount,
+        # while income (commission) still counts commission only.
+        from django.utils import timezone
+        inv = Invoice.objects.create(
+            customer=self.ali, status='paid', date=timezone.now(),
+            total_amount=Decimal('40000'), commission_total=Decimal('3000'))
+        InvoicePayment.objects.create(invoice=inv, amount=Decimal('10000'), created_by=self.user)
+        data = self.client.get('/api/invoices/report/').data
+        # final = 40000 total + 3000 commission = 43000, counted in full.
+        self.assertEqual(data['total_revenue'], 132000 + 43000)
+        self.assertEqual(data['total_commission'], 7000 + 3000)
+
     def test_report_breakdowns(self):
         data = self.client.get('/api/invoices/report/').data
         self.assertEqual(data['by_status']['paid'], {'label': 'پرداخت شده', 'count': 1, 'amount': 112000})

@@ -349,7 +349,7 @@ const Invoices = () => {
                         ? (inv.card_payment_source === 'office' ? 'کارت دفتر' : 'کارت مشتری')
                         : '—'}
                     </td>}
-                    <td className="py-4 px-5"><StatusBadge status={inv.commission_paid ? 'commission_paid' : inv.status} /></td>
+                    <td className="py-4 px-5"><StatusBadge status={inv.commission_paid && inv.status !== 'paid' ? 'commission_paid' : inv.status} /></td>
                     <td className="py-4 px-5 text-slate-300">{inv.paid_by_name || '—'}</td>
                     {canSeeIssuer && <td className="py-4 px-5 text-slate-300">{inv.operator_name || '—'}</td>}
                     <td className="py-4 px-5">

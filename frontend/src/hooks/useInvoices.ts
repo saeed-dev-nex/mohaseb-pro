@@ -157,7 +157,9 @@ export function useMarkInvoicePaid() {
     },
     onSuccess: (paidId) => {
       transformInvoiceLists(qc, (items) =>
-        items.map((inv) => (inv.id === paidId ? { ...inv, status: 'paid' } : inv)),
+        items.map((inv) => (inv.id === paidId
+          ? { ...inv, status: 'paid', paid_amount: inv.final_amount, remaining_amount: 0 }
+          : inv)),
       );
     },
   });
