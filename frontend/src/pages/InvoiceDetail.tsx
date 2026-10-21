@@ -1021,6 +1021,18 @@ const InvoiceDetail = () => {
                   <span className="text-slate-100">جمع قابل پرداخت توسط مشتری</span>
                   <span className="text-blue-400 text-xl">{fmt(finalAmount)}</span>
                 </div>
+                {Number(invoice.paid_amount ?? 0) > 0 && Number(invoice.remaining_amount ?? 0) > 0 && !['cancelled', 'draft'].includes(invoice.status) && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">دریافت‌شده</span>
+                      <span className="text-emerald-400">{fmt(invoice.paid_amount)}</span>
+                    </div>
+                    <div className="flex justify-between text-base font-bold">
+                      <span className="text-amber-400">مانده قابل پرداخت</span>
+                      <span className="text-amber-400">{fmt(invoice.remaining_amount)}</span>
+                    </div>
+                  </>
+                )}
                 {/* Amount in words */}
                 <div className="bg-slate-700/30 rounded-lg px-3 py-2 border border-slate-600/30">
                   <span className="text-slate-500 text-[10px]">به حروف: </span>

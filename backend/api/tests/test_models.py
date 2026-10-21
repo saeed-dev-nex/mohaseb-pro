@@ -109,3 +109,50 @@ class CustomerTotalsTests(TestCase):
 
     def test_total_paid_is_zero_without_invoices(self):
         self.assertEqual(self.customer.total_paid, 0)
+
+
+class InvoiceSerializerPaymentTests(TestCase):
+    """paid_amount / remaining_amount exposed by the API.
+
+    The frontend shows the remaining balance next to the invoice total
+    whenever a customer has paid only part of an invoice, so these computed
+    fields are the contract that display depends on.
+    """
+
+    def serialize(self, invoice):
+        from api.serializers import InvoiceSerializer
+        return InvoiceSerializer(invoice).data
+
+    def test_partial_payment_reports_paid_and_remaining(self):
+        invoice = make_invoice(total_amount=Decimal('50000'))
+        InvoicePayment.objects.create(invoice=invoice, amount=Decimal('20000'))
+        data = self.serialize(invoice)
+        self.assertEqual(data['paid_amount'], 20000)
+        self.assertEqual(data['remaining_amount'], 30000)
+
+    def test_multiple_partial_payments_sum_up(self):
+        invoice = make_invoice(total_amount=Decimal('50000'))
+        InvoicePayment.objects.create(invoice=invoice, amount=Decimal('20000'))
+        InvoicePayment.objects.create(invoice=invoice, amount=Decimal('15000'))
+        data = self.serialize(invoice)
+        self.assertEqual(data['paid_amount'], 35000)
+        self.assertEqual(data['remaining_amount'], 15000)
+
+    def test_full_payment_via_records_leaves_no_remaining(self):
+        invoice = make_invoice(total_amount=Decimal('50000'))
+        InvoicePayment.objects.create(invoice=invoice, amount=Decimal('50000'))
+        data = self.serialize(invoice)
+        self.assertEqual(data['paid_amount'], 50000)
+        self.assertEqual(data['remaining_amount'], 0)
+
+    def test_paid_invoice_without_payment_records_counts_as_fully_paid(self):
+        invoice = make_invoice(total_amount=Decimal('50000'), status='paid')
+        data = self.serialize(invoice)
+        self.assertEqual(data['paid_amount'], 50000)
+        self.assertEqual(data['remaining_amount'], 0)
+
+    def test_unpaid_invoice_has_full_remaining(self):
+        invoice = make_invoice(total_amount=Decimal('50000'))
+        data = self.serialize(invoice)
+        self.assertEqual(data['paid_amount'], 0)
+        self.assertEqual(data['remaining_amount'], 50000)

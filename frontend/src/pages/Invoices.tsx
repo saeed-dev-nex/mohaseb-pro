@@ -32,6 +32,7 @@ type InvoiceRow = {
   created_at?: string | null;
   final_amount: number;
   paid_amount?: number | null;
+  remaining_amount?: number | null;
   status: string;
   card_payment_source?: string | null;
   commission_paid?: boolean;
@@ -341,7 +342,7 @@ const Invoices = () => {
                       )}
                     </td>
                     <td className="py-4 px-5 text-slate-400 text-xs">{persianDate(inv.created_at)}<span className="block text-slate-500 mt-1">{inv.created_at ? new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' }).format(new Date(inv.created_at)) : ''}</span></td>
-                    <td className="py-4 px-5 text-slate-300">{formatPrice(inv.final_amount)}</td>
+                    <td className="py-4 px-5 text-slate-300">{formatPrice(inv.final_amount)}{Number(inv.paid_amount ?? (inv.status === 'paid' ? inv.final_amount : 0)) > 0 && Number(inv.remaining_amount ?? 0) > 0 && (<span className="block text-amber-400 text-xs mt-1">مانده: {formatPrice(Number(inv.remaining_amount ?? 0))}</span>)}</td>
                     <td className="py-4 px-5 text-white font-semibold">{formatPrice(inv.paid_amount ?? (inv.status === 'paid' ? inv.final_amount : 0))}</td>
                     {showPaymentType && <td className="py-4 px-5 text-slate-300">
                       {inv.status === 'paid'

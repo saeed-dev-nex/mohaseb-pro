@@ -342,6 +342,9 @@ const CustomerDetail = () => {
                     </div>
                     <div className="flex items-center gap-4">
                       <span className="text-white font-medium text-sm">{fmt(inv.total_amount)}</span>
+                      {Number(inv.paid_amount ?? 0) > 0 && Number(inv.remaining_amount ?? 0) > 0 && (
+                        <span className="text-amber-400 text-xs">مانده: {fmt(inv.remaining_amount)}</span>
+                      )}
                       <span className={`text-xs px-2 py-0.5 rounded-full border ${st.color}`}>{st.label}</span>
                     </div>
                   </Link>
