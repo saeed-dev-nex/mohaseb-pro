@@ -8,17 +8,12 @@
     <meta name="theme-color" content="#2563eb" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>محاسب پرو - سیستم یکپارچه مالی</title>
-    <script>
-      window.addEventListener('error', function(e) {
-        document.body.innerHTML += '<div style="color:red; background:#fee; padding:20px; z-index:9999; position:absolute; top:0; left:0; right:0; direction:ltr;"><h3>JS Error:</h3><pre>' + e.error.stack + '</pre></div>';
-      });
-      window.addEventListener('unhandledrejection', function(e) {
-        document.body.innerHTML += '<div style="color:red; background:#fee; padding:20px; z-index:9999; position:absolute; top:0; left:0; right:0; direction:ltr;"><h3>Promise Error:</h3><pre>' + e.reason + '</pre></div>';
-      });
-    </script>
+    <!-- Runtime errors are handled by the React ErrorBoundary in src/main.jsx.
+         Never render stack traces into the page: they leak internals to end
+         users and break the UI. -->
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

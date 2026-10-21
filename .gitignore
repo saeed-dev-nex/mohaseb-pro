@@ -40,3 +40,4 @@ firefox-extension/release/
 .DS_Store
 Thumbs.db
 Desktop.ini
+backend/.secret_key

@@ -1,4 +1,7 @@
-from django.db import models
+import re
+from decimal import Decimal
+
+from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.utils import timezone
 
@@ -18,6 +21,10 @@ class Customer(models.Model):
         ordering = ['-created_at']
         verbose_name = 'مشتری'
         verbose_name_plural = 'مشتریان'
+        indexes = [
+            models.Index(fields=['phone'], name='customer_phone_idx'),
+            models.Index(fields=['name'], name='customer_name_idx'),
+        ]
 
     def __str__(self):
         return self.name
@@ -30,11 +37,13 @@ class Customer(models.Model):
     def total_paid(self):
         total = 0
         for invoice in self.invoice_set.all().prefetch_related('payments'):
-            payments = list(invoice.payments.all())
-            if payments:
-                total += sum(payment.amount for payment in payments)
-            elif invoice.status == 'paid':
-                total += invoice.final_amount
+            recorded = sum(payment.amount for payment in invoice.payments.all())
+            if invoice.status == 'paid':
+                # Settled invoices count at their full final amount, even
+                # when only part was recorded as staged payments.
+                total += max(recorded, invoice.final_amount)
+            else:
+                total += recorded
         return total
 
 
@@ -57,6 +66,40 @@ class Service(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class InvoiceNumberCounter(models.Model):
+    """Singleton row that allocates sequential invoice numbers atomically.
+
+    Replaces the previous ``last invoice id + 1`` scheme, which could hand
+    the same number to two invoices created at the same time and could
+    reissue the number of a deleted invoice.
+    """
+
+    last_number = models.PositiveBigIntegerField(default=0, verbose_name='آخرین شمارهٔ فاکتور')
+
+    class Meta:
+        verbose_name = 'شمارندهٔ شماره فاکتور'
+        verbose_name_plural = 'شمارندهٔ شماره فاکتور'
+
+    def __str__(self):
+        return f'InvoiceNumberCounter(last_number={self.last_number})'
+
+    @classmethod
+    def highest_existing_number(cls):
+        """Largest numeric suffix among existing ``INV-#####`` numbers.
+
+        Used once, when the counter is first created on a database that
+        already has invoices, so numbering continues where it left off.
+        The invoice primary key is considered too because legacy numbers
+        were derived from it.
+        """
+        highest = Invoice.objects.order_by('-id').values_list('id', flat=True).first() or 0
+        for number in Invoice.objects.exclude(invoice_number='').values_list('invoice_number', flat=True):
+            match = re.fullmatch(r'INV-(\d+)', number or '')
+            if match:
+                highest = max(highest, int(match.group(1)))
+        return highest
 
 
 class Invoice(models.Model):
@@ -112,12 +155,32 @@ class Invoice(models.Model):
         ordering = ['-date']
         verbose_name = 'فاکتور'
         verbose_name_plural = 'فاکتورها'
+        indexes = [
+            models.Index(fields=['status', 'date'], name='invoice_status_date_idx'),
+            models.Index(fields=['due_date'], name='invoice_due_date_idx'),
+        ]
 
     def save(self, *args, **kwargs):
         if not self.invoice_number:
-            last = Invoice.objects.order_by('-id').first()
-            next_id = (last.id + 1) if last else 1
-            self.invoice_number = f'INV-{next_id:05d}'
+            # Allocate the number from the singleton counter inside a
+            # transaction. The old ``last.id + 1`` scheme raced when two
+            # users issued invoices at the same time and reused numbers
+            # after the newest invoice was deleted.
+            with transaction.atomic():
+                counter, created = (
+                    InvoiceNumberCounter.objects.select_for_update()
+                    .get_or_create(pk=1, defaults={'last_number': 0})
+                )
+                if created:
+                    counter.last_number = InvoiceNumberCounter.highest_existing_number()
+                counter.last_number += 1
+                counter.save(update_fields=['last_number'])
+                self.invoice_number = f'INV-{counter.last_number:05d}'
+                update_fields = kwargs.get('update_fields')
+                if update_fields is not None and 'invoice_number' not in update_fields:
+                    kwargs['update_fields'] = list(update_fields) + ['invoice_number']
+                super().save(*args, **kwargs)
+            return
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -125,8 +188,12 @@ class Invoice(models.Model):
 
     @property
     def final_amount(self):
-        tax_amount = (self.total_amount * self.tax) / 100
-        return self.total_amount + tax_amount - self.discount + self.commission_total
+        # Coerce through Decimal: on a freshly-built instance the fields
+        # can still be plain ints, and int/int division would produce a
+        # float that cannot be added to Decimal money fields.
+        total = Decimal(self.total_amount or 0)
+        tax_amount = (total * Decimal(self.tax or 0)) / Decimal(100)
+        return total + tax_amount - Decimal(self.discount or 0) + Decimal(self.commission_total or 0)
 
     @property
     def net_commission(self):
@@ -531,6 +598,44 @@ class Cheque(models.Model):
         ordering = ['due_date']
         verbose_name = 'چک'
         verbose_name_plural = 'چک‌ها'
+        indexes = [
+            models.Index(fields=['status', 'due_date'], name='cheque_status_due_idx'),
+        ]
 
     def __str__(self):
         return f"چک {self.cheque_number} - {self.bank_name} ({self.get_type_display()})"
+
+
+class UserModuleAccess(models.Model):
+    """Per-user module access overrides (stage 6).
+
+    A row only ever *restricts*: the user's role decides the ceiling
+    (see api.module_access.effective_modules) and the row intersects with
+    it. Users without a row keep exactly the access their role has always
+    given them, so existing installs are unaffected until an admin starts
+    carving modules away. All fields default to True so creating a row is
+    not, by itself, a lockout.
+    """
+
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name='module_access',
+        verbose_name='کاربر',
+    )
+    invoices = models.BooleanField(default=True, verbose_name='فاکتورها')
+    customers = models.BooleanField(default=True, verbose_name='مشتریان')
+    services = models.BooleanField(default=True, verbose_name='خدمات')
+    expenses = models.BooleanField(default=True, verbose_name='هزینه‌ها')
+    cheques = models.BooleanField(default=True, verbose_name='چک‌ها')
+    reports = models.BooleanField(default=True, verbose_name='گزارشات')
+    chat = models.BooleanField(default=True, verbose_name='گفتگو')
+    staff = models.BooleanField(default=True, verbose_name='پرسنل')
+    settings = models.BooleanField(default=True, verbose_name='تنظیمات')
+    users = models.BooleanField(default=True, verbose_name='مدیریت کاربران')
+    backup = models.BooleanField(default=True, verbose_name='بکاپ')
+
+    class Meta:
+        verbose_name = 'دسترسی ماژولی کاربر'
+        verbose_name_plural = 'دسترسی‌های ماژولی کاربران'
+
+    def __str__(self):
+        return f'دسترسی ماژولی {self.user}'

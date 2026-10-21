@@ -14,6 +14,8 @@ from pathlib import Path
 import os
 import secrets
 
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -21,11 +23,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or secrets.token_urlsafe(50)
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+# SECURITY WARNING: keep the secret key used in production secret!
+# A random per-process key is fine for local development, but in production it
+# would silently invalidate every JWT/session on each restart, so fail fast.
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            'DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is off. '
+            'See .env.example in the repository root.'
+        )
+    SECRET_KEY = secrets.token_urlsafe(50)
 
 ALLOWED_HOSTS = [
     host.strip()
@@ -48,6 +59,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'api.apps.ApiConfig',
 ]
 
@@ -94,7 +106,9 @@ CHANNEL_LAYERS = {
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        # Overridable so containers can put the database on a mounted volume
+        # (see docker-compose.yml) without touching the code.
+        'NAME': os.environ.get('DJANGO_DB_PATH', BASE_DIR / 'db.sqlite3'),
     }
 }
 
@@ -138,8 +152,21 @@ STATIC_URL = 'static/'
 from datetime import timedelta
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = os.environ.get('DJANGO_MEDIA_ROOT', BASE_DIR / 'media')
 DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get('DJANGO_DATA_UPLOAD_MAX_MEMORY_SIZE', 256 * 1024 * 1024))
+
+# The frontend sends the httpOnly refresh-token cookie cross-origin
+# (dev server / LAN host -> API), which requires credentialed CORS. Origins
+# stay an explicit allow-list above; never combine this with a wildcard.
+CORS_ALLOW_CREDENTIALS = True
+
+# The web client marks its requests with X-Client-Type so the API can keep
+# the refresh token out of response bodies (see api.auth_views). Browsers
+# preflight that custom header, so it must be CORS-allowed or cross-origin
+# login (the standard frontend-port -> API-port setup) is blocked entirely.
+from corsheaders.defaults import default_headers as _cors_default_headers
+
+CORS_ALLOW_HEADERS = list(_cors_default_headers) + ['x-client-type']
 
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
@@ -153,10 +180,64 @@ CORS_ALLOWED_ORIGINS = [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+    ),
+    # Opt-in pagination: unchanged array responses unless the client sends
+    # ?page= or ?page_size= (see api.pagination).
+    'DEFAULT_PAGINATION_CLASS': 'api.pagination.OptionalPageNumberPagination',
+    'PAGE_SIZE': 50,
+    # Scoped throttles only apply to views that declare a throttle_scope
+    # (see api.auth_views.ThrottledTokenObtainPairView for the login view).
+    'DEFAULT_THROTTLE_RATES': {
+        'login': '5/min',
+        'token_refresh': '30/min',
+    },
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    # Short-lived access tokens limit the damage of a leaked token; the
+    # frontend already renews them transparently via the refresh token.
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': False,
 }
+
+
+# --- Production security & single-process serving -------------------------
+# Transport security stays opt-in: the app usually runs over plain HTTP on
+# a trusted LAN, where Secure cookies or an SSL redirect would break access.
+# Set DJANGO_HTTPS=true when the app is exposed over HTTPS (directly or
+# behind a TLS-terminating reverse proxy) to switch them on.
+#
+# Behind such a proxy also set DJANGO_BEHIND_PROXY=true so Django trusts
+# X-Forwarded-Proto/Host; among other things this makes the refresh-token
+# cookie (secure=request.is_secure()) come out Secure on proxied HTTPS.
+
+def _env_flag(name):
+    return os.environ.get(name, 'false').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+HTTPS_ENABLED = _env_flag('DJANGO_HTTPS')
+BEHIND_PROXY = _env_flag('DJANGO_BEHIND_PROXY')
+if BEHIND_PROXY:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = True
+SECURE_SSL_REDIRECT = HTTPS_ENABLED
+SESSION_COOKIE_SECURE = HTTPS_ENABLED
+CSRF_COOKIE_SECURE = HTTPS_ENABLED
+SECURE_HSTS_SECONDS = 31_536_000 if HTTPS_ENABLED else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = HTTPS_ENABLED
+SECURE_HSTS_PRELOAD = False
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'SAMEORIGIN'
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+# When true (and the frontend build exists), core.asgi serves the built
+# frontend and the uploaded media on the same port as the API, so a single
+# Daphne process runs the whole app in production (see run_production.bat).
+SERVE_FRONTEND = _env_flag('DJANGO_SERVE_FRONTEND')
+FRONTEND_DIST = Path(os.environ.get('DJANGO_FRONTEND_DIST', BASE_DIR.parent / 'frontend' / 'dist'))

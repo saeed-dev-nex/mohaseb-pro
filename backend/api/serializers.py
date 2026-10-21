@@ -6,8 +6,9 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from .models import (
     Customer, Service, Invoice, InvoiceItem, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
-    Cheque, InvoiceSettings, ChatMessage, SocialNetwork
+    Cheque, InvoiceSettings, ChatMessage, SocialNetwork, UserModuleAccess
 )
+from .validators import validate_customer_identifier, validate_national_code_field, validate_tax_id
 
 
 class SafeTokenRefreshSerializer(TokenRefreshSerializer):
@@ -22,16 +23,31 @@ class SafeTokenRefreshSerializer(TokenRefreshSerializer):
             raise InvalidToken("Token is invalid or expired")
 
 
+class UserModuleAccessSerializer(serializers.ModelSerializer):
+    """Per-user module restriction row (stage 6)."""
+
+    class Meta:
+        model = UserModuleAccess
+        fields = ['invoices', 'customers', 'services', 'expenses', 'cheques',
+                  'reports', 'chat', 'staff', 'settings', 'users', 'backup']
+
+
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for operator user management (admin-only)"""
     password = serializers.CharField(write_only=True, required=False, allow_blank=True)
     role = serializers.SerializerMethodField()
+    modules = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = ['id', 'username', 'first_name', 'last_name', 'email',
-                  'is_active', 'is_staff', 'is_superuser', 'role', 'password', 'date_joined']
+                  'is_active', 'is_staff', 'is_superuser', 'role', 'modules',
+                  'password', 'date_joined']
         read_only_fields = ['date_joined']
+
+    def get_modules(self, obj):
+        from .module_access import effective_modules
+        return sorted(effective_modules(obj))
 
     def get_role(self, obj):
         if obj.is_superuser:
@@ -173,10 +189,10 @@ class CustomerListSerializer(serializers.ModelSerializer):
         return total
 
     def validate_national_id(self, value):
-        """Convert empty string to None to avoid duplicate-empty-string issues"""
+        """Normalize empty to None, then verify کد ملی checksum / شناسه ملی format."""
         if value == '':
             return None
-        return value
+        return validate_customer_identifier(value)
 
     def validate_phone(self, value):
         """Convert empty string to None"""
@@ -230,7 +246,7 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
     def validate_national_id(self, value):
         if value == '':
             return None
-        return value
+        return validate_customer_identifier(value)
 
     def validate_phone(self, value):
         if value == '':
@@ -361,7 +377,11 @@ class InvoiceSerializer(serializers.ModelSerializer):
       return obj.created_by.get_full_name() or obj.created_by.username
 
     def get_status_display(self, obj):
-      return 'کارمزد پرداخت شده' if obj.commission_paid else obj.get_status_display()
+      # A fully-paid invoice always reads «پرداخت شده»; the commission
+      # label only applies while the invoice itself is still unpaid.
+      if obj.status != 'paid' and obj.commission_paid:
+          return 'کارمزد پرداخت شده'
+      return obj.get_status_display()
 
     def get_paid_by_name(self, obj):
       if not obj.paid_by: return ''
@@ -383,15 +403,18 @@ class InvoiceSerializer(serializers.ModelSerializer):
       return obj.edit_requests.filter(requested_by=request.user, status='approved').exists()
 
     def get_final_amount(self, obj):
-      tax_amount = (obj.total_amount * obj.tax) / 100
-      return int(obj.total_amount + tax_amount - obj.discount + obj.commission_total)
+      return int(obj.final_amount)
 
     def get_paid_amount(self, obj):
       from django.db.models import Sum
       recorded = obj.payments.aggregate(total=Sum('amount'))['total']
-      if recorded is not None:
-          return int(recorded)
-      return int(obj.final_amount) if obj.status == 'paid' else 0
+      recorded = int(recorded) if recorded is not None else 0
+      if obj.status == 'paid':
+          # Fully paid is fully paid: once the invoice is settled, the
+          # paid amount is the full final amount even when only part of
+          # it was recorded as staged payments beforehand.
+          return max(recorded, int(obj.final_amount))
+      return recorded
 
     def get_remaining_amount(self, obj):
       return max(0, self.get_final_amount(obj) - self.get_paid_amount(obj))
@@ -459,6 +482,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
         self._sync_office_card_fee(instance, items_total)
         return instance
 
+    def validate_green_card_owner_national_id(self, value):
+        return validate_national_code_field(value)
 
 class DashboardStatsSerializer(serializers.Serializer):
     total_customers = serializers.IntegerField()
@@ -506,6 +531,8 @@ class BusinessProfileSerializer(serializers.ModelSerializer):
             return obj.logo.url
         return None
 
+    def validate_tax_id(self, value):
+        return validate_tax_id(value)
 
 class ExpenseCategorySerializer(serializers.ModelSerializer):
     class Meta:
