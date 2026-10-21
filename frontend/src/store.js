@@ -1,15 +1,11 @@
 import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './features/authSlice';
-import customersReducer from './features/customersSlice';
-import servicesReducer from './features/servicesSlice';
-import invoicesReducer from './features/invoicesSlice';
 
+// Stage 8: customers/services/invoices server state moved to TanStack
+// Query (see src/hooks/); Redux now holds session/UI state only.
 export const store = configureStore({
   reducer: {
     auth: authReducer,
-    customers: customersReducer,
-    services: servicesReducer,
-    invoices: invoicesReducer,
   },
 });
 
