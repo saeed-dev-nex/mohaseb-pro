@@ -1,0 +1,10 @@
+.git
+**/node_modules
+frontend/dist
+backend/db.sqlite3
+backend/media
+backend/.secret_key
+backend/backups
+__pycache__
+*.pyc
+.env
