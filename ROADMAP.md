@@ -42,6 +42,11 @@
       مرحله مهاجرت TS فرانت‌اند کامل شد و فقط main/store/authSlice
       جاوااسکریپت مانده‌اند. تایپ‌چک دو باگ نهفته را هم آشکار و رفع
       کرد: import گمشده در Expenses و ارجاع پیش از تعریف در Invoices).
+- [x] تایپ‌دار کردن سه فایل بوت‌استرپ (مرحلهٔ ۱۲: `main.tsx`، `store.ts`
+      با تایپ‌های RootState/AppDispatch و `features/authSlice.ts` با
+      تایپ AuthState و PayloadActionها؛ حالا کل `frontend/src`
+      TypeScript است و هیچ فایل JS/JSXای نمانده است. ورودی index.html
+      هم به main.tsx اشاره می‌کند).
 - [ ] ESLint/Prettier در CI (مسدود: ساخت/ویرایش فایل workflow در
       `.github/workflows/` از طریق GitHub App API ممکن نیست؛ نیازمند
       ساخت دستی فایل CI روی گیت‌هاب است).
