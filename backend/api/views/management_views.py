@@ -39,6 +39,8 @@ from ..audit import snapshot, record_audit, is_invoice_content_version
 
 
 
+from .common import HasModuleAccess
+
 class DashboardViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
@@ -195,7 +197,8 @@ class DashboardViewSet(viewsets.ViewSet):
         })
 
 class StaffViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasModuleAccess]
+    module_name = 'staff'
     serializer_class = StaffSerializer
 
     def get_queryset(self):
@@ -269,6 +272,46 @@ class UserViewSet(viewsets.ModelViewSet):
         """Return current logged-in user info with role"""
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'put'], permission_classes=[IsAdminUser])
+    def module_access(self, request, pk=None):
+        """Read or update a user's module restriction row (stage 6).
+
+        GET returns the user's effective modules plus the raw row (null
+        when the user simply follows their role). PUT updates the row with
+        the given module booleans; PUT with an empty body removes the row
+        and restores pure role-based access.
+        """
+        from ..models import UserModuleAccess
+        from ..module_access import effective_modules
+        from ..serializers import UserModuleAccessSerializer
+
+        user = self.get_object()
+        if request.method == 'GET':
+            try:
+                row = user.module_access
+            except UserModuleAccess.DoesNotExist:
+                row = None
+            return Response({
+                'modules': sorted(effective_modules(user)),
+                'access': UserModuleAccessSerializer(row).data if row else None,
+            })
+        if not request.data:
+            UserModuleAccess.objects.filter(user=user).delete()
+            user.refresh_from_db()
+            return Response({
+                'modules': sorted(effective_modules(user)),
+                'access': None,
+            })
+        row, _created = UserModuleAccess.objects.get_or_create(user=user)
+        serializer = UserModuleAccessSerializer(row, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        user.refresh_from_db()
+        return Response({
+            'modules': sorted(effective_modules(user)),
+            'access': serializer.data,
+        })
 
     @action(detail=False, methods=['post'], permission_classes=[IsAdminUser])
     def set_role(self, request):

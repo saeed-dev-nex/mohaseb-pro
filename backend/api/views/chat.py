@@ -39,8 +39,11 @@ from ..audit import snapshot, record_audit, is_invoice_content_version
 
 
 
+from .common import HasModuleAccess
+
 class ChatMessageViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin, viewsets.mixins.CreateModelMixin, viewsets.mixins.DestroyModelMixin):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasModuleAccess]
+    module_name = 'chat'
     serializer_class = ChatMessageSerializer
     queryset = ChatMessage.objects.select_related('sender', 'recipient').all()
 

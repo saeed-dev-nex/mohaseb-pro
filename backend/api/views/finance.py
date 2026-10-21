@@ -39,13 +39,17 @@ from ..audit import snapshot, record_audit, is_invoice_content_version
 
 
 
+from .common import HasModuleAccess
+
 class ExpenseCategoryViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasModuleAccess]
+    module_name = 'expenses'
     serializer_class = ExpenseCategorySerializer
     queryset = ExpenseCategory.objects.all()
 
 class ExpenseViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasModuleAccess]
+    module_name = 'expenses'
     serializer_class = ExpenseSerializer
 
     def perform_create(self, serializer):
@@ -98,7 +102,8 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         })
 
 class ChequeViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasModuleAccess]
+    module_name = 'cheques'
     serializer_class = ChequeSerializer
 
     def get_queryset(self):
