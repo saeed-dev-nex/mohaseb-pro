@@ -81,7 +81,8 @@ MODEL_ORDER = [
     'api.expensecategory', 'api.service', 'api.staff', 'api.vehicletype',
     'api.customer', 'api.invoice', 'api.invoiceitem', 'api.invoicepayment',
     'api.invoiceeditrequest', 'api.expense', 'api.document', 'api.cheque',
-    'api.businessprofile', 'api.backupconfig', 'api.invoicesettings', 'api.auditlog',
+    'api.businessprofile', 'api.backupconfig', 'api.invoicesettings',
+    'api.usermoduleaccess', 'api.auditlog',
 ]
 MODEL_MAP = {label: apps.get_model(label) for label in MODEL_ORDER}
 USER_FOREIGN_KEYS = {
@@ -89,6 +90,7 @@ USER_FOREIGN_KEYS = {
     'api.invoiceeditrequest': {'requested_by': False, 'reviewed_by': True},
     'api.invoicepayment': {'created_by': True},
     'api.auditlog': {'user': True},
+    'api.usermoduleaccess': {'user': False},
 }
 
 

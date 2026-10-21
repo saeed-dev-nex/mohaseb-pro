@@ -597,3 +597,38 @@ class Cheque(models.Model):
 
     def __str__(self):
         return f"چک {self.cheque_number} - {self.bank_name} ({self.get_type_display()})"
+
+
+class UserModuleAccess(models.Model):
+    """Per-user module access overrides (stage 6).
+
+    A row only ever *restricts*: the user's role decides the ceiling
+    (see api.module_access.effective_modules) and the row intersects with
+    it. Users without a row keep exactly the access their role has always
+    given them, so existing installs are unaffected until an admin starts
+    carving modules away. All fields default to True so creating a row is
+    not, by itself, a lockout.
+    """
+
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name='module_access',
+        verbose_name='کاربر',
+    )
+    invoices = models.BooleanField(default=True, verbose_name='فاکتورها')
+    customers = models.BooleanField(default=True, verbose_name='مشتریان')
+    services = models.BooleanField(default=True, verbose_name='خدمات')
+    expenses = models.BooleanField(default=True, verbose_name='هزینه‌ها')
+    cheques = models.BooleanField(default=True, verbose_name='چک‌ها')
+    reports = models.BooleanField(default=True, verbose_name='گزارشات')
+    chat = models.BooleanField(default=True, verbose_name='گفتگو')
+    staff = models.BooleanField(default=True, verbose_name='پرسنل')
+    settings = models.BooleanField(default=True, verbose_name='تنظیمات')
+    users = models.BooleanField(default=True, verbose_name='مدیریت کاربران')
+    backup = models.BooleanField(default=True, verbose_name='بکاپ')
+
+    class Meta:
+        verbose_name = 'دسترسی ماژولی کاربر'
+        verbose_name_plural = 'دسترسی‌های ماژولی کاربران'
+
+    def __str__(self):
+        return f'دسترسی ماژولی {self.user}'

@@ -6,7 +6,7 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from .models import (
     Customer, Service, Invoice, InvoiceItem, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
-    Cheque, InvoiceSettings, ChatMessage, SocialNetwork
+    Cheque, InvoiceSettings, ChatMessage, SocialNetwork, UserModuleAccess
 )
 from .validators import validate_customer_identifier, validate_national_code_field, validate_tax_id
 
@@ -23,16 +23,31 @@ class SafeTokenRefreshSerializer(TokenRefreshSerializer):
             raise InvalidToken("Token is invalid or expired")
 
 
+class UserModuleAccessSerializer(serializers.ModelSerializer):
+    """Per-user module restriction row (stage 6)."""
+
+    class Meta:
+        model = UserModuleAccess
+        fields = ['invoices', 'customers', 'services', 'expenses', 'cheques',
+                  'reports', 'chat', 'staff', 'settings', 'users', 'backup']
+
+
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for operator user management (admin-only)"""
     password = serializers.CharField(write_only=True, required=False, allow_blank=True)
     role = serializers.SerializerMethodField()
+    modules = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = ['id', 'username', 'first_name', 'last_name', 'email',
-                  'is_active', 'is_staff', 'is_superuser', 'role', 'password', 'date_joined']
+                  'is_active', 'is_staff', 'is_superuser', 'role', 'modules',
+                  'password', 'date_joined']
         read_only_fields = ['date_joined']
+
+    def get_modules(self, obj):
+        from .module_access import effective_modules
+        return sorted(effective_modules(obj))
 
     def get_role(self, obj):
         if obj.is_superuser:
