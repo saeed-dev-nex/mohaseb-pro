@@ -30,8 +30,10 @@
       `vite preview`، با `run_production.bat`) + تنظیمات HTTPS و هدرهای امنیتی
       جنگو (محیط‌محور، امن برای LAN)؛ گام باقی‌مانده فقط اجرای آن روی سرور واقعی
       و در صورت نیاز ثبت Windows Service با NSSM طبق `docs/production-windows.md` است.
-- [ ] مهاجرت تدریجی فرانت‌اند به TypeScript (از `utils` و `services`) و
-      TanStack Query برای داده‌های سرور؛ ESLint/Prettier در CI.
+- [x] مهاجرت تدریجی فرانت‌اند به TypeScript از `utils` و `services`
+      (مرحلهٔ ۷: tsconfig تدریجی + تایپ کامل همین دو لایه، بدون تغییر رفتار).
+- [ ] TanStack Query برای داده‌های سرور، تایپ‌دار کردن کامپوننت‌ها/صفحات،
+      و ESLint/Prettier در CI.
 
 ## بلندمدت (نیازمند تصمیم محصولی)
 - [ ] چندکسب‌وکاری (Multi-Business) یا SaaS چندمستاجری — تصمیم معماری زودهنگام.
