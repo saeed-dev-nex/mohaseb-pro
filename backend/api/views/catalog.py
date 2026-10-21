@@ -39,8 +39,11 @@ from ..audit import snapshot, record_audit, is_invoice_content_version
 
 
 
+from .common import HasModuleAccess
+
 class ServiceViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasModuleAccess]
+    module_name = 'services'
     serializer_class = ServiceSerializer
 
     def get_queryset(self):
@@ -51,6 +54,7 @@ class ServiceViewSet(viewsets.ModelViewSet):
         return qs
 
 class VehicleTypeViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasModuleAccess]
+    module_name = 'services'
     serializer_class = VehicleTypeSerializer
     queryset = VehicleType.objects.all()

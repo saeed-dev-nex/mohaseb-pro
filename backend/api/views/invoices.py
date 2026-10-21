@@ -39,8 +39,11 @@ from ..audit import snapshot, record_audit, is_invoice_content_version
 
 
 
+from .common import HasModuleAccess
+
 class InvoiceViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasModuleAccess]
+    module_name = 'invoices'
     serializer_class = InvoiceSerializer
 
     def destroy(self, request, *args, **kwargs):

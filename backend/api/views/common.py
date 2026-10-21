@@ -49,6 +49,19 @@ class IsManagerOrAdmin(BasePermission):
         return bool(request.user and request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser))
 
 
+class HasModuleAccess(BasePermission):
+    """Granular module gate (stage 6): the viewset declares ``module_name``
+    and the caller's effective modules (api.module_access) decide. Viewsets
+    without a module name are not gated by this class."""
+
+    def has_permission(self, request, view):
+        module = getattr(view, 'module_name', None)
+        if module is None:
+            return True
+        from ..module_access import effective_modules
+        return module in effective_modules(request.user)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def database_revision(request):

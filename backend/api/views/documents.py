@@ -39,8 +39,11 @@ from ..audit import snapshot, record_audit, is_invoice_content_version
 
 
 
+from .common import HasModuleAccess
+
 class DocumentViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasModuleAccess]
+    module_name = 'customers'
     serializer_class = DocumentSerializer
     parser_classes = [MultiPartParser, FormParser]
 
