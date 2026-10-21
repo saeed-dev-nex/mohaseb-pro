@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { usersAPI } from '../services/api';
+import { ALL_MODULES, MODULE_LABELS, ceilingFor } from '../utils/modules';
 
 const ROLE_LABELS = {
   admin: { label: 'مدیر ارشد', color: 'bg-purple-500/20 text-purple-300 border-purple-500/30', icon: '👑' },
@@ -35,6 +36,9 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [formError, setFormError] = useState('');
+  // Stage 6: module-access editor state (null = not loaded for this user)
+  const [accessForm, setAccessForm] = useState(null);
+  const [accessMode, setAccessMode] = useState('default');
 
   const isAdmin = currentUser?.is_superuser;
 
@@ -65,6 +69,8 @@ export default function UsersPage() {
     setEditingUser(null);
     setForm(emptyForm);
     setFormError('');
+    setAccessForm(null);
+    setAccessMode('default');
     setShowModal(true);
   };
 
@@ -80,7 +86,19 @@ export default function UsersPage() {
       is_active: user.is_active,
     });
     setFormError('');
+    setAccessForm(null);
+    setAccessMode('default');
     setShowModal(true);
+    // Stage 6: load the user's module restriction row (null = role default)
+    usersAPI.getModuleAccess(user.id).then(({ data }) => {
+      if (data.access) {
+        setAccessForm(data.access);
+        setAccessMode('custom');
+      } else {
+        setAccessForm(Object.fromEntries(ALL_MODULES.map((m) => [m, true])));
+        setAccessMode('default');
+      }
+    }).catch(() => {});
   };
 
   const handleSave = async (e) => {
@@ -104,6 +122,13 @@ export default function UsersPage() {
 
       if (editingUser) {
         await usersAPI.update(editingUser.id, payload);
+        // Stage 6: persist module access (custom row, or {} to clear it)
+        if (accessForm) {
+          await usersAPI.setModuleAccess(
+            editingUser.id,
+            accessMode === 'custom' ? accessForm : {}
+          );
+        }
       } else {
         await usersAPI.create(payload);
       }
@@ -426,6 +451,58 @@ export default function UsersPage() {
                   {ROLE_OPTIONS.find(o => o.value === form.role)?.label}
                 </p>
               </div>
+
+              {editingUser && accessForm && (
+                <div className="p-3 bg-slate-800/50 rounded-xl border border-slate-700 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-slate-300 text-sm font-medium">🔐 دسترسی ماژول‌ها</p>
+                    {accessMode === 'custom' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccessMode('default');
+                          setAccessForm(Object.fromEntries(ALL_MODULES.map((m) => [m, true])));
+                        }}
+                        className="text-xs text-blue-400 hover:text-blue-300"
+                      >
+                        بازنشانی به پیش‌فرض نقش
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-slate-500 text-xs">
+                    {accessMode === 'default'
+                      ? 'این کاربر از دسترسی پیش‌فرض نقش خود پیروی می‌کند؛ با برداشتن تیک هر ماژول، دسترسی اختصاصی ساخته می‌شود.'
+                      : 'دسترسی اختصاصی فعال است؛ ماژول‌های بدون تیک برای این کاربر بسته می‌شوند.'}
+                    {' '}ماژول‌های خاکستری سقف نقش کاربرند و قابل اعطا نیستند.
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {ALL_MODULES.map((m) => {
+                      const allowed = ceilingFor(form.role).includes(m);
+                      return (
+                        <label
+                          key={m}
+                          className={`flex items-center gap-2 p-2 rounded-lg border text-xs
+                            ${allowed
+                              ? 'bg-slate-800 border-slate-600 text-slate-300 cursor-pointer'
+                              : 'bg-slate-800/40 border-slate-700/50 text-slate-600 cursor-not-allowed'}`}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={!allowed}
+                            checked={allowed && !!accessForm[m]}
+                            onChange={(e) => {
+                              setAccessForm((f) => ({ ...f, [m]: e.target.checked }));
+                              setAccessMode('custom');
+                            }}
+                            className="accent-purple-500"
+                          />
+                          {MODULE_LABELS[m]}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl border border-slate-700">
                 <div>

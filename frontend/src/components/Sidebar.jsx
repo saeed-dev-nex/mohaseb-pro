@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../features/authSlice';
 import { invoicesAPI, chatAPI, authAPI } from '../services/api';
+import { hasModule } from '../utils/modules';
 
 const BASE_NAV_GROUPS = [
   {
@@ -14,30 +15,30 @@ const BASE_NAV_GROUPS = [
   {
     label: 'فاکتور',
     items: [
-      { to: '/invoices', label: 'فاکتورها', icon: '🧾' },
-      { to: '/invoices/new', label: 'فاکتور جدید', icon: '➕' },
-      { to: '/reports', label: 'گزارشات', icon: '📈' },
+      { to: '/invoices', label: 'فاکتورها', icon: '🧾', module: 'invoices' },
+      { to: '/invoices/new', label: 'فاکتور جدید', icon: '➕', module: 'invoices' },
+      { to: '/reports', label: 'گزارشات', icon: '📈', module: 'reports' },
     ],
   },
   {
     label: 'مالی',
     items: [
-      { to: '/expenses', label: 'هزینه‌ها', icon: '💰' },
-      { to: '/cheques', label: 'مدیریت چک‌ها', icon: '🎫' },
+      { to: '/expenses', label: 'هزینه‌ها', icon: '💰', module: 'expenses' },
+      { to: '/cheques', label: 'مدیریت چک‌ها', icon: '🎫', module: 'cheques' },
     ],
   },
   {
     label: 'ارتباطات',
     items: [
-      { to: '/chat', label: 'گفتگوی کاربران', icon: '💬' },
+      { to: '/chat', label: 'گفتگوی کاربران', icon: '💬', module: 'chat' },
     ],
   },
   {
     label: 'مدیریت',
     items: [
-      { to: '/customers', label: 'مشتریان', icon: '👥' },
-      { to: '/services', label: 'خدمات', icon: '⚙️' },
-      { to: '/staff', label: 'پرسنل', icon: '👷' },
+      { to: '/customers', label: 'مشتریان', icon: '👥', module: 'customers' },
+      { to: '/services', label: 'خدمات', icon: '⚙️', module: 'services' },
+      { to: '/staff', label: 'پرسنل', icon: '👷', module: 'staff' },
     ],
   },
 ];
@@ -76,12 +77,19 @@ const Sidebar = ({ isOpen, onClose, isCollapsed = false, onToggleCollapse }) => 
   const systemGroup = {
     label: 'سیستم',
     items: [
-      ...(isAdmin ? [{ to: '/users', label: 'مدیریت کاربران', icon: '🔐' }] : []),
-      { to: '/settings', label: 'تنظیمات و برند', icon: '🎨' },
+      ...(isAdmin ? [{ to: '/users', label: 'مدیریت کاربران', icon: '🔐', module: 'users' }] : []),
+      { to: '/settings', label: 'تنظیمات و برند', icon: '🎨', module: 'settings' },
     ],
   };
 
-  const navGroups = [...BASE_NAV_GROUPS, systemGroup];
+  // Stage 6: hide nav items for modules the user cannot access
+  // (the backend enforces the same rules on the API itself).
+  const navGroups = [...BASE_NAV_GROUPS, systemGroup]
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => hasModule(currentUser, item.module)),
+    }))
+    .filter((group) => group.items.length > 0);
 
   const handleLogout = async () => {
     // Blacklist the refresh token server-side and clear its httpOnly cookie;

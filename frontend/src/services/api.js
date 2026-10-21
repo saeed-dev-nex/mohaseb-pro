@@ -232,6 +232,8 @@ export const usersAPI = {
   create: (data) => api.post('users/', data),
   update: (id, data) => api.patch(`users/${id}/`, data),
   delete: (id) => api.delete(`users/${id}/`),
+  getModuleAccess: (id) => api.get(`users/${id}/module_access/`),
+  setModuleAccess: (id, data) => api.put(`users/${id}/module_access/`, data),
   setRole: (userId, role) => api.post('users/set_role/', { user_id: userId, role }),
 };
 

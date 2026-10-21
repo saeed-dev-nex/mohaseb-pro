@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { hasModule } from './utils/modules';
 const Login = lazy(() => import('./pages/Login'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Customers = lazy(() => import('./pages/Customers'));
@@ -29,6 +30,13 @@ const ProtectedRoute = ({ children }) => {
   return isAuthenticated ? children : <Navigate to="/login" replace />;
 };
 
+// Stage 6: route-level module gate mirroring the backend's per-module
+// permissions; users without the module land back on the dashboard.
+const ModuleRoute = ({ module, children }) => {
+  const currentUser = useSelector((state) => state.auth.currentUser);
+  return hasModule(currentUser, module) ? children : <Navigate to="/" replace />;
+};
+
 function App() {
   return (
     <Router>
@@ -46,36 +54,36 @@ function App() {
           <Route index element={<Dashboard />} />
 
           {/* Customers */}
-          <Route path="customers" element={<Customers />} />
-          <Route path="customers/:id" element={<CustomerDetail />} />
+          <Route path="customers" element={<ModuleRoute module="customers"><Customers /></ModuleRoute>} />
+          <Route path="customers/:id" element={<ModuleRoute module="customers"><CustomerDetail /></ModuleRoute>} />
 
           {/* Services */}
-          <Route path="services" element={<Services />} />
+          <Route path="services" element={<ModuleRoute module="services"><Services /></ModuleRoute>} />
 
           {/* Invoices */}
-          <Route path="invoices" element={<Invoices />} />
-          <Route path="invoices/new" element={<InvoiceForm />} />
-          <Route path="invoices/:id" element={<InvoiceDetail />} />
-          <Route path="invoices/:id/edit" element={<InvoiceForm />} />
+          <Route path="invoices" element={<ModuleRoute module="invoices"><Invoices /></ModuleRoute>} />
+          <Route path="invoices/new" element={<ModuleRoute module="invoices"><InvoiceForm /></ModuleRoute>} />
+          <Route path="invoices/:id" element={<ModuleRoute module="invoices"><InvoiceDetail /></ModuleRoute>} />
+          <Route path="invoices/:id/edit" element={<ModuleRoute module="invoices"><InvoiceForm /></ModuleRoute>} />
 
           {/* Reports */}
-          <Route path="reports" element={<Reports />} />
+          <Route path="reports" element={<ModuleRoute module="reports"><Reports /></ModuleRoute>} />
 
           {/* Expenses */}
-          <Route path="expenses" element={<Expenses />} />
+          <Route path="expenses" element={<ModuleRoute module="expenses"><Expenses /></ModuleRoute>} />
 
           {/* Cheques */}
-          <Route path="cheques" element={<Cheques />} />
+          <Route path="cheques" element={<ModuleRoute module="cheques"><Cheques /></ModuleRoute>} />
 
           {/* Staff */}
-          <Route path="staff" element={<StaffPage />} />
+          <Route path="staff" element={<ModuleRoute module="staff"><StaffPage /></ModuleRoute>} />
 
           {/* Users (admin only) */}
-          <Route path="users" element={<UsersPage />} />
-          <Route path="chat" element={<Chat />} />
+          <Route path="users" element={<ModuleRoute module="users"><UsersPage /></ModuleRoute>} />
+          <Route path="chat" element={<ModuleRoute module="chat"><Chat /></ModuleRoute>} />
 
           {/* Settings */}
-          <Route path="settings" element={<Settings />} />
+          <Route path="settings" element={<ModuleRoute module="settings"><Settings /></ModuleRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
