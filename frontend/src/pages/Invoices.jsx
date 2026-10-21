@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
-import { fetchInvoices, markInvoicePaid, cancelInvoice, deleteInvoice } from '../features/invoicesSlice';
+import { useSelector } from 'react-redux';
+import { useQueryClient } from '@tanstack/react-query';
+import { useInvoicesInfinite, useMarkInvoicePaid, useCancelInvoice, useDeleteInvoice, invoiceKeys } from '../hooks/useInvoices';
 import { StatusBadge, Button, Spinner, EmptyState, ConfirmDialog, formatPrice } from '../components/ui';
 import { invoicesAPI } from '../services/api';
 import JalaliDatePicker from '../components/JalaliDatePicker';
@@ -27,8 +28,7 @@ const formatThousands = (value) => {
 };
 
 const Invoices = () => {
-  const dispatch = useDispatch();
-  const { list, loading, loadingMore, hasMore, currentPage } = useSelector(s => s.invoices);
+  const queryClient = useQueryClient();
   const currentUser = useSelector(s => s.auth.currentUser);
   const canSeeIssuer = Boolean(currentUser?.is_staff || currentUser?.is_superuser);
   const isManager = Boolean(currentUser?.is_staff || currentUser?.is_superuser);
@@ -69,17 +69,24 @@ const Invoices = () => {
     amount_max: amountInTomans(paidMax),
     payment_source: paymentSource,
   };
+  const { list, loading, loadingMore, hasMore, fetchNextPage } = useInvoicesInfinite(invoiceFilters);
+  const markInvoicePaid = useMarkInvoicePaid();
+  const cancelInvoice = useCancelInvoice();
+  const deleteInvoice = useDeleteInvoice();
 
   useEffect(() => {
     pageRequestRef.current = false;
-    const refresh = () => {
-      dispatch(fetchInvoices({ ...invoiceFilters, page: 1 }));
+    const refreshStats = () => {
       invoicesAPI.stats().then(({ data }) => setCounts(data)).catch(() => {});
     };
-    refresh();
+    refreshStats();
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: invoiceKeys.all });
+      refreshStats();
+    };
     window.addEventListener('mohaseb:data-changed', refresh);
     return () => window.removeEventListener('mohaseb:data-changed', refresh);
-  }, [dispatch, statusFilter, search, customerName, vehiclePlate, dateFrom, dateTo, paidBy, createdBy, paidMin, paidMax, paymentSource]);
+  }, [queryClient, statusFilter, search, customerName, vehiclePlate, dateFrom, dateTo, paidBy, createdBy, paidMin, paidMax, paymentSource]);
 
   useEffect(() => {
     invoicesAPI.filterOptions().then(({ data }) => setFilterOptions(data)).catch(() => {});
@@ -91,12 +98,11 @@ const Invoices = () => {
     const observer = new IntersectionObserver(entries => {
       if (!entries.some(entry => entry.isIntersecting) || pageRequestRef.current) return;
       pageRequestRef.current = true;
-      dispatch(fetchInvoices({ ...invoiceFilters, page: currentPage + 1 }))
-        .finally(() => { pageRequestRef.current = false; });
+      fetchNextPage().finally(() => { pageRequestRef.current = false; });
     }, { rootMargin: '300px' });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [dispatch, hasMore, loading, loadingMore, currentPage, statusFilter, search, customerName, vehiclePlate, dateFrom, dateTo, paidBy, createdBy, paidMin, paidMax, paymentSource]);
+  }, [hasMore, loading, loadingMore, fetchNextPage]);
 
   const refreshEditRequests = async () => {
     if (!isManager) return;
@@ -112,7 +118,7 @@ const Invoices = () => {
 
   const requestEdit = async (id) => {
     setActionLoading(`${id}_request`);
-    try { await invoicesAPI.requestEdit(id); await dispatch(fetchInvoices({ ...invoiceFilters, page: 1 })); }
+    try { await invoicesAPI.requestEdit(id); await queryClient.invalidateQueries({ queryKey: invoiceKeys.all }); }
     finally { setActionLoading(null); }
   };
 
@@ -121,7 +127,7 @@ const Invoices = () => {
     try {
       await invoicesAPI.reviewEditRequest(item.invoice_id, item.id, decision);
       await refreshEditRequests();
-      await dispatch(fetchInvoices({ ...invoiceFilters, page: 1 }));
+      await queryClient.invalidateQueries({ queryKey: invoiceKeys.all });
     } finally { setActionLoading(null); }
   };
 
@@ -134,19 +140,19 @@ const Invoices = () => {
 
   const handleMarkPaid = async (id) => {
     setActionLoading(id + '_paid');
-    await dispatch(markInvoicePaid(id));
+    await markInvoicePaid.mutateAsync(id).catch(() => {});
     setActionLoading(null);
   };
 
   const handleCancel = async (id) => {
     setActionLoading(id + '_cancel');
-    await dispatch(cancelInvoice(id));
+    await cancelInvoice.mutateAsync(id).catch(() => {});
     setActionLoading(null);
   };
 
   const handleDelete = async () => {
     setDeleting(true);
-    await dispatch(deleteInvoice(deleteTarget.id));
+    await deleteInvoice.mutateAsync(deleteTarget.id).catch(() => {});
     setDeleteTarget(null);
     setDeleting(false);
   };

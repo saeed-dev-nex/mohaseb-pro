@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
-import { fetchCustomers } from '../features/customersSlice';
-import { fetchServices } from '../features/servicesSlice';
-import { createInvoice } from '../features/invoicesSlice';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCustomers, customerKeys } from '../hooks/useCustomers';
+import { useServices, serviceKeys } from '../hooks/useServices';
+import { useCreateInvoice } from '../hooks/useInvoices';
 import { Button, SelectField, formatPrice } from '../components/ui';
 
 const emptyItem = { service: '', main_price: '', extra_price: 0, quantity: 1, notes: '' };
 
 const NewInvoice = () => {
-  const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { list: customers } = useSelector(s => s.customers);
-  const { list: services } = useSelector(s => s.services);
+  const queryClient = useQueryClient();
+  const { data: customersData } = useCustomers();
+  const customers = customersData ?? [];
+  const { data: servicesData } = useServices({ active: 'true' });
+  const services = servicesData ?? [];
+  const createInvoice = useCreateInvoice();
 
   const [customer, setCustomer] = useState('');
   const [description, setDescription] = useState('');
@@ -25,13 +28,12 @@ const NewInvoice = () => {
 
   useEffect(() => {
     const refreshReferences = () => {
-      dispatch(fetchCustomers());
-      dispatch(fetchServices({ active: 'true' }));
+      queryClient.invalidateQueries({ queryKey: customerKeys.all });
+      queryClient.invalidateQueries({ queryKey: serviceKeys.all });
     };
-    refreshReferences();
     window.addEventListener('mohaseb:data-changed', refreshReferences);
     return () => window.removeEventListener('mohaseb:data-changed', refreshReferences);
-  }, [dispatch]);
+  }, [queryClient]);
 
   const addItem = () => setItems(prev => [...prev, { ...emptyItem }]);
   const removeItem = (idx) => setItems(prev => prev.filter((_, i) => i !== idx));
@@ -65,7 +67,7 @@ const NewInvoice = () => {
     setError('');
     setSaving(true);
     try {
-      await dispatch(createInvoice({
+      await createInvoice.mutateAsync({
         customer: Number(customer),
         description,
         discount: Number(discount),
@@ -81,7 +83,7 @@ const NewInvoice = () => {
           notes: i.notes || '',
           commission: 0,
         })),
-      })).unwrap();
+      });
       navigate('/invoices');
     } catch (e) {
       setError('خطا در ثبت فاکتور. لطفاً دوباره تلاش کنید.');

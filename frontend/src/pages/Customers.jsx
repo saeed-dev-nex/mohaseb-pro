@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer } from '../features/customersSlice';
+import { useCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer, customerKeys } from '../hooks/useCustomers';
 import { formatPrice, Button, Modal, InputField, Spinner, EmptyState, ConfirmDialog } from '../components/ui';
 import { toPersianKeyboard } from '../utils/persian';
 
@@ -52,9 +52,14 @@ const CustomerForm = ({ initial, onSave, onClose, loading }) => {
 };
 
 const Customers = () => {
-  const dispatch = useDispatch();
-  const { list, loading } = useSelector(s => s.customers);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const { data, isFetching } = useCustomers({ search });
+  const list = data ?? [];
+  const loading = isFetching;
+  const createCustomer = useCreateCustomer();
+  const updateCustomer = useUpdateCustomer();
+  const deleteCustomer = useDeleteCustomer();
   const [modalOpen, setModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -62,11 +67,10 @@ const Customers = () => {
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    const refresh = () => dispatch(fetchCustomers({ search }));
-    refresh();
+    const refresh = () => queryClient.invalidateQueries({ queryKey: customerKeys.all });
     window.addEventListener('mohaseb:data-changed', refresh);
     return () => window.removeEventListener('mohaseb:data-changed', refresh);
-  }, [dispatch, search]);
+  }, [queryClient]);
 
   const openAdd = () => { setEditTarget(null); setModalOpen(true); };
   const openEdit = (c) => { setEditTarget(c); setModalOpen(true); };
@@ -75,9 +79,9 @@ const Customers = () => {
     setSaving(true);
     try {
       if (editTarget?.id) {
-        await dispatch(updateCustomer({ id: editTarget.id, data: form })).unwrap();
+        await updateCustomer.mutateAsync({ id: editTarget.id, data: form });
       } else {
-        await dispatch(createCustomer(form)).unwrap();
+        await createCustomer.mutateAsync(form);
       }
       setModalOpen(false);
     } catch (e) {
@@ -90,7 +94,7 @@ const Customers = () => {
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      await dispatch(deleteCustomer(deleteTarget.id)).unwrap();
+      await deleteCustomer.mutateAsync(deleteTarget.id);
       setDeleteTarget(null);
     } finally {
       setDeleting(false);

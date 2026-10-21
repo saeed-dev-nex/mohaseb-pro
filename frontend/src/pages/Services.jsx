@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import {
-  fetchServices, createService, updateService, deleteService,
-} from '../features/servicesSlice';
+import { useQueryClient } from '@tanstack/react-query';
+import { useServices, useCreateService, useUpdateService, useDeleteService, serviceKeys } from '../hooks/useServices';
 import PriceInput from '../components/PriceInput';
 import { toPersianKeyboard } from '../utils/persian';
 
@@ -117,27 +115,31 @@ const ServiceModal = ({ initial, onSave, onClose, loading }) => {
 
 // ── Main ──────────────────────────────────────────────────────
 const Services = () => {
-  const dispatch = useDispatch();
-  const { list, loading } = useSelector((s) => s.services);
+  const queryClient = useQueryClient();
+  const { data, isFetching } = useServices();
+  const list = data ?? [];
+  const loading = isFetching;
+  const createService = useCreateService();
+  const updateService = useUpdateService();
+  const deleteService = useDeleteService();
   const [modal, setModal] = useState(null); // null | 'add' | {service}
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    const refresh = () => dispatch(fetchServices());
-    refresh();
+    const refresh = () => queryClient.invalidateQueries({ queryKey: serviceKeys.all });
     window.addEventListener('mohaseb:data-changed', refresh);
     return () => window.removeEventListener('mohaseb:data-changed', refresh);
-  }, [dispatch]);
+  }, [queryClient]);
 
   const handleSave = async (form) => {
     setSaving(true);
     try {
       if (modal?.id) {
-        await dispatch(updateService({ id: modal.id, data: form })).unwrap();
+        await updateService.mutateAsync({ id: modal.id, data: form });
       } else {
-        await dispatch(createService(form)).unwrap();
+        await createService.mutateAsync(form);
       }
       setModal(null);
     } catch (e) {
@@ -148,7 +150,7 @@ const Services = () => {
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      await dispatch(deleteService(deleteTarget.id)).unwrap();
+      await deleteService.mutateAsync(deleteTarget.id);
       setDeleteTarget(null);
     } finally { setDeleting(false); }
   };

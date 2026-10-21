@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
-import { fetchServices } from '../features/servicesSlice';
-import { fetchCustomers, createCustomer } from '../features/customersSlice';
+import { useQueryClient } from '@tanstack/react-query';
+import { useServices, serviceKeys } from '../hooks/useServices';
+import { useCustomers, useCreateCustomer, customerKeys } from '../hooks/useCustomers';
 import { invoicesAPI, vehicleTypesAPI, invoiceSettingsAPI, documentsAPI } from '../services/api';
 import PriceInput from '../components/PriceInput';
 import PlateInput from '../components/PlateInput';
@@ -355,9 +355,12 @@ const InvoiceForm = () => {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
-  const dispatch = useDispatch();
-  const { list: services } = useSelector((s) => s.services);
-  const { list: customers } = useSelector((s) => s.customers);
+  const queryClient = useQueryClient();
+  const { data: servicesData } = useServices();
+  const services = servicesData ?? [];
+  const { data: customersData } = useCustomers();
+  const customers = customersData ?? [];
+  const { mutateAsync: createCustomerAsync } = useCreateCustomer();
 
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
@@ -392,7 +395,7 @@ const InvoiceForm = () => {
     setCustomerError('');
     setInlineNotice('');
     try {
-      const data = await dispatch(createCustomer(customerData)).unwrap();
+      const data = await createCustomerAsync(customerData);
       setError('');
       setNewCustomerModal(null);
       setInlineNotice(`✅ مشتری جدید «${data.name}» ثبت شد`);
@@ -406,7 +409,7 @@ const InvoiceForm = () => {
     } finally {
       setCreatingCustomer(false);
     }
-  }, [dispatch, newCustomerModal, creatingCustomer]);
+  }, [createCustomerAsync, newCustomerModal, creatingCustomer]);
 
   const handleCustomerModalCancel = useCallback(() => {
     if (creatingCustomer) return;
@@ -449,15 +452,17 @@ const InvoiceForm = () => {
   const [invoiceFields, setInvoiceFields] = useState({ show_discount_field: true, show_tax_field: true });
 
   useEffect(() => {
-    const refreshReferences = () => { dispatch(fetchServices()); dispatch(fetchCustomers()); };
-    refreshReferences();
+    const refreshReferences = () => {
+      queryClient.invalidateQueries({ queryKey: serviceKeys.all });
+      queryClient.invalidateQueries({ queryKey: customerKeys.all });
+    };
     window.addEventListener('mohaseb:data-changed', refreshReferences);
     invoiceSettingsAPI.get().then(({ data }) => {
       setOfficeCardThreshold(Number(data.office_card_fee_threshold) || 0);
       setInvoiceFields({ show_discount_field: data.show_discount_field !== false, show_tax_field: data.show_tax_field !== false });
     }).catch(() => {});
     return () => window.removeEventListener('mohaseb:data-changed', refreshReferences);
-  }, [dispatch]);
+  }, [queryClient]);
 
   useEffect(() => {
     if (!isEdit) return;
