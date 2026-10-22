@@ -149,11 +149,12 @@ class BackupConfigViewSet(viewsets.ViewSet):
         cfg.save()
         return Response({'saved': True, 'path': dest, 'filename': filename})
 
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['post'], permission_classes=[IsSuperuser])
     def check_auto(self, request):
-        """Run a due backup as a browser-side fallback to the server worker."""
+        """Superuser fallback; never disclose server paths or internal errors."""
         from ..scheduler import run_due_backup
-        return Response(run_due_backup())
+        result = run_due_backup()
+        return Response({'ran': bool(result.get('ran')), 'saved': bool(result.get('saved'))})
 
 class BackupViewSet(viewsets.ViewSet):
     """Backup and restore all data"""

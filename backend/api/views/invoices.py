@@ -35,6 +35,7 @@ from ..serializers import (
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
 from ..audit import snapshot, record_audit, is_invoice_content_version
+from ..services.money import invoice_payment_totals, safe_spreadsheet_cell
 
 
 
@@ -45,6 +46,18 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasModuleAccess]
     module_name = 'invoices'
     serializer_class = InvoiceSerializer
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        from ..module_access import effective_modules
+        from rest_framework.exceptions import PermissionDenied
+        modules = effective_modules(request.user)
+        if self.action in {'report', 'export_excel', 'export_csv', 'history'} and 'reports' not in modules:
+            raise PermissionDenied('دسترسی به ماژول گزارشات لازم است.')
+        # Reports/Excel contain expense totals and rows: reject the whole report
+        # instead of leaking expenses or presenting an incomplete profit figure.
+        if self.action in {'report', 'export_excel'} and 'expenses' not in modules:
+            raise PermissionDenied('این گزارش شامل هزینه‌هاست؛ دسترسی به ماژول هزینه‌ها لازم است.')
 
     def destroy(self, request, *args, **kwargs):
         invoice = self.get_object()
@@ -82,6 +95,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             edit_request.save(update_fields=['status', 'used_at'])
         record_audit(user=self.request.user, instance=invoice, action='update', before=before, after=snapshot(invoice))
 
+    @transaction.atomic
     def perform_create(self, serializer):
         invoice = serializer.save(
             created_by=self.request.user,
@@ -95,7 +109,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         instance.delete()
 
     def get_queryset(self):
-        qs = Invoice.objects.select_related('customer', 'created_by', 'paid_by').prefetch_related('items__service', 'payments', 'edit_requests')
+        qs = Invoice.objects.select_related('customer', 'created_by', 'paid_by').prefetch_related('items__service', 'payments__created_by', 'edit_requests')
         status_filter = self.request.query_params.get('status', '')
         customer_id = self.request.query_params.get('customer', '')
         customer_name = self.request.query_params.get('customer_name', '')
@@ -153,7 +167,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             if paid_max:
                 qs = qs.annotate(_invoice_total=invoice_total).filter(_invoice_total__lte=paid_max)
         if overdue_only == 'true':
-            today = date.today()
+            today = timezone.localdate()
             qs = qs.filter(status='pending', due_date__lt=today)
         return qs.order_by('-created_at', '-id')
 
@@ -212,9 +226,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         invoice = Invoice.objects.select_for_update().get(pk=self.get_object().pk)
         before = snapshot(invoice)
         was_paid = invoice.status == 'paid'
-        amount_paid = invoice.payments.aggregate(total=Sum('amount'))['total']
-        already_paid = amount_paid if amount_paid is not None else (invoice.final_amount if invoice.status == 'paid' else 0)
-        balance = max(0, int(invoice.final_amount - already_paid))
+        balance = int(invoice_payment_totals(invoice)[1])
         payment = None
         if balance:
             payment = InvoicePayment.objects.create(invoice=invoice, amount=balance, method='other', note='ثبت پرداخت کامل از صفحه فاکتورها', created_by=request.user)
@@ -233,13 +245,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if invoice.status == 'paid' and not (request.user.is_staff or request.user.is_superuser):
             return Response({'detail': 'اپراتور اجازهٔ تغییر پرداخت‌های فاکتور پرداخت‌شده را ندارد.'}, status=status.HTTP_403_FORBIDDEN)
 
-        amount = request.data.get('amount')
-        try:
-            amount = int(amount)
-        except (TypeError, ValueError):
-            return Response({'amount': 'مبلغ پرداخت باید عدد مثبت باشد.'}, status=400)
-        if amount <= 0:
-            return Response({'amount': 'مبلغ پرداخت باید بیشتر از صفر باشد.'}, status=400)
+        serializer = InvoicePaymentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        amount = serializer.validated_data['amount']
         if invoice.status in ['cancelled', 'draft']:
             return Response({'detail': 'برای این وضعیت فاکتور امکان ثبت پرداخت وجود ندارد.'}, status=400)
 
@@ -247,15 +255,13 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
             before = snapshot(invoice)
             was_paid = invoice.status == 'paid'
-            recorded = invoice.payments.aggregate(total=Sum('amount'))['total']
-            already_paid = recorded if recorded is not None else (invoice.final_amount if invoice.status == 'paid' else 0)
-            remaining = max(0, int(invoice.final_amount - already_paid))
+            if invoice.status in ['cancelled', 'draft']:
+                return Response({'detail': 'برای این وضعیت فاکتور امکان ثبت پرداخت وجود ندارد.'}, status=400)
+            already_paid, remaining = invoice_payment_totals(invoice)
             if amount > remaining:
                 return Response({'amount': f'مبلغ پرداخت از ماندهٔ فاکتور ({remaining}) بیشتر است.'}, status=400)
-            serializer = InvoicePaymentSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
             payment = serializer.save(invoice=invoice, created_by=request.user)
-            new_paid_total = int(already_paid) + amount
+            new_paid_total = already_paid + amount
             if new_paid_total >= invoice.final_amount:
                 invoice.status = 'paid'
                 if not was_paid:
@@ -479,7 +485,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def overdue(self, request):
         """Return overdue invoices"""
-        today = date.today()
+        today = timezone.localdate()
         qs = Invoice.objects.filter(
             status='pending', due_date__lt=today
         ).select_related('customer').order_by('due_date')
@@ -534,26 +540,28 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if customer_search:
             qs = qs.filter(customer__name__icontains=customer_search)
 
-        response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+        # Encoding each writerow with utf-8-sig would insert a BOM on every row.
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="invoices.csv"'
         # BOM for Excel UTF-8
         response.write('\ufeff')
         writer = csv.writer(response)
         writer.writerow(['شماره فاکتور', 'مشتری', 'تاریخ', 'مبلغ کل', 'کارمزد', 'تخفیف', 'مالیات', 'وضعیت'])
         for inv in qs:
-            writer.writerow([
+            writer.writerow([safe_spreadsheet_cell(value) for value in [
                 inv.invoice_number,
                 inv.customer.name if inv.customer else '',
-                inv.date.strftime('%Y-%m-%d') if inv.date else '',
+                timezone.localtime(inv.date).strftime('%Y-%m-%d') if inv.date else '',
                 int(inv.total_amount),
                 int(inv.commission_total),
                 int(inv.discount),
-                float(inv.tax),
+                str(inv.tax),
                 inv.get_status_display(),
-            ])
+            ]])
         return response
 
     @action(detail=False, methods=['post'])
+    @transaction.atomic
     def quick_create(self, request):
         """
         Quick invoice creation with auto-customer.
@@ -567,83 +575,33 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         }
         """
         data = request.data
-        customer_name = (data.get('customer_name') or '').strip()
-        customer_phone = (data.get('customer_phone') or '').strip()
+        customer_serializer = CustomerListSerializer(data={
+            'name': data.get('customer_name', ''),
+            'phone': data.get('customer_phone', ''),
+        })
+        customer_serializer.is_valid(raise_exception=True)
+        customer_name = customer_serializer.validated_data['name']
+        customer_phone = customer_serializer.validated_data.get('phone')
+        # Validate every invoice field before creating a customer. Known optional
+        # fields (including tags, vehicle/custom fields and card source) share
+        # the normal invoice serializer and calculations.
+        payload = {key: value for key, value in data.items() if key not in {'customer', 'customer_name', 'customer_phone'}}
+        invoice_serializer = self.get_serializer(data=payload)
+        invoice_serializer.is_valid(raise_exception=True)
 
-        if not customer_name:
-            return Response({'error': 'نام مشتری الزامی است'}, status=400)
-
-        items_data = data.get('items', [])
-        if not items_data:
-            return Response({'error': 'حداقل یک ردیف خدمات لازم است'}, status=400)
-
-        # Find or create customer
         customer = None
         if customer_phone:
             customer = Customer.objects.filter(phone=customer_phone).first()
         if not customer:
             customer = Customer.objects.filter(name__iexact=customer_name).first()
         if not customer:
-            customer = Customer.objects.create(
-                name=customer_name,
-                phone=customer_phone or '',
-            )
+            customer = customer_serializer.save()
 
-        # Calculate total
-        total = 0
-        for item in items_data:
-            qty = int(item.get('quantity', 1))
-            mp = int(item.get('main_price', 0))
-            ep = int(item.get('extra_price', 0))
-            total += (mp + ep) * qty
-
-        # Create invoice
-        invoice = Invoice.objects.create(
+        invoice = invoice_serializer.save(
             customer=customer,
             created_by=request.user,
-            status=data.get('status', 'pending'),
-            paid_by=request.user if data.get('status', 'pending') == 'paid' else None,
-            description=data.get('description', ''),
-            discount=int(data.get('discount', 0)),
-            tax=float(data.get('tax', 0)),
-            commission_total=int(data.get('commission_total', 0)),
-            total_amount=total,
-            paper_size=data.get('paper_size', 'a5'),
-            vehicle_plate=data.get('vehicle_plate', ''),
-            vehicle_vin=data.get('vehicle_vin', ''),
-            vehicle_model=data.get('vehicle_model', ''),
-            vehicle_type=data.get('vehicle_type', ''),
-            tags=data.get('tags', []),
-            card_payment_source=data.get('card_payment_source') if data.get('card_payment_source') in ('customer', 'office') else 'customer',
+            paid_by=request.user if invoice_serializer.validated_data.get('status', 'pending') == 'paid' else None,
         )
-
-        # Create items
-        from ..models import InvoiceItem as II
-        for item in items_data:
-            svc_id = item.get('service')
-            svc = None
-            svc_title = item.get('service_title_snapshot', '')
-            if svc_id:
-                try:
-                    svc = Service.objects.get(id=svc_id)
-                    if not svc_title:
-                        svc_title = svc.title
-                except Service.DoesNotExist:
-                    pass
-
-            II.objects.create(
-                invoice=invoice,
-                service=svc,
-                service_title_snapshot=svc_title,
-                quantity=int(item.get('quantity', 1)),
-                main_price=int(item.get('main_price', 0)),
-                extra_price=int(item.get('extra_price', 0)),
-                commission=int(item.get('commission', 0)),
-                notes=item.get('notes', ''),
-            )
-
-        invoice_serializer = InvoiceSerializer()
-        invoice_serializer._sync_office_card_fee(invoice, total)
 
         record_audit(user=request.user, instance=invoice, action='create', after=snapshot(invoice))
         serializer = self.get_serializer(invoice)
@@ -653,7 +611,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 'id': customer.id,
                 'name': customer.name,
                 'phone': customer.phone,
-                'is_new': customer.created_at.date() == date.today(),
+                'is_new': timezone.localdate(customer.created_at) == timezone.localdate(),
             },
             'message': f'فاکتور {invoice.invoice_number} با موفقیت صادر شد',
         }, status=201)

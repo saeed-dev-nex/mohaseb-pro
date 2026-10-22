@@ -3,11 +3,8 @@ import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { setTokens, setCurrentUser } from "../features/authSlice";
-import api from "../services/api";
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  `http://${window.location.hostname}:8000/api/`;
+import api, { API_BASE_URL } from "../services/api";
+import { queryClient } from "../lib/queryClient";
 
 const Login = () => {
   const [username, setUsername] = useState("");
@@ -35,6 +32,8 @@ const Login = () => {
 
       // For the web client the backend returns no refresh token in the body;
       // it is stored in an httpOnly cookie instead.
+      queryClient.clear();
+      dispatch(setCurrentUser(null));
       dispatch(
         setTokens({
           access: response.data.access,

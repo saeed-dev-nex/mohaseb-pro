@@ -18,6 +18,17 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import Http404
+from django.views.static import serve
+import posixpath
+
+
+def serve_public_media(request, path, **kwargs):
+    # Normalize before checking: static.serve also resolves dot segments.
+    normalized = posixpath.normpath('/' + path.replace('\\', '/')).lstrip('/')
+    if normalized.split('/', 1)[0].lower() in {'customer_docs', 'chat_files'}:
+        raise Http404
+    return serve(request, path, **kwargs)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -25,4 +36,4 @@ urlpatterns = [
 ]
 
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.MEDIA_URL, view=serve_public_media, document_root=settings.MEDIA_ROOT)

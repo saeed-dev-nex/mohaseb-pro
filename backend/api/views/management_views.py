@@ -5,6 +5,8 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import BasePermission, IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.exceptions import ValidationError
+from collections.abc import Mapping
 from django.db.models import Sum, Count, Q, OuterRef, Subquery, DecimalField, Value, Case, When, F, ExpressionWrapper
 from django.db.models.functions import Coalesce
 from django.db import transaction, connection
@@ -39,7 +41,8 @@ from ..audit import snapshot, record_audit, is_invoice_content_version
 
 
 
-from .common import HasModuleAccess
+from .common import HasModuleAccess, IsManagerOrAdmin, IsSuperuser
+from ..module_access import effective_modules
 
 class DashboardViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
@@ -53,12 +56,25 @@ class DashboardViewSet(viewsets.ViewSet):
             within_days = min(90, max(1, int(request.query_params.get('days', 7))))
         except (TypeError, ValueError):
             within_days = 7
-        return Response(build_reminders(within_days=within_days))
+        modules = effective_modules(request.user)
+        if 'reports' not in modules:
+            return Response({'today': timezone.localdate().isoformat(), 'within_days': within_days, 'totals': {}})
+        digest = build_reminders(within_days=within_days)
+        allowed_sections = set()
+        if 'invoices' in modules:
+            allowed_sections.update(('overdue_invoices', 'due_soon_invoices'))
+        if 'cheques' in modules:
+            allowed_sections.update(('cheques_due', 'cheques_overdue', 'bounced_cheques'))
+        digest = {key: value for key, value in digest.items()
+                  if key in allowed_sections or key in ('today', 'within_days', 'totals')}
+        digest['totals'] = {key: value for key, value in digest['totals'].items()
+                            if any(key.startswith(section + '_') for section in allowed_sections)}
+        return Response(digest)
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        now = timezone.now()
-        today = date.today()
+        now = timezone.localtime()
+        today = now.date()
 
         total_customers = Customer.objects.count()
         total_invoices = Invoice.objects.count()
@@ -175,7 +191,7 @@ class DashboardViewSet(viewsets.ViewSet):
             type='outgoing', status='pending'
         ).aggregate(t=Sum('amount'))['t'] or 0
 
-        return Response({
+        data = {
             'total_customers': total_customers,
             'total_invoices': total_invoices,
             'total_revenue': int(total_revenue),
@@ -194,7 +210,28 @@ class DashboardViewSet(viewsets.ViewSet):
             'upcoming_cheques': upcoming_cheques_data,
             'pending_incoming_cheques_amount': int(pending_incoming_cheques_amount),
             'pending_outgoing_cheques_amount': int(pending_outgoing_cheques_amount),
-        })
+        }
+        # Keep the landing accessible, exposing only the caller's modules.
+        modules = effective_modules(request.user)
+        allowed = set()
+        if 'customers' in modules:
+            allowed.add('total_customers')
+        if 'invoices' in modules:
+            allowed.update(('total_invoices', 'pending_invoices', 'paid_invoices', 'recent_invoices'))
+        if 'reports' in modules:
+            if 'invoices' in modules:
+                allowed.update(('total_revenue', 'total_commission', 'overdue_invoices', 'overdue_amount', 'overdue_items'))
+                if 'services' in modules:
+                    allowed.add('top_services')
+                if 'customers' in modules:
+                    allowed.add('top_customers')
+            if 'expenses' in modules:
+                allowed.add('total_expenses')
+            if {'invoices', 'expenses'} <= modules:
+                allowed.update(('net_profit', 'monthly_revenue'))
+            if 'cheques' in modules:
+                allowed.update(('upcoming_cheques', 'pending_incoming_cheques_amount', 'pending_outgoing_cheques_amount'))
+        return Response({key: value for key, value in data.items() if key in allowed})
 
 class StaffViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasModuleAccess]
@@ -207,6 +244,12 @@ class StaffViewSet(viewsets.ModelViewSet):
         if active == 'true':
             qs = qs.filter(is_active=True)
         return qs
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        if self.action == 'performance' and 'reports' not in effective_modules(request.user):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('دسترسی به ماژول گزارشات لازم است.')
 
     @action(detail=True, methods=['get'])
     def performance(self, request, pk=None):
@@ -251,19 +294,60 @@ class UserViewSet(viewsets.ModelViewSet):
         return User.objects.all().order_by('id')
 
     def get_permissions(self):
-        # Only superusers/admins can create/delete/list users
-        # Everyone can read /me/
+        # User management, including custom actions, is superuser-only.
         if self.action == 'me':
             return [IsAuthenticated()]
-        return [IsAdminUser()]
+        return [IsSuperuser()]
 
+    def get_serializer(self, *args, **kwargs):
+        data = kwargs.get('data')
+        if isinstance(data, Mapping) and 'role' in data:
+            role = data['role']
+            if role not in ('admin', 'manager', 'operator'):
+                raise ValidationError({'role': ['نقش انتخاب‌شده معتبر نیست.']})
+            data = dict(data.items())
+            data.pop('role')
+            data['is_superuser'] = role == 'admin'
+            data['is_staff'] = role in ('admin', 'manager')
+            kwargs['data'] = data
+        return super().get_serializer(*args, **kwargs)
+
+    def lock_active_admins(self):
+        # Lock the same ordered set for updates/deletes so two requests cannot
+        # concurrently remove each other's last active administrator.
+        return list(User.objects.select_for_update().filter(is_superuser=True, is_active=True).order_by('pk'))
+
+    def validate_account_change(self, user, *, is_superuser, is_active):
+        losing_access = not is_superuser or not is_active
+        if user.pk == self.request.user.pk and losing_access:
+            raise ValidationError({'detail': 'نمی‌توانید دسترسی مدیریتی حساب خود را غیرفعال کنید.'})
+        if user.is_superuser and user.is_active and losing_access:
+            if not User.objects.filter(is_superuser=True, is_active=True).exclude(pk=user.pk).exists():
+                raise ValidationError({'detail': 'حداقل یک ادمین فعال باید باقی بماند.'})
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        self.lock_active_admins()
+        return super().update(request, *args, **kwargs)
+
+    def perform_update(self, serializer):
+        self.validate_account_change(
+            serializer.instance,
+            is_superuser=serializer.validated_data.get('is_superuser', serializer.instance.is_superuser),
+            is_active=serializer.validated_data.get('is_active', serializer.instance.is_active),
+        )
+        serializer.save()
+
+    @transaction.atomic
     def destroy(self, request, *args, **kwargs):
+        self.lock_active_admins()
         user = self.get_object()
         if user == request.user:
             return Response(
                 {'error': 'نمی‌توانید حساب خود را حذف کنید'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        self.validate_account_change(user, is_superuser=False, is_active=False)
         user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -273,7 +357,7 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['get', 'put'], permission_classes=[IsAdminUser])
+    @action(detail=True, methods=['get', 'put'], permission_classes=[IsSuperuser])
     def module_access(self, request, pk=None):
         """Read or update a user's module restriction row (stage 6).
 
@@ -313,7 +397,8 @@ class UserViewSet(viewsets.ModelViewSet):
             'access': serializer.data,
         })
 
-    @action(detail=False, methods=['post'], permission_classes=[IsAdminUser])
+    @action(detail=False, methods=['post'], permission_classes=[IsSuperuser])
+    @transaction.atomic
     def set_role(self, request):
         """
         Quick role assignment.
@@ -321,35 +406,40 @@ class UserViewSet(viewsets.ModelViewSet):
         """
         user_id = request.data.get('user_id')
         role = request.data.get('role')
+        if role not in ('admin', 'manager', 'operator'):
+            raise ValidationError({'role': ['نقش انتخاب‌شده معتبر نیست.']})
+        self.lock_active_admins()
         try:
             user = User.objects.get(id=user_id)
-        except User.DoesNotExist:
+        except (User.DoesNotExist, TypeError, ValueError):
             return Response({'error': 'کاربر یافت نشد'}, status=404)
 
-        if role == 'admin':
-            user.is_superuser = True
-            user.is_staff = True
-        elif role == 'manager':
-            user.is_superuser = False
-            user.is_staff = True
-        else:  # operator
-            user.is_superuser = False
-            user.is_staff = False
-        user.save()
-        return Response(UserSerializer(user).data)
+        serializer = self.get_serializer(user, data={'role': role}, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsManagerOrAdmin, HasModuleAccess]
+    module_name = 'reports'
     serializer_class = AuditLogSerializer
 
     def get_queryset(self):
         qs = AuditLog.objects.select_related('user').all()
+        modules = effective_modules(self.request.user)
+        object_modules = {
+            'customer': 'customers', 'document': 'customers', 'invoice': 'invoices',
+            'invoicepayment': 'invoices', 'expense': 'expenses', 'cheque': 'cheques',
+            'service': 'services', 'staff': 'staff',
+        }
+        if not self.request.user.is_superuser:
+            qs = qs.filter(object_type__in=[name for name, module in object_modules.items() if module in modules])
         object_type = self.request.query_params.get('object_type', '')
         object_id = self.request.query_params.get('object_id', '')
-        if not (self.request.user.is_staff or self.request.user.is_superuser) and not (object_type and object_id):
-            return AuditLog.objects.none()
         if object_type:
             qs = qs.filter(object_type=object_type)
         if object_id:
             qs = qs.filter(object_id=object_id)
-        return qs[:500]
+        # Detail lookup must remain filterable; slicing it makes DRF's get()
+        # raise TypeError (which get_object_or_404 turns into a false 404).
+        return qs[:500] if self.action == 'list' else qs

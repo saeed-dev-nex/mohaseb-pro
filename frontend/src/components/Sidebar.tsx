@@ -80,9 +80,10 @@ const Sidebar = ({
   const isManager = Boolean(currentUser?.is_staff || currentUser?.is_superuser);
   const [editRequestCount, setEditRequestCount] = useState(0);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const canChat = hasModule(currentUser, "chat");
 
   useEffect(() => {
-    if (!currentUser) return undefined;
+    if (!currentUser || !canChat) { setChatUnreadCount(0); return undefined; }
     chatAPI
       .unread()
       .then(({ data }) => {
@@ -98,7 +99,7 @@ const Sidebar = ({
       setChatUnreadCount(event.detail?.count || 0);
     window.addEventListener("mohaseb:chat-unread", syncCount);
     return () => window.removeEventListener("mohaseb:chat-unread", syncCount);
-  }, [currentUser?.id]);
+  }, [currentUser?.id, canChat]);
 
   useEffect(() => {
     if (!isManager) {

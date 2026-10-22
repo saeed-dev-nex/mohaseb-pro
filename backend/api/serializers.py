@@ -1,6 +1,9 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from django.core.exceptions import ObjectDoesNotExist
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ObjectDoesNotExist, ValidationError as DjangoValidationError
+from django.db import transaction
+from decimal import Decimal
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from .models import (
@@ -9,6 +12,7 @@ from .models import (
     Cheque, InvoiceSettings, ChatMessage, SocialNetwork, UserModuleAccess
 )
 from .validators import validate_customer_identifier, validate_national_code_field, validate_tax_id
+from .services.money import invoice_payment_totals, final_amount, office_card_fee, MAX_INVOICE_AMOUNT, MAX_ITEM_AMOUNT
 
 
 class SafeTokenRefreshSerializer(TokenRefreshSerializer):
@@ -56,6 +60,17 @@ class UserSerializer(serializers.ModelSerializer):
             return 'manager'
         return 'operator'
 
+    def validate(self, attrs):
+        password = attrs.get('password')
+        if password:
+            candidate = User(**{field: attrs.get(field, getattr(self.instance, field, ''))
+                                for field in ('username', 'first_name', 'last_name', 'email')})
+            try:
+                validate_password(password, user=candidate)
+            except DjangoValidationError as exc:
+                raise serializers.ValidationError({'password': exc.messages})
+        return attrs
+
     def create(self, validated_data):
         password = validated_data.pop('password', None)
         user = User(**validated_data)
@@ -77,20 +92,83 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class DocumentSerializer(serializers.ModelSerializer):
+    file = serializers.FileField(write_only=True)
+    file_name = serializers.SerializerMethodField()
     file_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Document
-        fields = ['id', 'customer', 'invoice', 'title', 'file', 'file_url', 'description', 'tags', 'file_path', 'uploaded_at', 'updated_at']
+        fields = ['id', 'customer', 'invoice', 'title', 'file', 'file_name', 'file_url', 'description', 'tags', 'uploaded_at', 'updated_at']
         read_only_fields = ['uploaded_at', 'updated_at', 'file_url']
 
+    def get_file_name(self, obj):
+        return obj.file.name.replace('\\', '/').rsplit('/', 1)[-1] if obj.file else ''
+
     def get_file_url(self, obj):
-        if obj.file and hasattr(obj.file, 'url'):
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.file.url)
-            return obj.file.url
+        if obj.file:
+            from rest_framework.reverse import reverse
+            return reverse('document-download', args=[obj.pk], request=self.context.get('request'))
         return None
+
+    def validate_file(self, value):
+        import codecs
+        import re
+        from pathlib import Path
+        from zipfile import BadZipFile, ZipFile
+
+        if value.size > 20 * 1024 * 1024:
+            raise serializers.ValidationError('حداکثر حجم سند ۲۰ مگابایت است.')
+        extension = Path(value.name).suffix.lower()
+        signatures = {
+            '.pdf': (b'%PDF-',), '.jpg': (b'\xff\xd8\xff',), '.jpeg': (b'\xff\xd8\xff',),
+            '.png': (b'\x89PNG\r\n\x1a\n',), '.gif': (b'GIF87a', b'GIF89a'),
+            '.bmp': (b'BM',), '.tif': (b'II*\x00', b'MM\x00*'), '.tiff': (b'II*\x00', b'MM\x00*'),
+            '.doc': (b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1',),
+            '.xls': (b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1',),
+            '.ppt': (b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1',),
+        }
+        office = {'.docx': 'word/', '.xlsx': 'xl/', '.pptx': 'ppt/'}
+        allowed = set(signatures) | set(office) | {'.webp', '.txt', '.csv'}
+        if extension not in allowed:
+            raise serializers.ValidationError('نوع فایل مجاز نیست؛ سند، تصویر یا فایل متنی معتبر انتخاب کنید.')
+        try:
+            value.seek(0)
+            header = value.read(4096)
+            valid = True
+            if extension in signatures:
+                valid = header.startswith(signatures[extension])
+            elif extension == '.webp':
+                valid = header.startswith(b'RIFF') and header[8:12] == b'WEBP'
+            elif extension in office:
+                try:
+                    with ZipFile(value) as archive:
+                        names = archive.namelist()
+                        valid = '[Content_Types].xml' in names and any(name.startswith(office[extension]) for name in names)
+                        valid = valid and not any(name.lower().endswith('vbaproject.bin') for name in names)
+                except BadZipFile:
+                    valid = False
+            else:
+                try:
+                    encoding = 'utf-16' if header.startswith((b'\xff\xfe', b'\xfe\xff')) else 'utf-8-sig'
+                    text = codecs.getincrementaldecoder(encoding)().decode(header, final=value.size <= len(header))
+                    valid = not re.search(r'<\s*(?:!doctype|html\b|svg\b|script\b|iframe\b|object\b|embed\b)', text, re.I)
+                    valid = valid and not header.startswith((b'MZ', b'\x7fELF', b'#!')) and '\x00' not in text
+                except UnicodeError:
+                    valid = False
+            if not valid:
+                raise serializers.ValidationError('محتوای فایل با نوع مجاز آن مطابقت ندارد.')
+        finally:
+            value.seek(0)
+        return value
+
+    def validate(self, attrs):
+        if 'file_path' in self.initial_data:
+            raise serializers.ValidationError({'file_path': 'مسیر فایل توسط سرور تعیین می‌شود.'})
+        customer = attrs.get('customer', getattr(self.instance, 'customer', None))
+        invoice = attrs.get('invoice', getattr(self.instance, 'invoice', None))
+        if invoice and customer and invoice.customer_id != customer.pk:
+            raise serializers.ValidationError({'invoice': 'فاکتور باید متعلق به همین مشتری باشد.'})
+        return attrs
 
 
 class BackupConfigSerializer(serializers.ModelSerializer):
@@ -161,17 +239,27 @@ class ChatMessageSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class CustomerFinancialListSerializer(serializers.ListSerializer):
+    def to_representation(self, data):
+        from django.db.models import prefetch_related_objects
+        rows = list(data.all() if hasattr(data, 'all') else data)
+        prefetch_related_objects(rows, 'invoice_set__payments')
+        return super().to_representation(rows)
+
+
 class CustomerListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list views (also handles create/update)"""
     total_invoices = serializers.SerializerMethodField(read_only=True)
     total_paid = serializers.SerializerMethodField(read_only=True)
+    total_pending = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Customer
+        list_serializer_class = CustomerFinancialListSerializer
         fields = [
             'id', 'name', 'phone', 'email', 'national_id',
             'address', 'notes', 'created_at',
-            'total_invoices', 'total_paid',
+            'total_invoices', 'total_paid', 'total_pending',
         ]
         read_only_fields = ['created_at', 'total_invoices', 'total_paid']
 
@@ -179,14 +267,10 @@ class CustomerListSerializer(serializers.ModelSerializer):
         return obj.invoice_set.count()
 
     def get_total_paid(self, obj):
-        total = 0
-        for invoice in obj.invoice_set.all().prefetch_related('payments'):
-            payments = list(invoice.payments.all())
-            if payments:
-                total += sum(int(payment.amount) for payment in payments)
-            elif invoice.status == 'paid':
-                total += int(invoice.final_amount)
-        return total
+        return int(obj.total_paid)
+
+    def get_total_pending(self, obj):
+        return int(obj.total_pending)
 
     def validate_national_id(self, value):
         """Normalize empty to None, then verify کد ملی checksum / شناسه ملی format."""
@@ -216,6 +300,7 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Customer
+        list_serializer_class = CustomerFinancialListSerializer
         fields = [
             'id', 'name', 'phone', 'email', 'address',
             'national_id', 'notes', 'created_at', 'updated_at',
@@ -227,21 +312,10 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
         return obj.invoice_set.count()
 
     def get_total_paid(self, obj):
-        total = 0
-        for invoice in obj.invoice_set.all().prefetch_related('payments'):
-            payments = list(invoice.payments.all())
-            if payments:
-                total += sum(int(payment.amount) for payment in payments)
-            elif invoice.status == 'paid':
-                total += int(invoice.final_amount)
-        return total
+        return int(obj.total_paid)
 
     def get_total_pending(self, obj):
-        total = 0
-        for invoice in obj.invoice_set.filter(status='pending').all().prefetch_related('payments'):
-            recorded = sum(int(payment.amount) for payment in invoice.payments.all())
-            total += max(0, int(invoice.final_amount) - recorded)
-        return total
+        return int(obj.total_pending)
 
     def validate_national_id(self, value):
         if value == '':
@@ -345,13 +419,13 @@ class InvoiceSerializer(serializers.ModelSerializer):
     remaining_amount = serializers.SerializerMethodField()
     # Make financial fields optional with defaults so missing fields don't cause 400s
     commission_total = serializers.DecimalField(
-        max_digits=15, decimal_places=0, required=False, default=0
+        max_digits=15, decimal_places=0, required=False, default=0, min_value=0
     )
     discount = serializers.DecimalField(
-        max_digits=15, decimal_places=0, required=False, default=0
+        max_digits=15, decimal_places=0, required=False, default=0, min_value=0
     )
     tax = serializers.DecimalField(
-        max_digits=5, decimal_places=2, required=False, default=0
+        max_digits=5, decimal_places=2, required=False, default=0, min_value=0, max_value=100
     )
 
     class Meta:
@@ -367,7 +441,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             # vehicle / custom fields
             'vehicle_plate', 'vehicle_vin', 'vehicle_model', 'vehicle_type',
             'vehicle_year', 'custom_fields', 'created_by',
-            'green_card_owner_name', 'green_card_owner_national_id',
+            'green_card_owner_name', 'green_card_owner_national_id', 'tags',
         ]
         read_only_fields = ['invoice_number', 'created_at', 'updated_at', 'created_by']
 
@@ -391,7 +465,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
       request = self.context.get('request')
       if not request or not request.user.is_authenticated:
           return None
-      edit_request = obj.edit_requests.filter(requested_by=request.user).order_by('-created_at', '-pk').first()
+      edit_request = next(iter(sorted((row for row in obj.edit_requests.all() if row.requested_by_id == request.user.pk),
+                                     key=lambda row: (row.created_at, row.pk), reverse=True)), None)
       return edit_request.status if edit_request else None
 
     def get_can_edit(self, obj):
@@ -400,56 +475,83 @@ class InvoiceSerializer(serializers.ModelSerializer):
           return False
       if obj.status != 'paid' or request.user.is_staff or request.user.is_superuser:
           return True
-      return obj.edit_requests.filter(requested_by=request.user, status='approved').exists()
+      return any(row.requested_by_id == request.user.pk and row.status == 'approved' for row in obj.edit_requests.all())
 
     def get_final_amount(self, obj):
       return int(obj.final_amount)
 
     def get_paid_amount(self, obj):
-      from django.db.models import Sum
-      recorded = obj.payments.aggregate(total=Sum('amount'))['total']
-      recorded = int(recorded) if recorded is not None else 0
-      if obj.status == 'paid':
-          # Fully paid is fully paid: once the invoice is settled, the
-          # paid amount is the full final amount even when only part of
-          # it was recorded as staged payments beforehand.
-          return max(recorded, int(obj.final_amount))
-      return recorded
+      return int(invoice_payment_totals(obj)[0])
 
     def get_remaining_amount(self, obj):
-      return max(0, self.get_final_amount(obj) - self.get_paid_amount(obj))
+      return int(invoice_payment_totals(obj)[1])
 
     def _calc_total(self, items_data):
-        total = 0
+        total = Decimal(0)
         for item_data in items_data:
             qty = item_data.get('quantity', 1)
             mp = item_data.get('main_price', 0)
             ep = item_data.get('extra_price', 0)
-            total += (int(mp) + int(ep)) * int(qty)
+            total += (Decimal(mp) + Decimal(ep)) * qty
         return total
+
+    def validate_items(self, value):
+        if not value:
+            raise serializers.ValidationError('حداقل یک ردیف خدمات لازم است.')
+        return value
+
+    def _validated_total(self, attrs):
+        if 'items' in attrs:
+            items = attrs['items']
+        elif self.instance:
+            items = [{'quantity': item.quantity, 'main_price': item.main_price, 'extra_price': item.extra_price}
+                     for item in self.instance.items.all() if not item.is_office_card_fee]
+        else:
+            items = []
+        total = self._calc_total(items)
+        source = attrs.get('card_payment_source', getattr(self.instance, 'card_payment_source', 'customer'))
+        threshold = InvoiceSettings.objects.filter(pk=1).values_list('office_card_fee_threshold', flat=True).first() or 0
+        fee = office_card_fee(total, source, threshold)
+        if fee > MAX_ITEM_AMOUNT or total + fee > MAX_INVOICE_AMOUNT or total < 0:
+            raise serializers.ValidationError({'items': 'جمع مبالغ از محدودهٔ مجاز بیشتر است.'})
+        total += fee
+        amount = final_amount(total, *(attrs.get(field, getattr(self.instance, field, 0))
+                                      for field in ('tax', 'discount', 'commission_total')))
+        if not 0 <= amount <= MAX_INVOICE_AMOUNT:
+            raise serializers.ValidationError({'discount': 'مبلغ نهایی باید نامنفی و در محدودهٔ مجاز باشد.'})
+        return total
+
+    def validate(self, attrs):
+        # Client totals are never trusted; include the generated fee before checking limits.
+        attrs['total_amount'] = self._validated_total(attrs)
+        return attrs
 
     def _sync_office_card_fee(self, invoice, items_total):
         """Rebuild the generated office-card fee row from trusted invoice data."""
         InvoiceItem.objects.filter(invoice=invoice, is_office_card_fee=True).delete()
-        threshold = int(InvoiceSettings.load().office_card_fee_threshold or 0)
-        fee = 0
-        if invoice.card_payment_source == 'office' and threshold > 0 and items_total > threshold:
-            # 10,000 toman for each 1,000,000 toman, prorated to whole toman.
-            fee = (int(items_total) * 10_000) // 1_000_000
-            if fee:
-                InvoiceItem.objects.create(
-                    invoice=invoice,
-                    service_title_snapshot='واریزی',
-                    quantity=1,
-                    main_price=fee,
-                    extra_price=0,
-                    commission=0,
-                    is_office_card_fee=True,
-                )
-        invoice.total_amount = int(items_total) + fee
+        threshold = InvoiceSettings.objects.filter(pk=1).values_list('office_card_fee_threshold', flat=True).first() or 0
+        fee = office_card_fee(items_total, invoice.card_payment_source, threshold)
+        if fee:
+            InvoiceItem.objects.create(
+                invoice=invoice,
+                service_title_snapshot='واریزی',
+                quantity=1,
+                main_price=fee,
+                extra_price=0,
+                commission=0,
+                is_office_card_fee=True,
+            )
+        invoice.total_amount = Decimal(items_total) + fee
+        try:
+            invoice.clean_fields(exclude=['customer', 'created_by', 'paid_by'])
+            invoice.clean()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict)
         invoice.save(update_fields=['total_amount', 'updated_at'])
 
+    @transaction.atomic
     def create(self, validated_data):
+        validated_data = self.validate(validated_data)
         items_data = validated_data.pop('items')
         # commission_total comes directly from validated_data (manual input)
         invoice = Invoice.objects.create(**validated_data)
@@ -462,7 +564,9 @@ class InvoiceSerializer(serializers.ModelSerializer):
         self._sync_office_card_fee(invoice, total)
         return invoice
 
+    @transaction.atomic
     def update(self, instance, validated_data):
+        validated_data = self.validate(validated_data)
         items_data = validated_data.pop('items', None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -480,6 +584,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
         ])
         instance.save()
         self._sync_office_card_fee(instance, items_total)
+        if hasattr(instance, '_prefetched_objects_cache'):
+            instance._prefetched_objects_cache.pop('items', None)
         return instance
 
     def validate_green_card_owner_national_id(self, value):

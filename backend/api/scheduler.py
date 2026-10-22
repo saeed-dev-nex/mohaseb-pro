@@ -1,68 +1,137 @@
 """In-process scheduled database backups for the single-server deployment."""
 
+import errno
 import json
 import logging
 import os
 import threading
+from contextlib import contextmanager
+from datetime import timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 _backup_lock = threading.Lock()
+_startup_lock = threading.Lock()
+_scheduler_worker = None
+_scheduler_pid = None
+BUSINESS_TIMEZONE = ZoneInfo(getattr(settings, 'TIME_ZONE', 'Asia/Tehran'))
+
+
+def start_backup_scheduler():
+    """App registry reloads must not create another worker in this process."""
+    global _scheduler_worker, _scheduler_pid
+    with _startup_lock:
+        pid = os.getpid()
+        if _scheduler_pid == pid and _scheduler_worker is not None and _scheduler_worker.is_alive():
+            return _scheduler_worker
+        worker = threading.Thread(
+            target=backup_scheduler_loop, name='mohaseb-auto-backup', daemon=True,
+        )
+        worker.start()
+        _scheduler_worker, _scheduler_pid = worker, pid
+        return worker
+
+
+@contextmanager
+def _interprocess_backup_lock():
+    """Serialize checks for a shared SQLite database, including browser fallbacks.
+
+    Keep the lock file: unlinking it allows two processes to lock different
+    inodes. OS-owned locks are released automatically when a process exits.
+    """
+    database = Path(settings.DATABASES['default']['NAME']).resolve()
+    lock_path = database.with_name(database.name + '.backup.lock')
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    with os.fdopen(descriptor, 'r+b', buffering=0) as lock_file:
+        # Windows locks one byte, even when the file was just created.
+        if os.fstat(lock_file.fileno()).st_size == 0:
+            lock_file.write(b'\0')
+        lock_file.seek(0)
+        acquired = False
+        try:
+            try:
+                if os.name == 'nt':
+                    import msvcrt
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                acquired = True
+            except OSError as error:
+                if error.errno not in {errno.EACCES, errno.EAGAIN, errno.EDEADLK}:
+                    raise
+            yield acquired
+        finally:
+            if acquired:
+                lock_file.seek(0)
+                if os.name == 'nt':
+                    import msvcrt
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def run_due_backup():
-    """Create one scheduled backup when the configured local-time window is due."""
+    """Check under both locks, re-reading config after the process lock is held."""
+    with _backup_lock:
+        try:
+            with _interprocess_backup_lock() as acquired:
+                if not acquired:
+                    return {'ran': False, 'reason': 'another backup check is running'}
+                return _run_due_backup_locked()
+        except Exception:
+            logger.exception('Scheduled Mohaseb backup check failed')
+            return {'ran': False, 'reason': 'backup failed; see server logs'}
+
+
+def _run_due_backup_locked():
+    """Use the most recent due slot, catching up once after a missed Monday."""
     from .backup_utils import build_backup
     from .models import BackupConfig
 
-    with _backup_lock:
-        config = BackupConfig.load()
-        if not config.auto_backup or not config.backup_path:
-            return {'ran': False, 'reason': 'auto backup disabled or path not set'}
-        if config.backup_frequency == 'manual':
-            return {'ran': False, 'reason': 'manual backup frequency'}
+    config = BackupConfig.load()
+    if not config.auto_backup or not config.backup_path:
+        return {'ran': False, 'reason': 'auto backup disabled or path not set'}
+    if config.backup_frequency == 'manual':
+        return {'ran': False, 'reason': 'manual backup frequency'}
+    if config.backup_frequency not in {'daily', 'weekly'} or not 0 <= config.backup_hour <= 23:
+        raise ValueError('Invalid automatic backup schedule')
 
-        now = timezone.localtime()
-        if now.hour < config.backup_hour:
-            return {'ran': False, 'reason': f'waiting for backup hour ({config.backup_hour})'}
-        if config.backup_frequency == 'weekly' and now.weekday() != 0:
-            return {'ran': False, 'reason': 'weekly backup runs on Monday'}
-        if not os.path.isdir(config.backup_path):
-            return {'ran': False, 'reason': 'backup path does not exist'}
+    now = timezone.localtime(timezone.now(), BUSINESS_TIMEZONE)
+    due_at = now.replace(hour=config.backup_hour, minute=0, second=0, microsecond=0)
+    if config.backup_frequency == 'weekly':
+        due_at -= timedelta(days=now.weekday())
+    if now < due_at:
+        return {'ran': False, 'reason': 'waiting for scheduled backup time'}
+    if config.last_backup_at and config.last_backup_at >= due_at:
+        return {'ran': False, 'reason': 'already backed up for this schedule'}
+    if not os.path.isdir(config.backup_path):
+        logger.error('Scheduled Mohaseb backup destination is unavailable')
+        return {'ran': False, 'reason': 'backup destination unavailable'}
 
-        if config.last_backup_at:
-            last_local = timezone.localtime(config.last_backup_at)
-            if config.backup_frequency == 'weekly':
-                if last_local.isocalendar()[:2] == now.isocalendar()[:2]:
-                    return {'ran': False, 'reason': 'already backed up this week'}
-            elif last_local.date() == now.date():
-                return {'ran': False, 'reason': 'already backed up today'}
+    filename = f"mohaseb_backup_{now.strftime('%Y%m%d_%H%M%S_%f')}.json"
+    destination = os.path.join(config.backup_path, filename)
+    temporary = destination + f'.{os.getpid()}.tmp'
+    try:
+        payload = json.dumps(build_backup(), ensure_ascii=False, indent=2, default=str)
+        with open(temporary, 'w', encoding='utf-8') as backup_file:
+            backup_file.write(payload)
+            backup_file.flush()
+            os.fsync(backup_file.fileno())
+        os.replace(temporary, destination)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
 
-        filename = f"mohaseb_backup_{now.strftime('%Y%m%d_%H%M%S')}.json"
-        destination = os.path.join(config.backup_path, filename)
-        temporary = destination + f'.{os.getpid()}.tmp'
-        try:
-            payload = json.dumps(build_backup(), ensure_ascii=False, indent=2, default=str)
-            with open(temporary, 'w', encoding='utf-8') as backup_file:
-                backup_file.write(payload)
-                backup_file.flush()
-                os.fsync(backup_file.fileno())
-            os.replace(temporary, destination)
-        except OSError as error:
-            try:
-                Path(temporary).unlink(missing_ok=True)
-            except OSError:
-                pass
-            logger.exception('Scheduled Mohaseb backup could not be saved')
-            return {'ran': False, 'reason': f'backup write failed: {error}'}
-
-        config.last_backup_at = timezone.now()
-        config.last_backup_path = destination
-        config.save(update_fields=['last_backup_at', 'last_backup_path'])
-        logger.info('Scheduled Mohaseb backup saved to %s', destination)
-        return {'ran': True, 'saved': True, 'path': destination, 'filename': filename}
+    config.last_backup_at = timezone.now()
+    config.last_backup_path = destination
+    config.save(update_fields=['last_backup_at', 'last_backup_path'])
+    logger.info('Scheduled Mohaseb backup completed')
+    return {'ran': True, 'saved': True, 'path': destination, 'filename': filename}
 
 
 def backup_scheduler_loop():

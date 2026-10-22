@@ -65,7 +65,12 @@ def decrypt_backup(envelope, passphrase):
         salt = base64.b64decode(envelope['salt'], validate=True)
         nonce = base64.b64decode(envelope['nonce'], validate=True)
         ciphertext = base64.b64decode(envelope['ciphertext'], validate=True)
-        iterations = int(envelope.get('iterations') or _PBKDF2_ITERATIONS)
+        iterations = envelope.get('iterations', _PBKDF2_ITERATIONS)
+        # Envelope metadata is untrusted: reject excessive work before deriving a key.
+        if type(iterations) is not int or not 100_000 <= iterations <= 2_000_000:
+            raise ValueError('Invalid KDF work factor')
+        if len(salt) != 16 or len(nonce) != 12 or len(ciphertext) < 16:
+            raise ValueError('Invalid encryption parameters')
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError('ساختار فایل بکاپ رمزنگاری‌شده معتبر نیست.') from error
     key = _derive_backup_key(passphrase, salt, iterations)

@@ -7,16 +7,20 @@ prefetched relations for every invoice and every status.
 """
 
 import io
+from decimal import Decimal
 
 from django.db.models import F, Sum
+from django.utils import timezone
 
 from ..models import Expense, Invoice, InvoiceItem, InvoicePayment
+from .money import payment_totals, safe_spreadsheet_cell
 
 METHOD_LABELS = dict(InvoicePayment.METHOD_CHOICES)
 
 
 def _filter_invoices(date_from='', date_to='', status_filter='', customer_search=''):
-    qs = Invoice.objects.select_related('customer', 'created_by', 'paid_by').all()
+    qs = Invoice.objects.select_related('customer', 'created_by', 'paid_by').prefetch_related(
+        'payments__created_by', 'items__service', 'edit_requests').all()
     if date_from:
         qs = qs.filter(date__date__gte=date_from)
     if date_to:
@@ -44,17 +48,11 @@ def _paid_amounts(invoice_ids):
         .values('invoice_id')
         .annotate(total=Sum('amount'))
     )
-    return {row['invoice_id']: int(row['total'] or 0) for row in rows}
+    return {row['invoice_id']: Decimal(row['total'] or 0) for row in rows}
 
 
 def _paid_amount_with_legacy_fallback(invoice, paid_amounts):
-    paid = paid_amounts.get(invoice.id, 0)
-    if invoice.status == 'paid':
-        # Settled invoices count as fully paid: legacy records marked paid
-        # without payment rows, and invoices settled after staged payments
-        # whose rows sum to less than the final amount.
-        paid = max(paid, int(invoice.final_amount))
-    return paid
+    return payment_totals(invoice.final_amount, invoice.status, paid_amounts.get(invoice.id, 0))[0]
 
 
 def build_report_data(date_from='', date_to='', status_filter='', customer_search=''):
@@ -92,11 +90,11 @@ def build_report_data(date_from='', date_to='', status_filter='', customer_searc
         if invoice.status == 'paid' or invoice.commission_paid:
             total_commission += int(invoice.commission_total)
         if invoice.status == 'pending':
-            pending_amount += max(0, final - paid_total)
+            pending_amount += payment_totals(invoice.final_amount, invoice.status, paid_amounts.get(invoice.id, 0))[1]
         if invoice.status != 'cancelled':
             invoice_amount += final
 
-        month = invoice.date.strftime('%Y-%m') if invoice.date else 'نامشخص'
+        month = timezone.localtime(invoice.date).strftime('%Y-%m') if invoice.date else 'نامشخص'
         bucket = by_month.setdefault(month, {'count': 0, 'amount': 0, 'received': 0})
         bucket['count'] += 1
         bucket['amount'] += final
@@ -108,9 +106,12 @@ def build_report_data(date_from='', date_to='', status_filter='', customer_searc
             customer['count'] += 1
             customer['amount'] += final
 
-        status_bucket = by_status[invoice.status]
+        status_bucket = by_status.setdefault(invoice.status, {'label': invoice.get_status_display(), 'count': 0, 'amount': 0})
         status_bucket['count'] += 1
-        status_bucket['amount'] += max(0, final - paid_amounts.get(invoice.id, 0)) if invoice.status == 'pending' else final
+        status_bucket['amount'] += payment_totals(invoice.final_amount, invoice.status, paid_amounts.get(invoice.id, 0))[1] if invoice.status == 'pending' else final
+
+    for bucket in by_status.values():
+        bucket['amount'] = int(bucket['amount'])
 
     expenses = _filter_expenses(date_from, date_to)
     expense_total = expenses.aggregate(total=Sum('amount'))['total'] or 0
@@ -126,7 +127,7 @@ def build_report_data(date_from='', date_to='', status_filter='', customer_searc
         'expense_total': int(expense_total),
         'net_profit': int(total_commission - expense_total),
         'by_status': by_status,
-        'monthly': [{'month': month, **values} for month, values in sorted(by_month.items())],
+        'monthly': [{'month': month, **values, 'received': int(values['received'])} for month, values in sorted(by_month.items())],
         'top_customers': sorted(customer_totals.values(), key=lambda item: item['amount'], reverse=True)[:10],
         'top_services': [
             {'name': name, 'amount': amount}
@@ -152,10 +153,8 @@ def build_excel_bytes(date_from='', date_to='', status_filter='', customer_searc
     expense_rows = list(_filter_expenses(date_from, date_to).order_by('-date'))
     invoice_ids = [invoice.id for invoice in invoice_rows]
     paid_sums = _paid_amounts(invoice_ids)
-    # Preserve the historical semantics: a non-zero recorded sum wins; a paid
-    # invoice without payments counts at its full final amount.
     paid_amounts = {
-        invoice.id: (paid_sums.get(invoice.id) or (int(invoice.final_amount) if invoice.status == 'paid' else 0))
+        invoice.id: _paid_amount_with_legacy_fallback(invoice, paid_sums)
         for invoice in invoice_rows
     }
     received = sum(paid_amounts.values())
@@ -174,14 +173,14 @@ def build_excel_bytes(date_from='', date_to='', status_filter='', customer_searc
     sheets = [
         ('خلاصه', [
             ['شاخص', 'مقدار'], ['از تاریخ', date_from or 'همه'], ['تا تاریخ', date_to or 'امروز'],
-            ['تعداد فاکتور', len(invoice_rows)], ['مبلغ دریافت‌شده', received],
+            ['تعداد فاکتور', len(invoice_rows)], ['مبلغ دریافت‌شده', int(received)],
             ['کارمزد فاکتورهای پرداخت‌شده', commission],
             ['مبلغ هزینه‌ها', expense_total], ['سود خالص', commission - expense_total],
         ]),
         ('فاکتورها', [['شماره فاکتور', 'مشتری', 'تاریخ', 'وضعیت', 'مبلغ کل', 'کارمزد', 'مبلغ نهایی', 'مبلغ پرداخت‌شده', 'مانده', 'پرداخت‌کننده', 'صادرکننده']] + [
-            [inv.invoice_number, inv.customer.name if inv.customer else '', inv.date.strftime('%Y-%m-%d') if inv.date else '',
+            [inv.invoice_number, inv.customer.name if inv.customer else '', timezone.localtime(inv.date).strftime('%Y-%m-%d') if inv.date else '',
              inv.get_status_display(), int(inv.total_amount), int(inv.commission_total), int(inv.final_amount),
-             paid_amounts[inv.id], max(0, int(inv.final_amount) - paid_amounts[inv.id]),
+              int(paid_amounts[inv.id]), int(payment_totals(inv.final_amount, inv.status, paid_sums.get(inv.id, 0))[1]),
              inv.paid_by.get_full_name() or inv.paid_by.username if inv.paid_by else '',
              inv.created_by.get_full_name() or inv.created_by.username if inv.created_by else '']
             for inv in invoice_rows
@@ -194,7 +193,7 @@ def build_excel_bytes(date_from='', date_to='', status_filter='', customer_searc
         ('پرداخت‌ها', [['شماره فاکتور', 'مشتری', 'تاریخ پرداخت', 'روش پرداخت', 'مبلغ', 'ثبت‌کننده', 'توضیحات']] + [
             [payment.invoice.invoice_number,
              payment.invoice.customer.name if payment.invoice.customer else '',
-             payment.paid_at.strftime('%Y-%m-%d %H:%M') if payment.paid_at else '',
+              timezone.localtime(payment.paid_at).strftime('%Y-%m-%d %H:%M') if payment.paid_at else '',
              payment.get_method_display(), int(payment.amount),
              payment.created_by.get_full_name() or payment.created_by.username if payment.created_by else '',
              payment.note]
@@ -205,10 +204,11 @@ def build_excel_bytes(date_from='', date_to='', status_filter='', customer_searc
     workbook = Workbook()
     for index, (title, rows) in enumerate(sheets):
         worksheet = workbook.active if index == 0 else workbook.create_sheet()
+        assert worksheet is not None
         worksheet.title = title
         worksheet.sheet_view.rightToLeft = True
         for row in rows:
-            worksheet.append(row)
+            worksheet.append([safe_spreadsheet_cell(value) for value in row])
         worksheet.freeze_panes = 'A2'
 
     buffer = io.BytesIO()

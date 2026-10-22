@@ -41,12 +41,20 @@ from ..audit import snapshot, record_audit, is_invoice_content_version
 
 class IsSuperuser(BasePermission):
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and request.user.is_superuser)
+        return bool(request.user and request.user.is_authenticated and request.user.is_active and request.user.is_superuser)
 
 
 class IsManagerOrAdmin(BasePermission):
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser))
+        return bool(request.user and request.user.is_authenticated and request.user.is_active and (request.user.is_staff or request.user.is_superuser))
+
+
+class CanManageSettings(IsManagerOrAdmin):
+    """Settings writes require both the management role and its module."""
+
+    def has_permission(self, request, view):
+        from ..module_access import effective_modules
+        return super().has_permission(request, view) and 'settings' in effective_modules(request.user)
 
 
 class HasModuleAccess(BasePermission):
@@ -55,6 +63,8 @@ class HasModuleAccess(BasePermission):
     without a module name are not gated by this class."""
 
     def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated or not request.user.is_active:
+            return False
         module = getattr(view, 'module_name', None)
         if module is None:
             return True

@@ -5,7 +5,7 @@ import {
   Link,
   useSearchParams,
 } from "react-router-dom";
-import { customersAPI, documentsAPI, auditAPI } from "../services/api";
+import { customersAPI, documentsAPI, downloadDocumentFile, auditAPI } from "../services/api";
 
 const fmt = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0) + " تومان";
@@ -71,6 +71,7 @@ type CustomerDoc = {
   description?: string | null;
   file_url?: string | null;
   file?: string | null;
+  file_name?: string;
   uploaded_at: string;
   tags?: string[];
 };
@@ -95,9 +96,30 @@ type DocViewerProps = {
 };
 
 const DocViewer = ({ doc, onClose }: DocViewerProps) => {
-  const url = doc.file_url || doc.file;
-  const isImage = url && /\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(url);
-  const isPdf = url && /\.pdf$/i.test(url);
+  const [url, setUrl] = useState("");
+  const [mimeType, setMimeType] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let disposed = false;
+    let objectUrl = "";
+    setUrl("");
+    setMimeType("");
+    setError("");
+    documentsAPI.download(doc.id).then(({ data }) => {
+      if (disposed) return;
+      objectUrl = URL.createObjectURL(data);
+      setMimeType(data.type);
+      setUrl(objectUrl);
+    }).catch(() => {
+      if (!disposed) setError("دریافت فایل ممکن نشد. دسترسی خود را بررسی کنید.");
+    });
+    return () => {
+      disposed = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [doc.id]);
+  const isImage = /^image\/(jpeg|png|webp|gif|bmp|tiff)$/.test(mimeType);
+  const isPdf = mimeType === "application/pdf";
 
   return (
     <div
@@ -115,14 +137,15 @@ const DocViewer = ({ doc, onClose }: DocViewerProps) => {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <a
+          {url && <a
             href={url}
             target="_blank"
             rel="noreferrer"
+            download={!isImage && !isPdf ? doc.file_name || doc.title : undefined}
             className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all"
           >
-            باز کردن در تب جدید ↗
-          </a>
+            {isImage || isPdf ? "باز کردن در تب جدید ↗" : "دانلود فایل"}
+          </a>}
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-lg bg-slate-700 text-white hover:bg-slate-600 transition-all text-lg leading-none"
@@ -135,14 +158,15 @@ const DocViewer = ({ doc, onClose }: DocViewerProps) => {
         className="flex-1 overflow-auto flex items-center justify-center p-4"
         onClick={(e) => e.stopPropagation()}
       >
-        {isImage && (
+        {!url && <p className="text-slate-400">{error || "در حال دریافت فایل…"}</p>}
+        {url && isImage && (
           <img
             src={url}
             alt={doc.title}
             className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
           />
         )}
-        {isPdf && (
+        {url && isPdf && (
           <iframe
             src={url}
             title={doc.title}
@@ -150,7 +174,7 @@ const DocViewer = ({ doc, onClose }: DocViewerProps) => {
             style={{ minHeight: "80vh" }}
           />
         )}
-        {!isImage && !isPdf && (
+        {url && !isImage && !isPdf && (
           <div className="text-center space-y-4">
             <div className="text-6xl">📄</div>
             <p className="text-slate-400">
@@ -158,8 +182,7 @@ const DocViewer = ({ doc, onClose }: DocViewerProps) => {
             </p>
             <a
               href={url}
-              target="_blank"
-              rel="noreferrer"
+              download={doc.file_name || doc.title}
               className="inline-block px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all"
             >
               دانلود فایل
@@ -632,7 +655,7 @@ const CustomerDetail = () => {
             ) : (
               <div className="divide-y divide-slate-700/30">
                 {docs.map((doc) => {
-                  const url = doc.file_url || doc.file;
+                  const url = doc.file_name || doc.file_url || doc.file;
                   const isEditing = editingDoc === doc.id;
                   return (
                     <div key={doc.id} className="px-5 py-4">
@@ -748,14 +771,13 @@ const CustomerDetail = () => {
                             >
                               ✏️
                             </button>
-                            <a
-                              href={url}
-                              target="_blank"
-                              rel="noreferrer"
+                            <button
+                              type="button"
+                              onClick={() => downloadDocumentFile(doc.id, doc.file_name || doc.title).catch(() => window.alert("دانلود فایل ممکن نشد."))}
                               className="text-xs px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition-all"
                             >
                               ⬇️
-                            </a>
+                            </button>
                             <button
                               onClick={() => handleDeleteDoc(doc.id)}
                               className="text-xs px-2 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all"
