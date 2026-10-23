@@ -19,6 +19,7 @@ from django.contrib.auth.models import User
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 import json, calendar, os, shutil
+import mimetypes
 from zoneinfo import ZoneInfo
 
 from ..models import (
@@ -88,6 +89,23 @@ class DocumentViewSet(viewsets.ModelViewSet):
         except (FileNotFoundError, OSError):
             return Response({'detail': 'فایل سند یافت نشد.'}, status=404)
         response = FileResponse(source, as_attachment=True, filename=os.path.basename(doc.file.name))
+        response['X-Content-Type-Options'] = 'nosniff'
+        response['Cache-Control'] = 'private, no-store'
+        return response
+
+    @action(detail=True, methods=['get'])
+    def preview(self, request, pk=None):
+        """Display a private document inline when the browser supports it."""
+        doc = self.get_object()
+        if not doc.file:
+            return Response({'detail': 'فایلی برای این سند ثبت نشده است.'}, status=404)
+        try:
+            source = doc.file.open('rb')
+        except (FileNotFoundError, OSError):
+            return Response({'detail': 'فایل سند یافت نشد.'}, status=404)
+        content_type = mimetypes.guess_type(doc.file.name)[0] or 'application/octet-stream'
+        response = FileResponse(source, as_attachment=False, content_type=content_type)
+        response['Content-Disposition'] = 'inline'
         response['X-Content-Type-Options'] = 'nosniff'
         response['Cache-Control'] = 'private, no-store'
         return response

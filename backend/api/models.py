@@ -1,4 +1,5 @@
 import re
+import uuid
 from decimal import Decimal
 
 from django.db import models, transaction
@@ -7,6 +8,25 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from .services.money import final_amount, invoice_payment_totals, MAX_INVOICE_AMOUNT
+
+
+def document_upload_path(instance, filename):
+    """Store invoice documents under a stable, human-readable private name."""
+    def safe_component(value):
+        cleaned = ''.join(
+            '_' if ch in '<>:"/\\|?*' or ord(ch) < 32 else ch
+            for ch in str(value or '')
+        ).strip(' .')
+        return cleaned or 'بدون-عنوان'
+
+    extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    suffix = f'.{extension}' if extension else ''
+    if not instance.invoice_id:
+        return f'customer_docs/{safe_component(instance.title)}_{uuid.uuid4().hex[:10]}{suffix}'
+    invoice_number = safe_component(instance.invoice.invoice_number if instance.invoice_id else 'بدون-فاکتور')
+    title = safe_component(instance.title)
+    unique = uuid.uuid4().hex[:10]
+    return f'customer_docs/invoices/{invoice_number}/{invoice_number}_{title}_{unique}{suffix}'
 
 
 class Customer(models.Model):
@@ -313,7 +333,7 @@ class Document(models.Model):
     customer = models.ForeignKey(Customer, related_name='documents', on_delete=models.CASCADE)
     invoice = models.ForeignKey(Invoice, related_name='documents', on_delete=models.SET_NULL, null=True, blank=True)
     title = models.CharField(max_length=255, verbose_name='عنوان')
-    file = models.FileField(upload_to='customer_docs/', verbose_name='فایل')
+    file = models.FileField(upload_to=document_upload_path, verbose_name='فایل')
     description = models.TextField(blank=True, null=True, verbose_name='توضیحات')
     tags = models.JSONField(default=list, blank=True, verbose_name='تگ‌ها')
     file_path = models.CharField(max_length=1000, blank=True, null=True, verbose_name='مسیر فیزیکی فایل')

@@ -122,6 +122,7 @@ export const documentsAPI = {
   list: (params: Params = {}) => api.get('documents/', { params }),
   detail: (id: Id) => api.get(`documents/${id}/`),
   download: (id: Id) => api.get<Blob>(`documents/${id}/download/`, { responseType: 'blob' }),
+  preview: (id: Id) => api.get<Blob>(`documents/${id}/preview/`, { responseType: 'blob' }),
   create: (formData: FormData) => api.post('documents/', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),

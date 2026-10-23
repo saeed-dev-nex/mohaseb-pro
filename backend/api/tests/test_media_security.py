@@ -110,7 +110,9 @@ class DocumentSecurityTests(APITestCase):
         self.authenticate()
         detail = self.client.get(f'/api/documents/{self.doc.pk}/').data
         self.assertTrue(detail['file_url'].endswith(f'/api/documents/{self.doc.pk}/download/'))
-        self.assertEqual(detail['file_name'], 'sample.pdf')
+        self.assertIn(self.invoice.invoice_number, detail['file_name'])
+        self.assertIn('Synthetic_PDF', detail['file_name'])
+        self.assertTrue(detail['file_name'].endswith('.pdf'))
         self.assertNotIn('file', detail)
         self.assertNotIn('file_path', detail)
         response = self.client.get(f'/api/documents/{self.doc.pk}/download/')
@@ -120,6 +122,34 @@ class DocumentSecurityTests(APITestCase):
         self.assertEqual(response['Cache-Control'], 'private, no-store')
         self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
         response.close()
+
+    def test_invoice_document_uses_title_and_invoice_number_and_supports_inline_preview(self):
+        self.authenticate()
+        response = self.upload(
+            name='receipt.png',
+            content=b'\x89PNG\r\n\x1a\nsynthetic image',
+            invoice=self.invoice.pk,
+            title='رسید پرداخت',
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        document = Document.objects.latest('id')
+        self.assertIn(self.invoice.invoice_number, document.file.name)
+        self.assertIn('رسید_پرداخت', document.file.name)
+        self.assertTrue(response.data['is_image'])
+        self.assertTrue(response.data['preview_url'].endswith(f'/api/documents/{document.pk}/preview/'))
+
+        preview = self.client.get(f'/api/documents/{document.pk}/preview/')
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview['Content-Type'], 'image/png')
+        self.assertTrue(preview['Content-Disposition'].startswith('inline'))
+        self.assertEqual(b''.join(preview.streaming_content), b'\x89PNG\r\n\x1a\nsynthetic image')
+        preview.close()
+
+    def test_document_title_is_required(self):
+        self.authenticate()
+        response = self.upload(title='   ')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('title', response.data)
 
     def test_missing_file_returns_404_without_path(self):
         self.authenticate()

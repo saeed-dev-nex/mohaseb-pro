@@ -95,10 +95,13 @@ class DocumentSerializer(serializers.ModelSerializer):
     file = serializers.FileField(write_only=True)
     file_name = serializers.SerializerMethodField()
     file_url = serializers.SerializerMethodField()
+    preview_url = serializers.SerializerMethodField()
+    is_image = serializers.SerializerMethodField()
+    content_type = serializers.SerializerMethodField()
 
     class Meta:
         model = Document
-        fields = ['id', 'customer', 'invoice', 'title', 'file', 'file_name', 'file_url', 'description', 'tags', 'uploaded_at', 'updated_at']
+        fields = ['id', 'customer', 'invoice', 'title', 'file', 'file_name', 'file_url', 'preview_url', 'is_image', 'content_type', 'description', 'tags', 'uploaded_at', 'updated_at']
         read_only_fields = ['uploaded_at', 'updated_at', 'file_url']
 
     def get_file_name(self, obj):
@@ -109,6 +112,26 @@ class DocumentSerializer(serializers.ModelSerializer):
             from rest_framework.reverse import reverse
             return reverse('document-download', args=[obj.pk], request=self.context.get('request'))
         return None
+
+    def get_preview_url(self, obj):
+        if obj.file:
+            from rest_framework.reverse import reverse
+            return reverse('document-preview', args=[obj.pk], request=self.context.get('request'))
+        return None
+
+    def get_is_image(self, obj):
+        return self.get_content_type(obj).startswith('image/')
+
+    def get_content_type(self, obj):
+        import mimetypes
+        content_type, _ = mimetypes.guess_type(obj.file.name if obj.file else '')
+        return content_type or 'application/octet-stream'
+
+    def validate_title(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('عنوان مدرک الزامی است.')
+        return value
 
     def validate_file(self, value):
         import codecs
