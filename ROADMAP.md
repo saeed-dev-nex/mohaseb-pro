@@ -47,9 +47,10 @@
       تایپ AuthState و PayloadActionها؛ حالا کل `frontend/src`
       TypeScript است و هیچ فایل JS/JSXای نمانده است. ورودی index.html
       هم به main.tsx اشاره می‌کند).
-- [ ] ESLint/Prettier در CI (مسدود: ساخت/ویرایش فایل workflow در
-      `.github/workflows/` از طریق GitHub App API ممکن نیست؛ نیازمند
-      ساخت دستی فایل CI روی گیت‌هاب است).
+- [ ] افزودن ESLint/Prettier؛ workflow موجود در `.github/workflows/ci.yml`
+      اکنون typecheck، build، تست و audit فرانت‌اند را اجرا می‌کند.
+- [ ] E2E خودکار مرورگر؛ فعلاً تست‌های ترکیب dialog با SSR و harness دستیِ
+      دادهٔ ساختگی طبق `frontend/tests/README.md` فراهم است.
 
 ## بلندمدت (نیازمند تصمیم محصولی)
 - [ ] چندکسب‌وکاری (Multi-Business) یا SaaS چندمستاجری — تصمیم معماری زودهنگام.

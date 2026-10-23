@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { chequesAPI, customersAPI } from '../services/api';
 import PriceInput from '../components/PriceInput';
 import JalaliDatePicker from '../components/JalaliDatePicker';
@@ -9,26 +9,14 @@ import {
   Spinner,
   EmptyState,
   Modal,
-  InputField,
-  SelectField,
+  ErrorNotice,
   Button,
   ConfirmDialog,
   formatPrice
 } from '../components/ui';
+import { formatApiError } from '../utils/apiError';
 
 const fmt = (n: number | string | null | undefined) => new Intl.NumberFormat('fa-IR').format(Number(n) || 0);
-
-const errorMessage = (error: unknown, fallback: string) => {
-  const data = (error as { response?: { data?: unknown } } | null)?.response?.data ?? error;
-  if (typeof data === 'string') return data;
-  if (data && typeof data === 'object') {
-    const messages = Object.values(data as Record<string, unknown>)
-      .flatMap((value) => Array.isArray(value) ? value : [value])
-      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
-    if (messages.length) return messages.join(' ');
-  }
-  return fallback;
-};
 
 const inp = 'w-full px-3 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all';
 
@@ -107,9 +95,10 @@ type ChequeModalProps = {
   onSave: (form: ChequeForm) => void;
   onClose: () => void;
   saving?: boolean;
+  error?: string;
 };
 
-const ChequeModal = ({ initial, customers, onSave, onClose, saving }: ChequeModalProps) => {
+const ChequeModal = ({ initial, customers, onSave, onClose, saving, error }: ChequeModalProps) => {
   const [form, setForm] = useState<ChequeForm>((initial as ChequeForm | null) || {
     customer: '',
     cheque_number: '',
@@ -132,8 +121,9 @@ const ChequeModal = ({ initial, customers, onSave, onClose, saving }: ChequeModa
   }));
 
   return (
-    <Modal isOpen onClose={onClose} title={initial?.id ? 'ویرایش چک' : 'ثبت چک جدید'} size="md">
-        <div className="p-5 space-y-4">
+    <Modal isOpen onClose={onClose} title={initial?.id ? 'ویرایش چک' : 'ثبت چک جدید'} size="md" dismissible={!saving}>
+        <ErrorNotice message={error} />
+        <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label htmlFor="cheque-type" className="text-xs text-slate-400 mb-1 block">نوع چک *</label>
@@ -185,8 +175,8 @@ const ChequeModal = ({ initial, customers, onSave, onClose, saving }: ChequeModa
               <input id="cheque-number" className={inp} value={form.cheque_number} onChange={(e) => set('cheque_number', toPersianKeyboard(e.target.value))} placeholder="شماره صیادی یا چک" required />
             </div>
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">مبلغ چک (تومان) *</label>
-              <PriceInput value={form.amount} onChange={(v) => set('amount', v)} />
+              <label htmlFor="cheque-amount" className="text-xs text-slate-400 mb-1 block">مبلغ چک (تومان) *</label>
+              <PriceInput id="cheque-amount" value={form.amount} onChange={(v) => set('amount', v)} />
             </div>
           </div>
 
@@ -207,7 +197,7 @@ const ChequeModal = ({ initial, customers, onSave, onClose, saving }: ChequeModa
           </div>
         </div>
         <div className="flex gap-3 justify-end p-5 border-t border-slate-700/50">
-          <Button variant="ghost" onClick={onClose}>انصراف</Button>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>انصراف</Button>
           <Button variant="primary" onClick={() => onSave(form)} loading={saving} disabled={!form.bank_name || !form.cheque_number || !form.amount || !form.due_date}
             className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm transition-all disabled:opacity-60 flex items-center gap-2">
             {initial?.id ? 'ذخیره تغییرات' : 'ثبت چک'}
@@ -225,6 +215,11 @@ const Cheques = () => {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ChequeRow | null>(null);
   const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const savingRef = useRef(false);
+  const deletingRef = useRef(false);
 
   // Filters
   const [filters, setFilters] = useState<ChequeFilters>({
@@ -244,7 +239,7 @@ const Cheques = () => {
       setCheques(chqRes.data.results || chqRes.data);
       setCustomers(custRes.data.results || custRes.data);
     } catch (e) {
-      setError(errorMessage(e, 'بارگذاری چک‌ها انجام نشد. اتصال سرور را بررسی کنید.'));
+      setError(formatApiError(e, 'بارگذاری چک‌ها انجام نشد. اتصال سرور را بررسی کنید.'));
     } finally {
       setLoading(false);
     }
@@ -257,8 +252,10 @@ const Cheques = () => {
   }, [filters]);
 
   const handleSave = async (form: ChequeForm) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
-    setError('');
+    setFormError('');
     try {
       // API expects Customer ID or null
       const payload = {
@@ -275,21 +272,27 @@ const Cheques = () => {
       setModal(null);
       loadData();
     } catch (e) {
-      setError(errorMessage(e, 'خطا در ذخیره‌سازی چک.'));
+      setFormError(formatApiError(e, 'خطا در ذخیره‌سازی چک.'));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!deleteTarget) return;
-    setError('');
+    if (!deleteTarget || deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
+    setDeleteError('');
     try {
       await chequesAPI.delete(deleteTarget.id);
       setDeleteTarget(null);
       loadData();
     } catch (e) {
-      setError(errorMessage(e, 'خطا در حذف چک.'));
+      setDeleteError(formatApiError(e, 'خطا در حذف چک.'));
+    } finally {
+      deletingRef.current = false;
+      setDeleting(false);
     }
   };
 
@@ -299,7 +302,7 @@ const Cheques = () => {
       await chequesAPI.patch(cheque.id, { status: newStatus });
       loadData();
     } catch (e) {
-      setError(errorMessage(e, 'خطا در تغییر وضعیت چک.'));
+      setError(formatApiError(e, 'خطا در تغییر وضعیت چک.'));
     }
   };
 
@@ -323,7 +326,7 @@ const Cheques = () => {
           <h2 className="text-2xl font-bold text-white">🎫 مدیریت چک‌ها</h2>
           <p className="text-slate-400 text-sm mt-0.5">ثبت، پیگیری و یادآوری چک‌های دریافتی و پرداختی</p>
         </div>
-        <button onClick={() => setModal('add')}
+        <button onClick={() => { setFormError(''); setModal('add'); }}
           className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-medium transition-all shadow-lg shadow-blue-500/25">
           + ثبت چک جدید
         </button>
@@ -476,14 +479,14 @@ const Cheques = () => {
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-left">
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex justify-end gap-1.5">
-                          <button onClick={() => setModal(chq)}
+                        <div className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity flex justify-end gap-1.5">
+                          <button onClick={() => { setFormError(''); setModal(chq); }}
                             className="px-2 py-1 text-xs rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-all"
                             title="ویرایش"
                           >
                             ✏️
                           </button>
-                          <button onClick={() => setDeleteTarget(chq)}
+                          <button onClick={() => { setDeleteError(''); setDeleteTarget(chq); }}
                             className="px-2 py-1 text-xs rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all"
                             title="حذف"
                           >
@@ -506,8 +509,9 @@ const Cheques = () => {
           initial={modal === 'add' ? null : modal}
           customers={customers}
           onSave={handleSave}
-          onClose={() => setModal(null)}
+          onClose={() => { if (!savingRef.current) setModal(null); }}
           saving={saving}
+          error={formError}
         />
       )}
 
@@ -518,7 +522,9 @@ const Cheques = () => {
           title="حذف چک"
           message={`آیا از حذف چک شماره «${deleteTarget.cheque_number}» بانک «${deleteTarget.bank_name}» به مبلغ ${formatPrice(deleteTarget.amount)} اطمینان دارید؟`}
           onConfirm={handleDelete}
-          onClose={() => setDeleteTarget(null)}
+          onClose={() => { if (!deletingRef.current) setDeleteTarget(null); }}
+          loading={deleting}
+          error={deleteError}
         />
       )}
     </div>

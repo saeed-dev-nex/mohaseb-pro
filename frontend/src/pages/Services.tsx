@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import type { ReactElement } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useServices,
@@ -10,21 +10,11 @@ import {
 } from "../hooks/useServices";
 import PriceInput from "../components/PriceInput";
 import { toPersianKeyboard } from "../utils/persian";
-import { Button, ConfirmDialog, Modal } from "../components/ui";
+import { Button, ConfirmDialog, ErrorNotice, Modal } from "../components/ui";
+import { formatApiError } from "../utils/apiError";
 
 const fmt = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0);
-
-const errorMessage = (error: unknown, fallback: string) => {
-  if (typeof error === "string") return error;
-  if (error && typeof error === "object") {
-    const messages = Object.values(error as Record<string, unknown>)
-      .flatMap((value) => Array.isArray(value) ? value : [value])
-      .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
-    if (messages.length) return messages.join(" ");
-  }
-  return fallback;
-};
 
 type ServiceRow = {
   id: number;
@@ -66,12 +56,16 @@ const emptyForm: ServiceFormData = {
 };
 
 // ── Inline Input ──
-const F = ({ label, children }: { label: string; children: ReactNode }) => (
-  <div className="space-y-1">
-    <label className="text-xs text-slate-400">{label}</label>
-    {children}
-  </div>
-);
+const F = ({ label, children }: { label: string; children: ReactElement<{ id?: string }> }) => {
+  const generatedId = React.useId();
+  const id = children.props.id || generatedId;
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="text-xs text-slate-400">{label}</label>
+      {React.cloneElement(children, { id })}
+    </div>
+  );
+};
 const inp =
   "w-full px-3 py-2 bg-slate-700/60 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all";
 
@@ -81,6 +75,7 @@ type ServiceModalProps = {
   onSave: (form: ServiceFormState) => void;
   onClose: () => void;
   loading?: boolean;
+  error?: string;
 };
 
 const ServiceModal = ({
@@ -88,6 +83,7 @@ const ServiceModal = ({
   onSave,
   onClose,
   loading,
+  error,
 }: ServiceModalProps) => {
   const [form, setForm] = useState<ServiceFormState>(
     (initial as ServiceFormState | null) || emptyForm,
@@ -101,8 +97,10 @@ const ServiceModal = ({
       onClose={onClose}
       title={initial?.id ? "ویرایش خدمت" : "افزودن خدمت جدید"}
       size="md"
+      dismissible={!loading}
     >
-        <div className="p-5 space-y-4">
+        <ErrorNotice message={error} />
+        <div className="space-y-4">
           <F label="عنوان خدمت *">
             <input
               className={inp}
@@ -209,7 +207,7 @@ const ServiceModal = ({
         </div>
 
         <div className="flex gap-3 justify-end p-5 border-t border-slate-700/50">
-          <Button variant="ghost" onClick={onClose}>انصراف</Button>
+          <Button variant="ghost" onClick={onClose} disabled={loading}>انصراف</Button>
           <Button variant="primary" onClick={() => onSave(form)} loading={loading}>
             {initial?.id ? "ذخیره تغییرات" : "افزودن"}
           </Button>
@@ -221,7 +219,7 @@ const ServiceModal = ({
 // ── Main ──────────────────────────────────────────────────────
 const Services = () => {
   const queryClient = useQueryClient();
-  const { data, isFetching } = useServices();
+  const { data, isFetching, error: loadError, refetch } = useServices();
   const list = (data ?? []) as ServiceRow[];
   const loading = isFetching;
   const createService = useCreateService();
@@ -231,7 +229,10 @@ const Services = () => {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ServiceRow | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const savingRef = useRef(false);
+  const deletingRef = useRef(false);
 
   useEffect(() => {
     const refresh = () =>
@@ -241,8 +242,10 @@ const Services = () => {
   }, [queryClient]);
 
   const handleSave = async (form: ServiceFormState) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
-    setError("");
+    setFormError("");
     try {
       if (modal && modal !== "add" && modal.id) {
         await updateService.mutateAsync({ id: modal.id, data: form });
@@ -251,22 +254,25 @@ const Services = () => {
       }
       setModal(null);
     } catch (e) {
-      setError(errorMessage(e, "ذخیره‌سازی خدمت انجام نشد."));
+      setFormError(formatApiError(e, "ذخیره‌سازی خدمت انجام نشد."));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || deletingRef.current) return;
+    deletingRef.current = true;
     setDeleting(true);
-    setError("");
+    setDeleteError("");
     try {
       await deleteService.mutateAsync(deleteTarget.id);
       setDeleteTarget(null);
     } catch (e) {
-      setError(errorMessage(e, "حذف خدمت انجام نشد."));
+      setDeleteError(formatApiError(e, "حذف خدمت انجام نشد."));
     } finally {
+      deletingRef.current = false;
       setDeleting(false);
     }
   };
@@ -282,17 +288,17 @@ const Services = () => {
           </p>
         </div>
         <button
-          onClick={() => setModal("add")}
+          onClick={() => { setFormError(""); setModal("add"); }}
           className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-all"
         >
           + افزودن خدمت
         </button>
       </div>
 
-      {error && (
-        <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-          <span>{error}</span>
-          <button type="button" onClick={() => setError("")} className="text-red-200 hover:text-white" aria-label="بستن پیام خطا">×</button>
+      {loadError && (
+        <div>
+          <ErrorNotice message={formatApiError(loadError, "دریافت خدمات انجام نشد.")} />
+          <Button variant="ghost" onClick={() => refetch()} disabled={loading}>تلاش دوباره</Button>
         </div>
       )}
 
@@ -301,7 +307,7 @@ const Services = () => {
         <div className="flex items-center justify-center py-16">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : list.length === 0 ? (
+      ) : loadError && data === undefined ? null : list.length === 0 ? (
         <div className="text-center py-16 bg-slate-800/50 border border-slate-700/50 rounded-2xl">
           <p className="text-4xl mb-3">⚙️</p>
           <p className="text-slate-300 font-medium text-lg">خدمتی تعریف نشده</p>
@@ -368,15 +374,15 @@ const Services = () => {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-2 px-5 py-3 border-t border-slate-700/40 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex items-center gap-2 px-5 py-3 border-t border-slate-700/40 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity">
                 <button
-                  onClick={() => setModal(svc)}
+                  onClick={() => { setFormError(""); setModal(svc); }}
                   className="flex-1 py-1.5 text-xs rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition-all"
                 >
                   ✏️ ویرایش
                 </button>
                 <button
-                  onClick={() => setDeleteTarget(svc)}
+                  onClick={() => { setDeleteError(""); setDeleteTarget(svc); }}
                   className="flex-1 py-1.5 text-xs rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all"
                 >
                   🗑️ حذف
@@ -392,8 +398,9 @@ const Services = () => {
         <ServiceModal
           initial={modal === "add" ? null : modal}
           onSave={handleSave}
-          onClose={() => setModal(null)}
+          onClose={() => { if (!savingRef.current) setModal(null); }}
           loading={saving}
+          error={formError}
         />
       )}
 
@@ -401,11 +408,12 @@ const Services = () => {
       {deleteTarget && (
         <ConfirmDialog
           isOpen
-          onClose={() => setDeleteTarget(null)}
+          onClose={() => { if (!deletingRef.current) setDeleteTarget(null); }}
           onConfirm={handleDelete}
           title="حذف خدمت"
           message={<>آیا از حذف خدمت «<span className="text-white">{deleteTarget.title}</span>» اطمینان دارید؟</>}
           loading={deleting}
+          error={deleteError}
         />
       )}
     </div>

@@ -138,12 +138,19 @@ export const EmptyState = ({
 );
 
 // ---- Modal ----
+export const ErrorNotice = ({ message }: { message?: string }) => message ? (
+  <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+    {message}
+  </div>
+) : null;
+
 type ModalProps = {
   isOpen: boolean;
   onClose: () => void;
   title: ReactNode;
   children: ReactNode;
   size?: "sm" | "md" | "lg" | "xl";
+  dismissible?: boolean;
 };
 
 export const Modal = ({
@@ -152,16 +159,19 @@ export const Modal = ({
   title,
   children,
   size = "md",
+  dismissible = true,
 }: ModalProps) => {
   const titleId = `modal-title-${React.useId()}`;
   const modalRootRef = React.useRef<HTMLDivElement>(null);
   const dialogRef = React.useRef<HTMLDivElement>(null);
   const previousFocusRef = React.useRef<HTMLElement | null>(null);
   const onCloseRef = React.useRef(onClose);
+  const dismissibleRef = React.useRef(dismissible);
 
   React.useEffect(() => {
     onCloseRef.current = onClose;
-  }, [onClose]);
+    dismissibleRef.current = dismissible;
+  }, [onClose, dismissible]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -197,7 +207,7 @@ export const Modal = ({
     (focusable || dialogRef.current)?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !event.defaultPrevented && dismissibleRef.current) {
         event.preventDefault();
         onCloseRef.current();
       }
@@ -239,7 +249,7 @@ export const Modal = ({
     >
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={() => { if (dismissible) onClose(); }}
         aria-hidden="true"
       />
       <div
@@ -257,6 +267,7 @@ export const Modal = ({
           <button
             type="button"
             onClick={onClose}
+            disabled={!dismissible}
             aria-label="بستن"
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-all"
           >
@@ -458,6 +469,7 @@ type ConfirmDialogProps = {
   title: ReactNode;
   message: ReactNode;
   loading?: boolean;
+  error?: string;
 };
 
 export const ConfirmDialog = ({
@@ -467,11 +479,13 @@ export const ConfirmDialog = ({
   title,
   message,
   loading,
+  error,
 }: ConfirmDialogProps) => (
-  <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
+  <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm" dismissible={!loading}>
     <p className="text-slate-300 text-sm mb-6">{message}</p>
+    <ErrorNotice message={error} />
     <div className="flex gap-3 justify-end">
-      <Button variant="ghost" onClick={onClose}>
+      <Button variant="ghost" onClick={onClose} disabled={loading}>
         انصراف
       </Button>
       <Button variant="danger" onClick={onConfirm} loading={loading}>
