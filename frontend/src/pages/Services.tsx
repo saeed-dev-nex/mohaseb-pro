@@ -10,9 +10,21 @@ import {
 } from "../hooks/useServices";
 import PriceInput from "../components/PriceInput";
 import { toPersianKeyboard } from "../utils/persian";
+import { Button, ConfirmDialog, Modal } from "../components/ui";
 
 const fmt = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0);
+
+const errorMessage = (error: unknown, fallback: string) => {
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const messages = Object.values(error as Record<string, unknown>)
+      .flatMap((value) => Array.isArray(value) ? value : [value])
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+    if (messages.length) return messages.join(" ");
+  }
+  return fallback;
+};
 
 type ServiceRow = {
   id: number;
@@ -84,19 +96,12 @@ const ServiceModal = ({
     setForm((f) => ({ ...f, [k]: v }));
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-800 border border-slate-700/60 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-slate-700/50">
-          <h3 className="text-white font-semibold">
-            {initial?.id ? "ویرایش خدمت" : "افزودن خدمت جدید"}
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-white transition-colors text-xl"
-          >
-            ×
-          </button>
-        </div>
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={initial?.id ? "ویرایش خدمت" : "افزودن خدمت جدید"}
+      size="md"
+    >
         <div className="p-5 space-y-4">
           <F label="عنوان خدمت *">
             <input
@@ -163,6 +168,8 @@ const ServiceModal = ({
             <button
               type="button"
               onClick={() => set("has_extra", !form.has_extra)}
+              aria-pressed={form.has_extra}
+              aria-label="فعال‌سازی خدمت اضافه"
               className={`relative w-11 h-6 rounded-full transition-all ${form.has_extra ? "bg-blue-600" : "bg-slate-600"}`}
             >
               <span
@@ -187,6 +194,8 @@ const ServiceModal = ({
             <button
               type="button"
               onClick={() => set("is_active", !form.is_active)}
+              aria-pressed={form.is_active}
+              aria-label="فعال‌سازی خدمت"
               className={`relative w-11 h-6 rounded-full transition-all ${form.is_active ? "bg-green-600" : "bg-slate-600"}`}
             >
               <span
@@ -200,25 +209,12 @@ const ServiceModal = ({
         </div>
 
         <div className="flex gap-3 justify-end p-5 border-t border-slate-700/50">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl border border-slate-600 text-slate-300 text-sm hover:bg-slate-700 transition-all"
-          >
-            انصراف
-          </button>
-          <button
-            onClick={() => onSave(form)}
-            disabled={loading}
-            className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm transition-all disabled:opacity-60 flex items-center gap-2"
-          >
-            {loading ? (
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : null}
+          <Button variant="ghost" onClick={onClose}>انصراف</Button>
+          <Button variant="primary" onClick={() => onSave(form)} loading={loading}>
             {initial?.id ? "ذخیره تغییرات" : "افزودن"}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 
@@ -235,6 +231,7 @@ const Services = () => {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ServiceRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const refresh = () =>
@@ -245,6 +242,7 @@ const Services = () => {
 
   const handleSave = async (form: ServiceFormState) => {
     setSaving(true);
+    setError("");
     try {
       if (modal && modal !== "add" && modal.id) {
         await updateService.mutateAsync({ id: modal.id, data: form });
@@ -253,17 +251,21 @@ const Services = () => {
       }
       setModal(null);
     } catch (e) {
-      alert("خطا: " + JSON.stringify(e));
+      setError(errorMessage(e, "ذخیره‌سازی خدمت انجام نشد."));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async () => {
+    if (!deleteTarget) return;
     setDeleting(true);
+    setError("");
     try {
       await deleteService.mutateAsync(deleteTarget.id);
       setDeleteTarget(null);
+    } catch (e) {
+      setError(errorMessage(e, "حذف خدمت انجام نشد."));
     } finally {
       setDeleting(false);
     }
@@ -286,6 +288,13 @@ const Services = () => {
           + افزودن خدمت
         </button>
       </div>
+
+      {error && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          <span>{error}</span>
+          <button type="button" onClick={() => setError("")} className="text-red-200 hover:text-white" aria-label="بستن پیام خطا">×</button>
+        </div>
+      )}
 
       {/* Services Grid */}
       {loading ? (
@@ -390,31 +399,14 @@ const Services = () => {
 
       {/* Delete Confirm */}
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-sm">
-            <p className="text-white font-semibold mb-2">حذف خدمت</p>
-            <p className="text-slate-400 text-sm mb-5">
-              آیا از حذف خدمت «
-              <span className="text-white">{deleteTarget.title}</span>» اطمینان
-              دارید؟
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 rounded-xl border border-slate-600 text-slate-300 text-sm hover:bg-slate-700 transition-all"
-              >
-                انصراف
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm transition-all disabled:opacity-60"
-              >
-                {deleting ? "در حال حذف..." : "بله، حذف شود"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          isOpen
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={handleDelete}
+          title="حذف خدمت"
+          message={<>آیا از حذف خدمت «<span className="text-white">{deleteTarget.title}</span>» اطمینان دارید؟</>}
+          loading={deleting}
+        />
       )}
     </div>
   );

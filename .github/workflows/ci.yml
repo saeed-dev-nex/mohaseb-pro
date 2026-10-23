@@ -34,7 +34,14 @@ jobs:
         run: python manage.py check
 
       - name: Deployment check (warnings are informational)
-        run: python manage.py check --deploy || true
+        continue-on-error: true
+        run: python manage.py check --deploy
+
+      - name: Dependency audit (informational)
+        continue-on-error: true
+        run: |
+          python -m pip install --upgrade pip-audit
+          python -m pip_audit -r requirements.txt
 
       - name: Verify migrations are complete
         run: python manage.py makemigrations --check --dry-run
@@ -87,6 +94,12 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Dependency audit (high severity)
+        run: npm audit --audit-level=high
 
       - name: Build
         run: npm run build

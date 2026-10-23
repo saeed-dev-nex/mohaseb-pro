@@ -18,6 +18,18 @@ import {
 
 const fmt = (n: number | string | null | undefined) => new Intl.NumberFormat('fa-IR').format(Number(n) || 0);
 
+const errorMessage = (error: unknown, fallback: string) => {
+  const data = (error as { response?: { data?: unknown } } | null)?.response?.data ?? error;
+  if (typeof data === 'string') return data;
+  if (data && typeof data === 'object') {
+    const messages = Object.values(data as Record<string, unknown>)
+      .flatMap((value) => Array.isArray(value) ? value : [value])
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+    if (messages.length) return messages.join(' ');
+  }
+  return fallback;
+};
+
 const inp = 'w-full px-3 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all';
 
 type ChequeRow = {
@@ -120,24 +132,19 @@ const ChequeModal = ({ initial, customers, onSave, onClose, saving }: ChequeModa
   }));
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-800 border border-slate-700/60 rounded-2xl shadow-2xl w-full max-w-lg overflow-y-auto max-h-[90vh]">
-        <div className="flex items-center justify-between p-5 border-b border-slate-700/50">
-          <h3 className="text-white font-semibold">{initial?.id ? 'ویرایش چک' : 'ثبت چک جدید'}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors text-xl">×</button>
-        </div>
+    <Modal isOpen onClose={onClose} title={initial?.id ? 'ویرایش چک' : 'ثبت چک جدید'} size="md">
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">نوع چک *</label>
-              <select className={inp} value={form.type} onChange={(e) => set('type', e.target.value)}>
+              <label htmlFor="cheque-type" className="text-xs text-slate-400 mb-1 block">نوع چک *</label>
+              <select id="cheque-type" className={inp} value={form.type} onChange={(e) => set('type', e.target.value)}>
                 <option value="incoming">دریافتی (از مشتری)</option>
                 <option value="outgoing">پرداختی (به همکار/تامین‌کننده)</option>
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">وضعیت چک *</label>
-              <select className={inp} value={form.status} onChange={(e) => set('status', e.target.value)}>
+              <label htmlFor="cheque-status" className="text-xs text-slate-400 mb-1 block">وضعیت چک *</label>
+              <select id="cheque-status" className={inp} value={form.status} onChange={(e) => set('status', e.target.value)}>
                 <option value="pending">در جریان (وصول نشده)</option>
                 <option value="passed">پاس شده (وصول شده)</option>
                 <option value="bounced">برگشت خورده</option>
@@ -163,19 +170,19 @@ const ChequeModal = ({ initial, customers, onSave, onClose, saving }: ChequeModa
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">نام بانک *</label>
-              <input className={inp} value={form.bank_name} onChange={(e) => set('bank_name', toPersianKeyboard(e.target.value))} placeholder="مثال: ملی، صادرات..." required />
+              <label htmlFor="cheque-bank" className="text-xs text-slate-400 mb-1 block">نام بانک *</label>
+              <input id="cheque-bank" className={inp} value={form.bank_name} onChange={(e) => set('bank_name', toPersianKeyboard(e.target.value))} placeholder="مثال: ملی، صادرات..." required />
             </div>
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">شعبه</label>
-              <input className={inp} value={form.branch} onChange={(e) => set('branch', toPersianKeyboard(e.target.value))} placeholder="مثال: مرکزی" />
+              <label htmlFor="cheque-branch" className="text-xs text-slate-400 mb-1 block">شعبه</label>
+              <input id="cheque-branch" className={inp} value={form.branch} onChange={(e) => set('branch', toPersianKeyboard(e.target.value))} placeholder="مثال: مرکزی" />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">شماره چک *</label>
-              <input className={inp} value={form.cheque_number} onChange={(e) => set('cheque_number', toPersianKeyboard(e.target.value))} placeholder="شماره صیادی یا چک" required />
+              <label htmlFor="cheque-number" className="text-xs text-slate-400 mb-1 block">شماره چک *</label>
+              <input id="cheque-number" className={inp} value={form.cheque_number} onChange={(e) => set('cheque_number', toPersianKeyboard(e.target.value))} placeholder="شماره صیادی یا چک" required />
             </div>
             <div>
               <label className="text-xs text-slate-400 mb-1 block">مبلغ چک (تومان) *</label>
@@ -195,20 +202,18 @@ const ChequeModal = ({ initial, customers, onSave, onClose, saving }: ChequeModa
           </div>
 
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">توضیحات</label>
-            <textarea className={inp} rows={2} value={form.description || ''} onChange={(e) => set('description', toPersianKeyboard(e.target.value))} placeholder="توضیحات اختیاری..." />
+            <label htmlFor="cheque-description" className="text-xs text-slate-400 mb-1 block">توضیحات</label>
+            <textarea id="cheque-description" className={inp} rows={2} value={form.description || ''} onChange={(e) => set('description', toPersianKeyboard(e.target.value))} placeholder="توضیحات اختیاری..." />
           </div>
         </div>
         <div className="flex gap-3 justify-end p-5 border-t border-slate-700/50">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-600 text-slate-300 text-sm hover:bg-slate-700 transition-all">انصراف</button>
-          <button onClick={() => onSave(form)} disabled={saving || !form.bank_name || !form.cheque_number || !form.amount || !form.due_date}
+          <Button variant="ghost" onClick={onClose}>انصراف</Button>
+          <Button variant="primary" onClick={() => onSave(form)} loading={saving} disabled={!form.bank_name || !form.cheque_number || !form.amount || !form.due_date}
             className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm transition-all disabled:opacity-60 flex items-center gap-2">
-            {saving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
             {initial?.id ? 'ذخیره تغییرات' : 'ثبت چک'}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 
@@ -219,6 +224,7 @@ const Cheques = () => {
   const [modal, setModal] = useState<ChequeRow | 'add' | null>(null); // null | 'add' | {cheque}
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ChequeRow | null>(null);
+  const [error, setError] = useState('');
 
   // Filters
   const [filters, setFilters] = useState<ChequeFilters>({
@@ -229,6 +235,7 @@ const Cheques = () => {
 
   const loadData = async () => {
     setLoading(true);
+    setError('');
     try {
       const [chqRes, custRes] = await Promise.all([
         chequesAPI.list(filters),
@@ -237,9 +244,10 @@ const Cheques = () => {
       setCheques(chqRes.data.results || chqRes.data);
       setCustomers(custRes.data.results || custRes.data);
     } catch (e) {
-      console.error(e);
+      setError(errorMessage(e, 'بارگذاری چک‌ها انجام نشد. اتصال سرور را بررسی کنید.'));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -250,6 +258,7 @@ const Cheques = () => {
 
   const handleSave = async (form: ChequeForm) => {
     setSaving(true);
+    setError('');
     try {
       // API expects Customer ID or null
       const payload = {
@@ -266,28 +275,31 @@ const Cheques = () => {
       setModal(null);
       loadData();
     } catch (e) {
-      alert('خطا در ذخیره‌سازی چک: ' + JSON.stringify(e.response?.data || e.message));
+      setError(errorMessage(e, 'خطا در ذخیره‌سازی چک.'));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setError('');
     try {
       await chequesAPI.delete(deleteTarget.id);
       setDeleteTarget(null);
       loadData();
     } catch (e) {
-      alert('خطا در حذف چک');
+      setError(errorMessage(e, 'خطا در حذف چک.'));
     }
   };
 
   const handleQuickStatus = async (cheque: ChequeRow, newStatus: string) => {
+    setError('');
     try {
       await chequesAPI.patch(cheque.id, { status: newStatus });
       loadData();
     } catch (e) {
-      alert('خطا در تغییر وضعیت چک');
+      setError(errorMessage(e, 'خطا در تغییر وضعیت چک.'));
     }
   };
 
@@ -316,6 +328,13 @@ const Cheques = () => {
           + ثبت چک جدید
         </button>
       </div>
+
+      {error && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          <span>{error}</span>
+          <button type="button" onClick={() => setError('')} className="text-red-200 hover:text-white" aria-label="بستن پیام خطا">×</button>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
