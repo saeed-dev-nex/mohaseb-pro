@@ -35,6 +35,7 @@ from ..serializers import (
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
 from ..audit import snapshot, record_audit, is_invoice_content_version
+from ..pagination import OptionalPageNumberPagination
 
 
 
@@ -46,6 +47,7 @@ class ChatMessageViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin
     module_name = 'chat'
     serializer_class = ChatMessageSerializer
     queryset = ChatMessage.objects.select_related('sender', 'recipient').all()
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
         user = self.request.user
@@ -60,15 +62,21 @@ class ChatMessageViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin
             except (TypeError, ValueError):
                 return Response({'recipient': ['کاربر انتخاب‌شده معتبر نیست.']}, status=status.HTTP_400_BAD_REQUEST)
             if recipient_id == request.user.id:
-                return Response([])
-            queryset = queryset.filter(
-                Q(sender=request.user, recipient_id=recipient_id) |
-                Q(sender_id=recipient_id, recipient=request.user)
-            )
+                queryset = queryset.none()
+            else:
+                queryset = queryset.filter(
+                    Q(sender=request.user, recipient_id=recipient_id) |
+                    Q(sender_id=recipient_id, recipient=request.user)
+                )
         else:
             queryset = queryset.filter(recipient__isnull=True)
-        queryset = queryset.order_by('-created_at', '-id')[:100]
-        messages = list(reversed(queryset))
+        # Keep the historical latest-100 cap, but restore chronological order
+        # before applying pagination so adjacent pages are also chronological.
+        messages = list(reversed(list(queryset.order_by('-created_at', '-id')[:100])))
+        page = self.paginate_queryset(messages)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         return Response(self.get_serializer(messages, many=True).data)
 
     def perform_create(self, serializer):

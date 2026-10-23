@@ -35,6 +35,7 @@ from ..serializers import (
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
 from ..audit import snapshot, record_audit, is_invoice_content_version
+from ..pagination import OptionalPageNumberPagination
 
 
 
@@ -47,11 +48,13 @@ class ExpenseCategoryViewSet(viewsets.ModelViewSet):
     module_name = 'expenses'
     serializer_class = ExpenseCategorySerializer
     queryset = ExpenseCategory.objects.all()
+    pagination_class = OptionalPageNumberPagination
 
 class ExpenseViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasModuleAccess]
     module_name = 'expenses'
     serializer_class = ExpenseSerializer
+    pagination_class = OptionalPageNumberPagination
 
     def perform_create(self, serializer):
         expense = serializer.save()
@@ -112,6 +115,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasModuleAccess]
     module_name = 'cheques'
     serializer_class = ChequeSerializer
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
         qs = Cheque.objects.select_related('customer').all()

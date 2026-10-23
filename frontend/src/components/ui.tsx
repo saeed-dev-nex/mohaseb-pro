@@ -5,6 +5,7 @@ import type {
   ReactNode,
   SelectHTMLAttributes,
 } from "react";
+import { createPortal } from "react-dom";
 
 // ---- Stat Card ----
 type StatCardProps = {
@@ -152,26 +153,111 @@ export const Modal = ({
   children,
   size = "md",
 }: ModalProps) => {
-  if (!isOpen) return null;
+  const titleId = `modal-title-${React.useId()}`;
+  const modalRootRef = React.useRef<HTMLDivElement>(null);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  const previousFocusRef = React.useRef<HTMLElement | null>(null);
+  const onCloseRef = React.useRef(onClose);
+
+  React.useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+
+    const previousFocus =
+      document.activeElement instanceof HTMLElement &&
+      document.activeElement !== document.body
+        ? document.activeElement
+        : null;
+    previousFocusRef.current = previousFocus;
+
+    const modalRoot = modalRootRef.current;
+    if (!modalRoot) return;
+
+    const backgroundElements = Array.from(document.body.children).filter(
+      (element): element is HTMLElement =>
+        element instanceof HTMLElement && element !== modalRoot,
+    );
+    const previousBackgroundState = backgroundElements.map((element) => ({
+      element,
+      inert: (element as HTMLElement & { inert?: boolean }).inert ?? false,
+      ariaHidden: element.getAttribute("aria-hidden"),
+    }));
+
+    backgroundElements.forEach((element) => {
+      (element as HTMLElement & { inert?: boolean }).inert = true;
+      element.setAttribute("aria-hidden", "true");
+    });
+
+    const focusable = modalRoot.querySelector<HTMLElement>(
+      '[autofocus], button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    (focusable || dialogRef.current)?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      previousBackgroundState.forEach(
+        ({ element, inert, ariaHidden }) => {
+          (element as HTMLElement & { inert?: boolean }).inert = inert;
+          if (ariaHidden === null) {
+            element.removeAttribute("aria-hidden");
+          } else {
+            element.setAttribute("aria-hidden", ariaHidden);
+          }
+        },
+      );
+
+      const previousFocusElement = previousFocusRef.current;
+      if (previousFocusElement && document.contains(previousFocusElement)) {
+        previousFocusElement.focus();
+      }
+      previousFocusRef.current = null;
+    };
+  }, [isOpen]);
+
+  if (!isOpen || typeof document === "undefined") return null;
   const sizes: Record<string, string> = {
     sm: "max-w-md",
     md: "max-w-lg",
     lg: "max-w-2xl",
     xl: "max-w-4xl",
   };
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+  return createPortal(
+    <div
+      ref={modalRootRef}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
+        aria-hidden="true"
       />
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         className={`relative w-full ${sizes[size]} bg-slate-800 border border-slate-700/50 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto`}
       >
         <div className="flex items-center justify-between p-6 border-b border-slate-700/50">
-          <h2 className="text-white text-lg font-semibold">{title}</h2>
+          <h2 id={titleId} className="text-white text-lg font-semibold">
+            {title}
+          </h2>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="بستن"
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-all"
           >
             <svg
@@ -191,7 +277,8 @@ export const Modal = ({
         </div>
         <div className="p-6">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
@@ -201,22 +288,41 @@ type InputFieldProps = InputHTMLAttributes<HTMLInputElement> & {
   error?: ReactNode;
 };
 
-export const InputField = ({ label, error, ...props }: InputFieldProps) => (
-  <div className="space-y-1.5">
-    {label && (
-      <label className="block text-sm font-medium text-slate-300">
-        {label}
-      </label>
-    )}
-    <input
-      {...props}
-      className={`w-full px-4 py-2.5 bg-slate-700/50 border rounded-xl text-white placeholder-slate-500 
-        focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all
-        ${error ? "border-red-500/50" : "border-slate-600/50"} ${props.className || ""}`}
-    />
-    {error && <p className="text-red-400 text-xs">{error}</p>}
-  </div>
-);
+export const InputField = ({ label, error, ...props }: InputFieldProps) => {
+  const generatedId = `input-${React.useId()}`;
+  const fieldId = props.id || generatedId;
+  const errorId = `${fieldId}-error`;
+  const describedBy = [props["aria-describedby"], error ? errorId : null]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div className="space-y-1.5">
+      {label && (
+        <label
+          htmlFor={fieldId}
+          className="block text-sm font-medium text-slate-300"
+        >
+          {label}
+        </label>
+      )}
+      <input
+        {...props}
+        id={fieldId}
+        aria-invalid={error ? true : props["aria-invalid"]}
+        aria-describedby={describedBy || undefined}
+        className={`w-full px-4 py-2.5 bg-slate-700/50 border rounded-xl text-white placeholder-slate-500
+          focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all
+          ${error ? "border-red-500/50" : "border-slate-600/50"} ${props.className || ""}`}
+      />
+      {error && (
+        <p id={errorId} className="text-red-400 text-xs">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+};
 
 // ---- Select Field ----
 type SelectFieldProps = SelectHTMLAttributes<HTMLSelectElement> & {
@@ -230,24 +336,43 @@ export const SelectField = ({
   error,
   children,
   ...props
-}: SelectFieldProps) => (
-  <div className="space-y-1.5">
-    {label && (
-      <label className="block text-sm font-medium text-slate-300">
-        {label}
-      </label>
-    )}
-    <select
-      {...props}
-      className={`w-full px-4 py-2.5 bg-slate-700/50 border rounded-xl text-white
-        focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all
-        ${error ? "border-red-500/50" : "border-slate-600/50"} ${props.className || ""}`}
-    >
-      {children}
-    </select>
-    {error && <p className="text-red-400 text-xs">{error}</p>}
-  </div>
-);
+}: SelectFieldProps) => {
+  const generatedId = `select-${React.useId()}`;
+  const fieldId = props.id || generatedId;
+  const errorId = `${fieldId}-error`;
+  const describedBy = [props["aria-describedby"], error ? errorId : null]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div className="space-y-1.5">
+      {label && (
+        <label
+          htmlFor={fieldId}
+          className="block text-sm font-medium text-slate-300"
+        >
+          {label}
+        </label>
+      )}
+      <select
+        {...props}
+        id={fieldId}
+        aria-invalid={error ? true : props["aria-invalid"]}
+        aria-describedby={describedBy || undefined}
+        className={`w-full px-4 py-2.5 bg-slate-700/50 border rounded-xl text-white
+          focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all
+          ${error ? "border-red-500/50" : "border-slate-600/50"} ${props.className || ""}`}
+      >
+        {children}
+      </select>
+      {error && (
+        <p id={errorId} className="text-red-400 text-xs">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+};
 
 // ---- Button ----
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -285,6 +410,7 @@ export const Button = ({
     <button
       {...props}
       disabled={loading || props.disabled}
+      aria-busy={loading ? true : props["aria-busy"]}
       className={`inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-200
         active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed
         ${variants[variant]} ${sizes[size]} ${props.className || ""}`}
@@ -305,6 +431,11 @@ export const Button = ({
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
           />
         </svg>
+      )}
+      {loading && (
+        <span className="sr-only" role="status" aria-live="polite">
+          در حال بارگذاری
+        </span>
       )}
       {children}
     </button>

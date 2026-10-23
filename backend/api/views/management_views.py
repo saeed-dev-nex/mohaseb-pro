@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import ValidationError
 from collections.abc import Mapping
+from decimal import Decimal
 from django.db.models import Sum, Count, Q, OuterRef, Subquery, DecimalField, Value, Case, When, F, ExpressionWrapper
 from django.db.models.functions import Coalesce
 from django.db import transaction, connection
@@ -37,6 +38,7 @@ from ..serializers import (
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
 from ..audit import snapshot, record_audit, is_invoice_content_version
+from ..pagination import OptionalPageNumberPagination
 
 
 
@@ -237,6 +239,7 @@ class StaffViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasModuleAccess]
     module_name = 'staff'
     serializer_class = StaffSerializer
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
         qs = Staff.objects.all()
@@ -256,7 +259,7 @@ class StaffViewSet(viewsets.ModelViewSet):
         """Staff performance: how many items, total revenue"""
         staff = self.get_object()
         from ..models import InvoiceItem
-        items = InvoiceItem.objects.filter(staff=staff).select_related('invoice')
+        items = InvoiceItem.objects.filter(staff=staff)
         date_from = request.query_params.get('date_from', '')
         date_to = request.query_params.get('date_to', '')
         if date_from:
@@ -264,10 +267,20 @@ class StaffViewSet(viewsets.ModelViewSet):
         if date_to:
             items = items.filter(invoice__date__date__lte=date_to)
 
-        total_items = items.count()
-        total_revenue = sum(
-            (it.main_price + it.extra_price) * it.quantity for it in items
+        line_total = ExpressionWrapper(
+            (F('main_price') + F('extra_price')) * F('quantity'),
+            output_field=DecimalField(max_digits=30, decimal_places=0),
         )
+        totals = items.aggregate(
+            total_items=Count('id'),
+            total_revenue=Coalesce(
+                Sum(line_total),
+                Value(Decimal('0')),
+                output_field=DecimalField(max_digits=30, decimal_places=0),
+            ),
+        )
+        total_items = totals['total_items']
+        total_revenue = totals['total_revenue'] or Decimal('0')
         commission_earned = int(total_revenue * staff.commission_rate / 100)
         return Response({
             'staff_id': staff.id,
