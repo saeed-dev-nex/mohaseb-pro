@@ -76,7 +76,7 @@ test('all CSS/service-worker fonts emit from repository sources and dev serves e
   let middleware;
   plugin.configureServer({ middlewares: { use: callback => { middleware = callback; } } });
   for (const name of FONT_NAMES) {
-    const expected = readFileSync(new URL(`../../fonts/${name}`, import.meta.url));
+    const expected = readFileSync(new URL(`../public/fonts/${name}`, import.meta.url));
     assert.deepEqual(emitted.find(asset => asset.fileName === `fonts/${name}`).source, expected);
     assert.ok(css.includes(`/fonts/${name}`));
     assert.ok(workerSource.includes(`/fonts/${name}`));
@@ -100,7 +100,7 @@ test('production build includes exact font bytes, CSS URLs and the current safe 
   for (const name of FONT_NAMES) {
     assert.deepEqual(
       readFileSync(new URL(`../dist/fonts/${name}`, import.meta.url)),
-      readFileSync(new URL(`../../fonts/${name}`, import.meta.url)),
+      readFileSync(new URL(`../public/fonts/${name}`, import.meta.url)),
     );
   }
   const assets = new URL('../dist/assets/', import.meta.url);
