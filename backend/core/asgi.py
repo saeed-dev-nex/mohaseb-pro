@@ -8,13 +8,14 @@ https://docs.djangoproject.com/en/6.0/howto/deployment/asgi/
 
 In production mode (``DJANGO_SERVE_FRONTEND=true`` and a frontend build in
 ``frontend/dist``) the HTTP application also serves the built frontend and
-the uploaded media through WhiteNoise on the same port, so a single Daphne
+public uploaded media through WhiteNoise on the same port, so a single Daphne
 process runs the whole app. API, admin and websocket traffic always goes to
 Django/Channels; everything else is treated as a frontend asset or an SPA
 route. Development mode is unchanged (Django only).
 """
 
 import os
+import posixpath
 from pathlib import Path
 
 from django.conf import settings
@@ -49,6 +50,12 @@ def build_frontend_app(dist, media_root=None, media_url='/media/'):
     class SpaWhiteNoise(WhiteNoise):
         def __call__(self, environ, start_response):
             path = environ.get('PATH_INFO', '')
+            normalized = posixpath.normpath('/' + path.replace('\\', '/').lstrip('/'))
+            media_prefix = '/' + media_url.strip('/') + '/'
+            if normalized.lower().startswith(media_prefix.lower()):
+                media_path = normalized[len(media_prefix):].split('/', 1)[0].lower()
+                if media_path in {'customer_docs', 'chat_files'}:
+                    return _not_found_wsgi(environ, start_response)
             if (
                 environ.get('REQUEST_METHOD', 'GET') in ('GET', 'HEAD')
                 and '.' not in path.rsplit('/', 1)[-1]

@@ -39,11 +39,11 @@ class ModuleAccessApiTests(APITestCase):
         response = self.client.get('/api/users/me/')
         self.assertNotIn('users', response.data['modules'])
 
-    def test_manager_ceiling_includes_settings_and_users(self):
+    def test_manager_ceiling_includes_settings_but_not_user_administration(self):
         self.client.force_authenticate(self.manager)
         modules = self.client.get('/api/users/me/').data['modules']
         self.assertIn('settings', modules)
-        self.assertIn('users', modules)
+        self.assertNotIn('users', modules)
         self.assertNotIn('backup', modules)
 
     def test_superuser_bypasses_restrictions(self):

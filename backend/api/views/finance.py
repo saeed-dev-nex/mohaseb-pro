@@ -35,22 +35,26 @@ from ..serializers import (
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
 from ..audit import snapshot, record_audit, is_invoice_content_version
+from ..pagination import OptionalPageNumberPagination
 
 
 
 
 from .common import HasModuleAccess
+from ..module_access import effective_modules
 
 class ExpenseCategoryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasModuleAccess]
     module_name = 'expenses'
     serializer_class = ExpenseCategorySerializer
     queryset = ExpenseCategory.objects.all()
+    pagination_class = OptionalPageNumberPagination
 
 class ExpenseViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasModuleAccess]
     module_name = 'expenses'
     serializer_class = ExpenseSerializer
+    pagination_class = OptionalPageNumberPagination
 
     def perform_create(self, serializer):
         expense = serializer.save()
@@ -79,6 +83,12 @@ class ExpenseViewSet(viewsets.ModelViewSet):
             qs = qs.filter(date__lte=date_to)
         return qs
 
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        if self.action == 'summary' and 'reports' not in effective_modules(request.user):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('دسترسی به ماژول گزارشات لازم است.')
+
     @action(detail=False, methods=['get'])
     def summary(self, request):
         """Monthly expense summary"""
@@ -105,6 +115,7 @@ class ChequeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasModuleAccess]
     module_name = 'cheques'
     serializer_class = ChequeSerializer
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
         qs = Cheque.objects.select_related('customer').all()

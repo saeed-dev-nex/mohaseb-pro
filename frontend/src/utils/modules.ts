@@ -34,18 +34,21 @@ const RESOURCE_MODULES: ModuleName[] = [
 // The most a role can ever reach; a restriction row can only go below this.
 export function ceilingFor(role: string | null | undefined): ModuleName[] {
   if (role === 'admin') return ALL_MODULES;
-  if (role === 'manager') return [...RESOURCE_MODULES, 'settings', 'users'];
+  if (role === 'manager') return [...RESOURCE_MODULES, 'settings'];
   return RESOURCE_MODULES;
 }
 
-// UI visibility check. When the session payload predates stage 6 (no
-// `modules` array yet), don't hide anything here — the backend still
-// enforces the real rules and the next /me refresh fills the field in.
+// Apply the role ceiling even to older or stale session module arrays.
 export function hasModule(
-  user: { modules?: unknown } | null | undefined,
+  user: { modules?: unknown; is_superuser?: boolean; is_staff?: boolean; role?: string } | null | undefined,
   module: string | null | undefined,
 ): boolean {
   if (!module) return true;
+  if (!user) return false;
+  if (user.is_superuser) return true;
+  if (module === 'users' || module === 'backup') return false;
+  const role = user.is_staff || user.role === 'manager' ? 'manager' : 'operator';
+  if (!ceilingFor(role).includes(module as ModuleName)) return false;
   const mods = user?.modules;
   if (!Array.isArray(mods)) return true;
   return mods.includes(module);

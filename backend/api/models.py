@@ -1,9 +1,32 @@
 import re
+import uuid
 from decimal import Decimal
 
 from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator, MaxValueValidator
+from .services.money import final_amount, invoice_payment_totals, MAX_INVOICE_AMOUNT
+
+
+def document_upload_path(instance, filename):
+    """Store invoice documents under a stable, human-readable private name."""
+    def safe_component(value):
+        cleaned = ''.join(
+            '_' if ch in '<>:"/\\|?*' or ord(ch) < 32 else ch
+            for ch in str(value or '')
+        ).strip(' .')
+        return cleaned or 'بدون-عنوان'
+
+    extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    suffix = f'.{extension}' if extension else ''
+    if not instance.invoice_id:
+        return f'customer_docs/{safe_component(instance.title)}_{uuid.uuid4().hex[:10]}{suffix}'
+    invoice_number = safe_component(instance.invoice.invoice_number if instance.invoice_id else 'بدون-فاکتور')
+    title = safe_component(instance.title)
+    unique = uuid.uuid4().hex[:10]
+    return f'customer_docs/invoices/{invoice_number}/{invoice_number}_{title}_{unique}{suffix}'
 
 
 class Customer(models.Model):
@@ -35,16 +58,17 @@ class Customer(models.Model):
 
     @property
     def total_paid(self):
-        total = 0
-        for invoice in self.invoice_set.all().prefetch_related('payments'):
-            recorded = sum(payment.amount for payment in invoice.payments.all())
-            if invoice.status == 'paid':
-                # Settled invoices count at their full final amount, even
-                # when only part was recorded as staged payments.
-                total += max(recorded, invoice.final_amount)
-            else:
-                total += recorded
-        return total
+        return sum((invoice_payment_totals(invoice)[0] for invoice in self.financial_invoices()), Decimal(0))
+
+    def financial_invoices(self):
+        from django.db.models import prefetch_related_objects
+        prefetch_related_objects([self], 'invoice_set__payments')
+        return self.invoice_set.all()
+
+    @property
+    def total_pending(self):
+        return sum((invoice_payment_totals(invoice)[1] for invoice in self.financial_invoices()
+                    if invoice.status == 'pending'), Decimal(0))
 
 
 class Service(models.Model):
@@ -52,9 +76,9 @@ class Service(models.Model):
     description = models.TextField(blank=True, null=True, verbose_name='توضیحات')
     has_extra = models.BooleanField(default=False, verbose_name='دارای خدمت اضافه')
     extra_label = models.CharField(max_length=255, blank=True, null=True, verbose_name='برچسب خدمت اضافه')
-    default_main_price = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name='قیمت پایه')
-    default_extra_price = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name='قیمت اضافه')
-    default_commission = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name='کارمزد پیش‌فرض')
+    default_main_price = models.DecimalField(max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='قیمت پایه')
+    default_extra_price = models.DecimalField(max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='قیمت اضافه')
+    default_commission = models.DecimalField(max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='کارمزد پیش‌فرض')
     commission_label = models.CharField(max_length=100, default='کارمزد', blank=True, verbose_name='برچسب کارمزد')
     is_active = models.BooleanField(default=True, verbose_name='فعال')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -128,11 +152,11 @@ class Invoice(models.Model):
     date = models.DateTimeField(default=timezone.now, verbose_name='تاریخ')
     due_date = models.DateField(null=True, blank=True, verbose_name='سررسید')
     description = models.TextField(blank=True, null=True, verbose_name='توضیحات')
-    total_amount = models.DecimalField(max_digits=15, decimal_places=0, default=0, verbose_name='مبلغ کل')
-    commission_total = models.DecimalField(max_digits=15, decimal_places=0, default=0, verbose_name='جمع کارمزد')
+    total_amount = models.DecimalField(max_digits=15, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='مبلغ کل')
+    commission_total = models.DecimalField(max_digits=15, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='جمع کارمزد')
     commission_paid = models.BooleanField(default=False, verbose_name='کارمزد پرداخت شده')
-    discount = models.DecimalField(max_digits=15, decimal_places=0, default=0, verbose_name='تخفیف')
-    tax = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name='مالیات (%)')
+    discount = models.DecimalField(max_digits=15, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='تخفیف')
+    tax = models.DecimalField(max_digits=5, decimal_places=2, default=0, validators=[MinValueValidator(0), MaxValueValidator(100)], verbose_name='مالیات (%)')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='وضعیت')
     invoice_number = models.CharField(max_length=50, unique=True, blank=True, verbose_name='شماره فاکتور')
     paper_size = models.CharField(max_length=10, choices=PAPER_SIZE_CHOICES, default='a5', verbose_name='سایز کاغذ')
@@ -188,12 +212,12 @@ class Invoice(models.Model):
 
     @property
     def final_amount(self):
-        # Coerce through Decimal: on a freshly-built instance the fields
-        # can still be plain ints, and int/int division would produce a
-        # float that cannot be added to Decimal money fields.
-        total = Decimal(self.total_amount or 0)
-        tax_amount = (total * Decimal(self.tax or 0)) / Decimal(100)
-        return total + tax_amount - Decimal(self.discount or 0) + Decimal(self.commission_total or 0)
+        return final_amount(self.total_amount, self.tax, self.discount, self.commission_total)
+
+    def clean(self):
+        super().clean()
+        if not Decimal(0) <= self.final_amount <= MAX_INVOICE_AMOUNT:
+            raise ValidationError({'discount': 'مبلغ نهایی باید نامنفی و در محدودهٔ مجاز باشد.'})
 
     @property
     def net_commission(self):
@@ -204,10 +228,10 @@ class InvoiceItem(models.Model):
     invoice = models.ForeignKey(Invoice, related_name='items', on_delete=models.CASCADE)
     service = models.ForeignKey(Service, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='خدمت')
     service_title_snapshot = models.CharField(max_length=255, blank=True, verbose_name='عنوان خدمت')
-    quantity = models.IntegerField(default=1, verbose_name='تعداد')
-    main_price = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name='مبلغ پرداختی')
-    extra_price = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name='مبلغ استعلام')
-    commission = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name='کارمزد')
+    quantity = models.IntegerField(default=1, validators=[MinValueValidator(1)], verbose_name='تعداد')
+    main_price = models.DecimalField(max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='مبلغ پرداختی')
+    extra_price = models.DecimalField(max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='مبلغ استعلام')
+    commission = models.DecimalField(max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='کارمزد')
     notes = models.CharField(max_length=500, blank=True, null=True, verbose_name='یادداشت')
     staff = models.ForeignKey('Staff', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='تکنسین')
     is_office_card_fee = models.BooleanField(default=False, verbose_name='ردیف واریزی کارت دفتر')
@@ -267,7 +291,7 @@ class InvoicePayment(models.Model):
     ]
 
     invoice = models.ForeignKey(Invoice, related_name='payments', on_delete=models.CASCADE)
-    amount = models.DecimalField(max_digits=15, decimal_places=0)
+    amount = models.DecimalField(max_digits=15, decimal_places=0, validators=[MinValueValidator(1)])
     method = models.CharField(max_length=20, choices=METHOD_CHOICES, default='cash')
     reference = models.CharField(max_length=120, blank=True)
     note = models.CharField(max_length=500, blank=True)
@@ -309,7 +333,7 @@ class Document(models.Model):
     customer = models.ForeignKey(Customer, related_name='documents', on_delete=models.CASCADE)
     invoice = models.ForeignKey(Invoice, related_name='documents', on_delete=models.SET_NULL, null=True, blank=True)
     title = models.CharField(max_length=255, verbose_name='عنوان')
-    file = models.FileField(upload_to='customer_docs/', verbose_name='فایل')
+    file = models.FileField(upload_to=document_upload_path, verbose_name='فایل')
     description = models.TextField(blank=True, null=True, verbose_name='توضیحات')
     tags = models.JSONField(default=list, blank=True, verbose_name='تگ‌ها')
     file_path = models.CharField(max_length=1000, blank=True, null=True, verbose_name='مسیر فیزیکی فایل')
@@ -524,7 +548,7 @@ class Expense(models.Model):
     """Track business expenses for profit/loss calculation"""
     category = models.ForeignKey(ExpenseCategory, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='دسته')
     title = models.CharField(max_length=255, verbose_name='عنوان')
-    amount = models.DecimalField(max_digits=15, decimal_places=0, verbose_name='مبلغ')
+    amount = models.DecimalField(max_digits=15, decimal_places=0, validators=[MinValueValidator(1)], verbose_name='مبلغ')
     date = models.DateField(default=timezone.now, verbose_name='تاریخ')
     description = models.TextField(blank=True, verbose_name='توضیحات')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -543,7 +567,7 @@ class Staff(models.Model):
     name = models.CharField(max_length=255, verbose_name='نام')
     phone = models.CharField(max_length=50, blank=True, verbose_name='تلفن')
     specialty = models.CharField(max_length=255, blank=True, verbose_name='تخصص')
-    commission_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name='درصد پورسانت')
+    commission_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0, validators=[MinValueValidator(0), MaxValueValidator(100)], verbose_name='درصد پورسانت')
     is_active = models.BooleanField(default=True, verbose_name='فعال')
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -585,7 +609,7 @@ class Cheque(models.Model):
     cheque_number = models.CharField(max_length=100, verbose_name='شماره چک')
     bank_name = models.CharField(max_length=255, verbose_name='نام بانک')
     branch = models.CharField(max_length=255, blank=True, null=True, verbose_name='شعبه')
-    amount = models.DecimalField(max_digits=15, decimal_places=0, verbose_name='مبلغ چک')
+    amount = models.DecimalField(max_digits=15, decimal_places=0, validators=[MinValueValidator(1)], verbose_name='مبلغ چک')
     due_date = models.DateField(verbose_name='تاریخ سررسید')
     issue_date = models.DateField(blank=True, null=True, verbose_name='تاریخ صدور')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='وضعیت')

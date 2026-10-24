@@ -38,7 +38,11 @@ const authStorage = {
     await Promise.all([storage.remove(key), sessionStorage.remove(key)]);
     await (remember ? storage : sessionStorage).set(key, val);
   },
-  setRefreshedAccess: async (val) => authStorage.set('access_token', val, Boolean(await storage.get('refresh_token'))),
+  setRefreshedTokens: async (data) => {
+    const remember = Boolean(await storage.get('refresh_token'));
+    await authStorage.set('access_token', data.access, remember);
+    if (data.refresh) await authStorage.set('refresh_token', data.refresh, remember);
+  },
   remove: async (key) => Promise.all([storage.remove(key), sessionStorage.remove(key)]),
 };
 
@@ -61,9 +65,15 @@ async function apiRequest(endpoint, options = {}) {
       });
       if (refreshResp.ok) {
         const data = await refreshResp.json();
-        await authStorage.setRefreshedAccess(data.access);
+        if (typeof data.access !== 'string' || !data.access) throw new Error('AUTH_EXPIRED');
+        await authStorage.setRefreshedTokens(data);
         headers['Authorization'] = `Bearer ${data.access}`;
-        return fetch(API + endpoint, { ...options, headers }).then(r => r.json());
+        const retry = await fetch(API + endpoint, { ...options, headers });
+        if (!retry.ok) {
+          const error = await retry.json().catch(() => ({}));
+          throw new Error(retry.status === 401 ? 'AUTH_EXPIRED' : error.error || error.detail || JSON.stringify(error));
+        }
+        return retry.json();
       }
     }
     throw new Error('AUTH_EXPIRED');

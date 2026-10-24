@@ -1,5 +1,7 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
+import { createAccessRefresher, resolveApiBaseURL } from './apiConfig';
+import { queryClient } from '../lib/queryClient';
 
 // Stage 7 (gradual TypeScript migration): shared shapes for the API layer.
 // Payloads stay intentionally loose (`Record<string, unknown>` / FormData)
@@ -10,12 +12,17 @@ export type Id = number | string;
 export type Params = Record<string, unknown>;
 export type Payload = Record<string, unknown> | FormData;
 
-// LAN Support: if VITE_API_URL env var is set use it, otherwise
-// derive from current browser hostname so clients auto-connect to server
-const API_BASE_URL: string = import.meta.env.VITE_API_URL ||
-  `http://${window.location.hostname}:8000/api/`;
+export const API_BASE_URL: string = resolveApiBaseURL(import.meta.env.VITE_API_URL, window.location);
 
 const api = axios.create({ baseURL: API_BASE_URL });
+const refreshAccess = createAccessRefresher({
+  getAccess: () => Cookies.get('access_token'),
+  refresh: async () => (await axios.post(
+    `${API_BASE_URL}token/refresh/`, {},
+    { withCredentials: true, headers: { 'X-Client-Type': 'web' }, timeout: 15000 }
+  )).data,
+  saveAccess: (access: string) => Cookies.set('access_token', access, { sameSite: 'lax' }),
+});
 
 // Request interceptor - attach token
 api.interceptors.request.use((config) => {
@@ -33,17 +40,15 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !error.config?.url?.includes('token/') && !error.config?._retriedAfterRefresh) {
       error.config._retriedAfterRefresh = true;
       try {
-        const res = await axios.post(
-          `${API_BASE_URL}token/refresh/`,
-          {},
-          { withCredentials: true, headers: { 'X-Client-Type': 'web' } }
-        );
-        Cookies.set('access_token', res.data.access, { sameSite: 'lax' });
-        error.config.headers.Authorization = `Bearer ${res.data.access}`;
+        const failedAccess = String(error.config.headers?.Authorization || '').replace(/^Bearer /, '');
+        const access = await refreshAccess(failedAccess);
+        error.config.headers.Authorization = `Bearer ${access}`;
         return api.request(error.config);
       } catch {
         Cookies.remove('access_token');
         Cookies.remove('refresh_token');
+        localStorage.removeItem('mohaseb_user');
+        queryClient.clear();
         window.location.href = '/login';
       }
     }
@@ -116,6 +121,8 @@ export const auditAPI = {
 export const documentsAPI = {
   list: (params: Params = {}) => api.get('documents/', { params }),
   detail: (id: Id) => api.get(`documents/${id}/`),
+  download: (id: Id) => api.get<Blob>(`documents/${id}/download/`, { responseType: 'blob' }),
+  preview: (id: Id) => api.get<Blob>(`documents/${id}/preview/`, { responseType: 'blob' }),
   create: (formData: FormData) => api.post('documents/', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
@@ -124,6 +131,27 @@ export const documentsAPI = {
   }),
   delete: (id: Id) => api.delete(`documents/${id}/`),
   customerFolderFiles: (customerId: Id) => api.get(`documents/customer_folder_files/?customer=${customerId}`),
+};
+
+export const downloadDocumentFile = async (id: Id, fallbackName: string = 'document'): Promise<void> => {
+  const response = await documentsAPI.download(id);
+  const disposition = response.headers['content-disposition'] || '';
+  const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const plainName = disposition.match(/filename="([^"]+)"/i)?.[1];
+  let name = plainName || fallbackName;
+  if (encodedName) {
+    try { name = decodeURIComponent(encodedName); } catch { /* Keep the fallback name. */ }
+  }
+  const url = URL.createObjectURL(response.data);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  try { link.click(); } finally {
+    link.remove();
+    // Let the browser consume the blob before releasing it.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
 };
 
 
@@ -186,7 +214,7 @@ export const backupConfigAPI = {
   browseFolders: (path: string = '') => api.get('backup-config/browse_folders/', { params: { path } }),
   runBackup: (data: Payload = {}) => api.post('backup-config/run_backup/', data),
   runBackupDownload: (data: Payload = {}) => api.post('backup-config/run_backup/', data, { responseType: 'blob' }),
-  checkAuto: () => api.get('backup-config/check_auto/'),
+  checkAuto: () => api.post('backup-config/check_auto/'),
 };
 
 export const invoiceSettingsAPI = {

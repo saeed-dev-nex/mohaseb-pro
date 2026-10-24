@@ -10,6 +10,7 @@ webhook (REMINDER_WEBHOOK_URL) so any messenger/bot can deliver it.
 from datetime import date, timedelta
 
 from django.db.models import Sum
+from django.utils import timezone
 
 from ..models import Cheque, Invoice, InvoicePayment
 
@@ -53,7 +54,7 @@ def _cheque_row(cheque, today):
 
 
 def build_reminders(today=None, within_days=7):
-    today = today or date.today()
+    today = today or timezone.localdate()
     horizon = today + timedelta(days=within_days)
 
     pending = list(

@@ -19,6 +19,7 @@ from django.contrib.auth.models import User
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 import json, calendar, os, shutil
+import mimetypes
 from zoneinfo import ZoneInfo
 
 from ..models import (
@@ -78,6 +79,37 @@ class DocumentViewSet(viewsets.ModelViewSet):
         record_audit(user=self.request.user, instance=instance, action='delete', before={'customer_id': instance.customer_id, 'filename': os.path.basename(instance.file.name) if instance.file else ''})
         instance.delete()
 
+    @action(detail=True, methods=['get'])
+    def download(self, request, pk=None):
+        doc = self.get_object()
+        if not doc.file:
+            return Response({'detail': 'فایلی برای این سند ثبت نشده است.'}, status=404)
+        try:
+            source = doc.file.open('rb')
+        except (FileNotFoundError, OSError):
+            return Response({'detail': 'فایل سند یافت نشد.'}, status=404)
+        response = FileResponse(source, as_attachment=True, filename=os.path.basename(doc.file.name))
+        response['X-Content-Type-Options'] = 'nosniff'
+        response['Cache-Control'] = 'private, no-store'
+        return response
+
+    @action(detail=True, methods=['get'])
+    def preview(self, request, pk=None):
+        """Display a private document inline when the browser supports it."""
+        doc = self.get_object()
+        if not doc.file:
+            return Response({'detail': 'فایلی برای این سند ثبت نشده است.'}, status=404)
+        try:
+            source = doc.file.open('rb')
+        except (FileNotFoundError, OSError):
+            return Response({'detail': 'فایل سند یافت نشد.'}, status=404)
+        content_type = mimetypes.guess_type(doc.file.name)[0] or 'application/octet-stream'
+        response = FileResponse(source, as_attachment=False, content_type=content_type)
+        response['Content-Disposition'] = 'inline'
+        response['X-Content-Type-Options'] = 'nosniff'
+        response['Cache-Control'] = 'private, no-store'
+        return response
+
     def _sync_to_customer_folder(self, doc):
         """Copy file to customer-specific folder on disk if configured"""
         try:
@@ -112,12 +144,12 @@ class DocumentViewSet(viewsets.ModelViewSet):
             profile = BusinessProfile.load()
             base_path = profile.customer_documents_path
             if not base_path:
-                return Response({'files': [], 'folder': ''})
+                return Response({'files': []})
             safe_name = ''.join('_' if ch in '<>:"/\\|?*' or ord(ch) < 32 else ch for ch in customer.name).strip(' .') or 'بدون نام'
             folder_name = f"{customer.id}_{safe_name}"
             folder_path = os.path.join(base_path, folder_name)
             if not os.path.isdir(folder_path):
-                return Response({'files': [], 'folder': folder_path})
+                return Response({'files': []})
             files = []
             for root, _, filenames in os.walk(folder_path):
               for f in filenames:
@@ -125,10 +157,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
                 if os.path.isfile(fp):
                     files.append({
                         'name': f,
-                        'path': fp,
                         'size': os.path.getsize(fp),
                         'modified': os.path.getmtime(fp),
                     })
-            return Response({'files': files, 'folder': folder_path})
+            return Response({'files': files})
         except Customer.DoesNotExist:
             return Response({'error': 'customer not found'}, status=404)

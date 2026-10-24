@@ -8,6 +8,8 @@ import InvoiceEditRequestAlerts from './InvoiceEditRequestAlerts';
 import WelcomeModal from './WelcomeModal';
 import { backupConfigAPI, chatAPI, chatSocketProtocols, chatSocketURL, welcomeAPI } from '../services/api';
 import api from '../services/api';
+import { hasModule } from '../utils/modules';
+import { startVisibilityPoll } from '../utils/visibilityPoll';
 
 type ChatNotice = { sender: string; text: string };
 
@@ -15,9 +17,11 @@ const ChatRealtimeBridge = () => {
   const user = useSelector((state: any) => state.auth.currentUser);
   const isAuthenticated = useSelector((state: any) => state.auth.isAuthenticated);
   const [notice, setNotice] = React.useState<ChatNotice | null>(null);
+  const canChat = hasModule(user, 'chat');
 
   React.useEffect(() => {
-    if (!isAuthenticated || !user?.id) return undefined;
+    setNotice(null);
+    if (!isAuthenticated || !user?.id || !canChat) return undefined;
     let active = true;
     let socket: WebSocket | undefined;
     let reconnectTimer: number | undefined;
@@ -62,7 +66,7 @@ const ChatRealtimeBridge = () => {
         if (Number(message.sender) === Number(user.id)) return;
         const onChatPage = window.location.pathname === '/chat' && !document.hidden;
         if (!onChatPage) {
-          chatAPI.unread().then(({ data }) => window.dispatchEvent(new CustomEvent('mohaseb:chat-unread', { detail: { count: data.count || 0 } }))).catch(() => {});
+          refreshUnread();
           setNotice({ sender: message.sender_name, text: message.text || `فایل پیوست: ${message.file_name}` });
           window.clearTimeout(noticeTimer);
           noticeTimer = window.setTimeout(() => setNotice(null), 7000);
@@ -103,7 +107,7 @@ const ChatRealtimeBridge = () => {
       window.clearInterval(heartbeatTimer);
       socket?.close();
     };
-  }, [isAuthenticated, user?.id]);
+  }, [isAuthenticated, user?.id, canChat]);
 
   return notice ? <a href="/chat" onClick={() => setNotice(null)} className="fixed left-5 top-20 z-[60] max-w-sm rounded-2xl border border-blue-400/30 bg-slate-800 px-4 py-3 text-right shadow-2xl shadow-black/30"><p className="text-sm font-semibold text-blue-200">پیام تازه از {notice.sender}</p><p className="mt-1 truncate text-xs text-slate-300">{notice.text}</p><span className="mt-2 block text-[10px] text-blue-300">برای مشاهده وارد گفتگو شوید</span></a> : null;
 };
@@ -120,6 +124,9 @@ const Layout = () => {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [welcomeMessage, setWelcomeMessage] = useState('');
   const isAuthenticated = useSelector((state: any) => state.auth.isAuthenticated);
+  const currentUser = useSelector((state: any) => state.auth.currentUser);
+  const isSuperuser = !!currentUser?.is_superuser;
+  const canQuickInvoice = hasModule(currentUser, 'invoices');
 
   React.useEffect(() => {
     if (!isAuthenticated) return;
@@ -129,44 +136,25 @@ const Layout = () => {
   }, [isAuthenticated]);
 
   React.useEffect(() => {
-    let active = true;
-    let timer: number | undefined;
+    if (!isAuthenticated) return undefined;
     let lastRevision: string | undefined;
-    const poll = async () => {
-      try {
-        const { data } = await api.get('changes/');
+    return startVisibilityPoll(async (signal: AbortSignal, isActive: () => boolean) => {
+        const { data } = await api.get('changes/', { signal, timeout: 12000 });
+        if (!isActive()) return;
         const revision = JSON.stringify(data.revision);
         if (lastRevision !== undefined && revision !== lastRevision) {
           window.dispatchEvent(new CustomEvent('mohaseb:data-changed'));
         }
         lastRevision = revision;
-      } catch {
-        // Retry after a short delay; normal API errors are handled elsewhere.
-      } finally {
-        if (active) timer = window.setTimeout(poll, document.hidden ? 5000 : 1000);
-      }
-    };
-    const onVisible = () => {
-      if (!document.hidden && active) {
-        window.clearTimeout(timer);
-        poll();
-      }
-    };
-    poll();
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, []);
+    }, { document, setTimeout: window.setTimeout.bind(window), clearTimeout: window.clearTimeout.bind(window) });
+  }, [isAuthenticated, currentUser?.id]);
 
   React.useEffect(() => {
-    if (!isAuthenticated) return undefined;
+    if (!isAuthenticated || !isSuperuser) return undefined;
     backupConfigAPI.checkAuto().catch(() => {});
     const timer = window.setInterval(() => backupConfigAPI.checkAuto().catch(() => {}), 60 * 1000);
     return () => window.clearInterval(timer);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isSuperuser]);
 
   React.useEffect(() => {
     const captureInstallPrompt = (event: BeforeInstallPromptEvent) => {
@@ -201,7 +189,7 @@ const Layout = () => {
       </div>
 
       {/* Quick Invoice FAB */}
-      <button
+      {canQuickInvoice && <button
         onClick={() => setQuickInvoice(true)}
         title="فاکتور سریع"
         className="fixed bottom-6 left-6 z-40 w-14 h-14 rounded-2xl
@@ -218,14 +206,14 @@ const Layout = () => {
           opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
           فاکتور سریع
         </span>
-      </button>
+      </button>}
 
       {/* Quick Invoice Modal */}
-      <QuickInvoiceModal
+      {canQuickInvoice && <QuickInvoiceModal
         isOpen={quickInvoice}
         onClose={() => setQuickInvoice(false)}
         onSuccess={() => {}}
-      />
+      />}
       {installPrompt && <button type="button" onClick={installPwa} className="fixed bottom-24 left-6 z-40 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-900/30 hover:bg-emerald-500">⬇ نصب محاسب پرو</button>}
     </div>
   );

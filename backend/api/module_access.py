@@ -19,11 +19,9 @@ RESOURCE_MODULES = (
     'invoices', 'customers', 'services', 'expenses', 'cheques',
     'reports', 'chat', 'staff',
 )
-# Extra modules managers (is_staff) could reach before stage 6 through
-# role-gated endpoints (settings writes, user management).
-MANAGER_MODULES = ('settings', 'users')
-# Superuser-only before stage 6 (backup/restore) — stays superuser-only.
-ADMIN_MODULES = ('backup',)
+# Account administration is distinct from Django's is_staff flag.
+MANAGER_MODULES = ('settings',)
+ADMIN_MODULES = ('users', 'backup')
 
 ALL_MODULES = RESOURCE_MODULES + MANAGER_MODULES + ADMIN_MODULES
 

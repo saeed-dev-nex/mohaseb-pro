@@ -5,6 +5,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import BasePermission, IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.exceptions import PermissionDenied
 from django.db.models import Sum, Count, Q, OuterRef, Subquery, DecimalField, Value, Case, When, F, ExpressionWrapper
 from django.db.models.functions import Coalesce
 from django.db import transaction, connection
@@ -35,7 +36,7 @@ from ..serializers import (
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
 from ..audit import snapshot, record_audit, is_invoice_content_version
-from .common import IsManagerOrAdmin
+from .common import CanManageSettings
 
 
 
@@ -46,7 +47,7 @@ class InvoiceSettingsViewSet(viewsets.ViewSet):
     def list(self, request):
         return Response(InvoiceSettingsSerializer(InvoiceSettings.load()).data)
 
-    @action(detail=False, methods=['put', 'patch'], permission_classes=[IsManagerOrAdmin])
+    @action(detail=False, methods=['put', 'patch'], permission_classes=[CanManageSettings])
     def update_config(self, request):
         settings_obj = InvoiceSettings.load()
         serializer = InvoiceSettingsSerializer(settings_obj, data=request.data, partial=True)
@@ -57,7 +58,7 @@ class InvoiceSettingsViewSet(viewsets.ViewSet):
 class WelcomeSettingsViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
-    @action(detail=False, methods=['get', 'patch'], permission_classes=[IsManagerOrAdmin])
+    @action(detail=False, methods=['get', 'patch'], permission_classes=[CanManageSettings])
     def config(self, request):
         settings_obj = WelcomeSettings.load()
         if request.method == 'PATCH':
@@ -66,7 +67,7 @@ class WelcomeSettingsViewSet(viewsets.ViewSet):
             settings_obj.save(update_fields=['enabled', 'global_message'])
         return Response({'enabled': settings_obj.enabled, 'global_message': settings_obj.global_message})
 
-    @action(detail=False, methods=['get'], permission_classes=[IsManagerOrAdmin])
+    @action(detail=False, methods=['get'], permission_classes=[CanManageSettings])
     def users(self, request):
         users = User.objects.filter(is_active=True).order_by('first_name', 'last_name', 'username')
         return Response([{
@@ -74,7 +75,7 @@ class WelcomeSettingsViewSet(viewsets.ViewSet):
             'name': user.get_full_name().strip() or user.username,
         } for user in users])
 
-    @action(detail=False, methods=['get', 'post', 'delete'], permission_classes=[IsManagerOrAdmin])
+    @action(detail=False, methods=['get', 'post', 'delete'], permission_classes=[CanManageSettings])
     def personal(self, request):
         if request.method == 'GET':
             messages = UserWelcomeMessage.objects.select_related('user').order_by('user__first_name', 'user__last_name', 'user__username')
@@ -122,13 +123,21 @@ class BusinessProfileViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
+    def profile_data(self, serializer):
+        data = dict(serializer.data)
+        if not self.request.user.is_superuser:
+            data.pop('customer_documents_path', None)
+        return data
+
     def list(self, request):
         profile = BusinessProfile.load()
         serializer = BusinessProfileSerializer(profile, context={'request': request})
-        return Response(serializer.data)
+        return Response(self.profile_data(serializer))
 
-    @action(detail=False, methods=['put', 'patch'])
+    @action(detail=False, methods=['put', 'patch'], permission_classes=[CanManageSettings])
     def update_profile(self, request):
+        if 'customer_documents_path' in request.data and not request.user.is_superuser:
+            raise PermissionDenied('تغییر مسیر ذخیره‌سازی مدارک فقط برای ادمین مجاز است.')
         profile = BusinessProfile.load()
         serializer = BusinessProfileSerializer(
             profile, data=request.data, partial=True,
@@ -136,13 +145,18 @@ class BusinessProfileViewSet(viewsets.ViewSet):
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data)
+        return Response(self.profile_data(serializer))
 
 class SocialNetworkViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = SocialNetworkSerializer
     queryset = SocialNetwork.objects.select_related('profile').all()
     parser_classes = [MultiPartParser, FormParser]
+
+    def get_permissions(self):
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), CanManageSettings()]
 
     def get_queryset(self):
         return super().get_queryset().filter(profile_id=1)

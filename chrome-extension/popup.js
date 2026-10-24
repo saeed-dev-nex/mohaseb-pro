@@ -33,7 +33,11 @@ const authStorage = {
     await Promise.all([storage.remove(key), sessionStorage.remove(key)]);
     await (remember ? storage : sessionStorage).set(key, val);
   },
-  setRefreshedAccess: async (val) => authStorage.set('access_token', val, Boolean(await storage.get('refresh_token'))),
+  setRefreshedTokens: async (data) => {
+    const remember = Boolean(await storage.get('refresh_token'));
+    await authStorage.set('access_token', data.access, remember);
+    if (data.refresh) await authStorage.set('refresh_token', data.refresh, remember);
+  },
   remove: async (key) => Promise.all([storage.remove(key), sessionStorage.remove(key)]),
 };
 
@@ -56,9 +60,15 @@ async function apiRequest(endpoint, options = {}) {
       });
       if (refreshResp.ok) {
         const data = await refreshResp.json();
-        await authStorage.setRefreshedAccess(data.access);
+        if (typeof data.access !== 'string' || !data.access) throw new Error('AUTH_EXPIRED');
+        await authStorage.setRefreshedTokens(data);
         headers['Authorization'] = `Bearer ${data.access}`;
-        return fetch(API + endpoint, { ...options, headers }).then(r => r.json());
+        const retry = await fetch(API + endpoint, { ...options, headers });
+        if (!retry.ok) {
+          const error = await retry.json().catch(() => ({}));
+          throw new Error(retry.status === 401 ? 'AUTH_EXPIRED' : error.error || error.detail || JSON.stringify(error));
+        }
+        return retry.json();
       }
     }
     throw new Error('AUTH_EXPIRED');
@@ -289,14 +299,19 @@ $('customer-name').addEventListener('input', (e) => {
       const data = await apiRequest(`customers/?search=${encodeURIComponent(q)}`);
       const list = data.results || data;
       const container = $('customer-suggestions');
-      container.innerHTML = '';
+      container.replaceChildren();
 
       if (list.length > 0) {
         list.slice(0, 5).forEach(c => {
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'suggestion-item';
-          btn.innerHTML = `<span>${c.name}</span><span class="suggestion-phone">${c.phone || ''}</span>`;
+          const name = document.createElement('span');
+          name.textContent = c.name || '';
+          const phone = document.createElement('span');
+          phone.className = 'suggestion-phone';
+          phone.textContent = c.phone || '';
+          btn.append(name, phone);
           btn.addEventListener('click', () => {
             $('customer-name').value = c.name;
             if (c.phone) $('customer-phone').value = c.phone;
@@ -343,48 +358,19 @@ function updateStatusButtons() {
 // Item Rows
 // ═══════════════════════════════════════════
 function clearItems() {
-  $('items-container').innerHTML = '';
+  $('items-container').replaceChildren();
 }
 
 function addItemRow(data = {}) {
   const container = $('items-container');
-  const idx = container.children.length;
-  const row = document.createElement('div');
-  row.className = 'item-row';
-
-  row.innerHTML = `
-    <span class="item-num">${idx + 1}</span>
-    <button type="button" class="item-remove" data-action="remove-row">×</button>
-    <div class="item-title-input">
-      <input type="text" class="item-title" placeholder="عنوان خدمت (تایپ کنید برای جستجو)" value="${data.title || ''}" autocomplete="off" />
-      <div class="svc-suggestions" style="display:none;"></div>
-      <button type="button" class="btn-outline-sm svc-picker-toggle">افزودن از لیست خدمات</button>
-      <div class="svc-picker-list" style="display:none;"></div>
-    </div>
-    <div class="item-prices">
-      <div>
-        <span class="price-label">قیمت اصلی</span>
-        <div class="price-wrap">
-          <input type="number" class="item-main-price" placeholder="0" value="${data.mainPrice || ''}" />
-          <span class="price-unit">هزار ت</span>
-        </div>
-      </div>
-      <div>
-        <span class="price-label">قیمت اضافی</span>
-        <div class="price-wrap">
-          <input type="number" class="item-extra-price" placeholder="0" value="${data.extraPrice || ''}" />
-          <span class="price-unit">هزار ت</span>
-        </div>
-      </div>
-      <div>
-        <span class="price-label">تعداد</span>
-        <input type="number" class="item-qty" min="1" placeholder="1" value="${data.qty || 1}" />
-      </div>
-    </div>
-    <div class="item-line-total"></div>
-  `;
+  const row = document.getElementById('item-row-template').content.firstElementChild.cloneNode(true);
+  row.querySelector('.item-num').textContent = container.children.length + 1;
 
   container.appendChild(row);
+  row.querySelector('.item-title').value = data.title || '';
+  row.querySelector('.item-main-price').value = data.mainPrice || '';
+  row.querySelector('.item-extra-price').value = data.extraPrice || '';
+  row.querySelector('.item-qty').value = data.qty || 1;
 
   // Set serviceId if restoring
   if (data.serviceId) {
@@ -430,13 +416,18 @@ function addItemRow(data = {}) {
     if (!q) { svcSuggestions.style.display = 'none'; return; }
     svcSearchTimeout = setTimeout(() => {
       const filtered = services.filter(s => s.is_active && s.title.toLowerCase().includes(q));
-      svcSuggestions.innerHTML = '';
+      svcSuggestions.replaceChildren();
       if (filtered.length > 0) {
         filtered.slice(0, 4).forEach(s => {
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'svc-item';
-          btn.innerHTML = `<span>${s.title}</span><span class="svc-price">${fmt(s.default_main_price)} ت</span>`;
+          const title = document.createElement('span');
+          title.textContent = s.title || '';
+          const price = document.createElement('span');
+          price.className = 'svc-price';
+          price.textContent = `${fmt(s.default_main_price)} ت`;
+          btn.append(title, price);
           btn.addEventListener('click', () => {
             titleInput.value = s.title;
             titleInput.dataset.serviceId = s.id;

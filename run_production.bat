@@ -101,8 +101,8 @@ echo.
 :start_server
 set "DJANGO_DEBUG=false"
 set "DJANGO_SERVE_FRONTEND=true"
-set "DJANGO_ALLOWED_HOSTS=*"
-set "DJANGO_CORS_ALLOWED_ORIGINS=http://%LOCAL_IP%:%MOHASEB_PORT%,http://localhost:%MOHASEB_PORT%,http://127.0.0.1:%MOHASEB_PORT%"
+if not defined DJANGO_ALLOWED_HOSTS set "DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],%LOCAL_IP%"
+if not defined DJANGO_CORS_ALLOWED_ORIGINS set "DJANGO_CORS_ALLOWED_ORIGINS=http://%LOCAL_IP%:%MOHASEB_PORT%,http://localhost:%MOHASEB_PORT%,http://127.0.0.1:%MOHASEB_PORT%"
 
 start "Mohaseb-Production" "%BACKEND%\run_production_server.bat"
 

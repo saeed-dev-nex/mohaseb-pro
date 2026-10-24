@@ -6,6 +6,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated, IsAdminU
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.db.models import Sum, Count, Q, OuterRef, Subquery, DecimalField, Value, Case, When, F, ExpressionWrapper
+from django.db.models import Prefetch
 from django.db.models.functions import Coalesce
 from django.db import transaction, connection
 from django.utils import timezone
@@ -35,6 +36,7 @@ from ..serializers import (
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
 from ..audit import snapshot, record_audit, is_invoice_content_version
+from ..pagination import OptionalPageNumberPagination
 
 
 
@@ -44,9 +46,21 @@ from .common import HasModuleAccess
 class CustomerViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasModuleAccess]
     module_name = 'customers'
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
+        # Customer totals are calculated by the serializers through the shared
+        # ``invoice_payment_totals`` helper. Prefetching both levels keeps those
+        # calculations bounded to three queries for a list (customers,
+        # invoices, payments), rather than one query per customer/invoice.
         qs = Customer.objects.all()
+        if self.action in {'list', 'retrieve'}:
+            invoice_queryset = Invoice.objects.prefetch_related('payments')
+            qs = qs.prefetch_related(
+                Prefetch('invoice_set', queryset=invoice_queryset),
+            )
+        if self.action == 'retrieve':
+            qs = qs.prefetch_related('documents')
         search = self.request.query_params.get('search', '')
         if search:
             qs = qs.filter(
@@ -79,7 +93,11 @@ class CustomerViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def invoices(self, request, pk=None):
         customer = self.get_object()
-        invoices = Invoice.objects.filter(customer=customer).order_by('-date')
+        invoices = Invoice.objects.filter(customer=customer).select_related(
+            'customer', 'created_by', 'paid_by',
+        ).prefetch_related(
+            'items__service', 'payments__created_by', 'edit_requests',
+        ).order_by('-date')
         serializer = InvoiceSerializer(invoices, many=True, context={'request': request})
         return Response(serializer.data)
 

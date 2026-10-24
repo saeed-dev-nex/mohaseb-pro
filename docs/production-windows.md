@@ -37,6 +37,8 @@ run_production.bat
 | `DJANGO_SERVE_FRONTEND` | در Production روشن | سرویس‌دهی بیلد فرانت‌اند و فایل‌های مدیا توسط خود برنامه |
 | `DJANGO_FRONTEND_DIST` | `frontend\dist` | مسیر بیلد فرانت‌اند |
 | `DJANGO_DB_PATH` / `DJANGO_MEDIA_ROOT` | پیش‌فرض پروژه | جابه‌جایی فایل دیتابیس و پوشهٔ مدیا (مثلاً به درایو داده) |
+| `DJANGO_TIME_ZONE` | `Asia/Tehran` | منطقهٔ زمانی گزارش‌ها، سررسیدها و بکاپ‌ها |
+| `DJANGO_BACKUP_SCHEDULER_ENABLED` | `true` | فعال‌سازی بکاپ خودکار داخلی در پردازهٔ Daphne؛ برای زمان‌بندی بیرونی روی `false` بگذارید |
 
 ## HTTPS
 

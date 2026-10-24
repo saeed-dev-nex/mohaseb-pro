@@ -18,6 +18,7 @@ backend/staticfiles/
 .env
 .env.*
 !.env.example
+.omnirush
 
 # Node and generated frontend output
 node_modules/
@@ -41,3 +42,4 @@ firefox-extension/release/
 Thumbs.db
 Desktop.ini
 backend/.secret_key
+*.backup.lock

@@ -35,6 +35,7 @@ from ..serializers import (
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
 from ..audit import snapshot, record_audit, is_invoice_content_version
+from ..pagination import OptionalPageNumberPagination
 
 
 
@@ -45,6 +46,7 @@ class ServiceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasModuleAccess]
     module_name = 'services'
     serializer_class = ServiceSerializer
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
         qs = Service.objects.all()
@@ -58,3 +60,4 @@ class VehicleTypeViewSet(viewsets.ModelViewSet):
     module_name = 'services'
     serializer_class = VehicleTypeSerializer
     queryset = VehicleType.objects.all()
+    pagination_class = OptionalPageNumberPagination

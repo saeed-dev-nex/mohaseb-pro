@@ -137,7 +137,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = os.environ.get('DJANGO_TIME_ZONE', 'Asia/Tehran').strip() or 'Asia/Tehran'
 
 USE_I18N = True
 
@@ -241,3 +241,4 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 # Daphne process runs the whole app in production (see run_production.bat).
 SERVE_FRONTEND = _env_flag('DJANGO_SERVE_FRONTEND')
 FRONTEND_DIST = Path(os.environ.get('DJANGO_FRONTEND_DIST', BASE_DIR.parent / 'frontend' / 'dist'))
+BACKUP_SCHEDULER_ENABLED = os.environ.get('DJANGO_BACKUP_SCHEDULER_ENABLED', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}
