@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 export const FONT_NAMES = ['vazirmatn-1.woff2', 'vazirmatn-2.woff2', 'vazirmatn-3.woff2'];
-const fontRoot = new URL('../../fonts/', import.meta.url);
+const fontRoot = new URL('../public/fonts/', import.meta.url);
 
 // The repository owns one copy of the fonts; dev and production expose the same URLs.
 export function repositoryFonts() {
