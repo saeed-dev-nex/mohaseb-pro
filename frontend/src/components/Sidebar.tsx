@@ -83,7 +83,10 @@ const Sidebar = ({
   const canChat = hasModule(currentUser, "chat");
 
   useEffect(() => {
-    if (!currentUser || !canChat) { setChatUnreadCount(0); return undefined; }
+    if (!currentUser || !canChat) {
+      setChatUnreadCount(0);
+      return undefined;
+    }
     chatAPI
       .unread()
       .then(({ data }) => {

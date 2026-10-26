@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import type { InputHTMLAttributes } from 'react';
+import React, { useRef } from "react";
+import type { InputHTMLAttributes } from "react";
 
 /**
  * PriceInput — ورود قیمت به هزار تومان
@@ -15,7 +15,8 @@ import type { InputHTMLAttributes } from 'react';
  *   placeholder, className, ...rest
  */
 
-const fmt = (n: number | string) => new Intl.NumberFormat('fa-IR').format(Number(n) || 0);
+const fmt = (n: number | string) =>
+  new Intl.NumberFormat("fa-IR").format(Number(n) || 0);
 
 type PriceInputProps = {
   value?: number | string | null;
@@ -24,14 +25,17 @@ type PriceInputProps = {
   className?: string;
   borderColor?: string;
   blankWhenZero?: boolean;
-} & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'placeholder' | 'className'>;
+} & Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "value" | "onChange" | "placeholder" | "className"
+>;
 
 const PriceInput = ({
   value,
   onChange,
-  placeholder = '0',
-  className = '',
-  borderColor = '',
+  placeholder = "0",
+  className = "",
+  borderColor = "",
   blankWhenZero = false,
   ...rest
 }: PriceInputProps) => {
@@ -39,11 +43,14 @@ const PriceInput = ({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Display value (thousands)
-  const displayValue = value && !(blankWhenZero && Number(value) === 0) ? Math.floor(Number(value) / 1000) : '';
+  const displayValue =
+    value && !(blankWhenZero && Number(value) === 0)
+      ? Math.floor(Number(value) / 1000)
+      : "";
   const realAmount = Number(value) || 0;
 
   const baseCls =
-    'flex items-center justify-end w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus-within:ring-2 focus-within:ring-blue-500/40 transition-all';
+    "flex items-center justify-end w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus-within:ring-2 focus-within:ring-blue-500/40 transition-all";
 
   return (
     <div className="space-y-1">
@@ -55,8 +62,12 @@ const PriceInput = ({
         dir="ltr"
       >
         <div className="flex items-center select-none mr-1">
-          <span className="text-slate-500 font-mono text-sm leading-none">,000</span>
-          <span className="text-slate-400 text-xs ml-1.5 font-medium leading-none">تومان</span>
+          <span className="text-slate-500 font-mono text-sm leading-none">
+            ,000
+          </span>
+          <span className="text-slate-400 text-xs ml-1.5 font-medium leading-none">
+            تومان
+          </span>
         </div>
 
         <input
@@ -66,7 +77,7 @@ const PriceInput = ({
           value={displayValue}
           onChange={(e) => {
             const raw = e.target.value;
-            if (raw === '' || raw === '0') {
+            if (raw === "" || raw === "0") {
               onChange(0);
             } else {
               onChange(Math.round(Number(raw) * 1000));
@@ -80,9 +91,14 @@ const PriceInput = ({
 
       {/* Persian text preview of full amount */}
       {realAmount > 0 && (
-        <p className="text-[10px] text-emerald-400/70 pr-1 flex items-center justify-end gap-1" dir="rtl">
+        <p
+          className="text-[10px] text-emerald-400/70 pr-1 flex items-center justify-end gap-1"
+          dir="rtl"
+        >
           <span>=</span>
-          <span className="font-semibold text-emerald-400">{fmt(realAmount)} تومان</span>
+          <span className="font-semibold text-emerald-400">
+            {fmt(realAmount)} تومان
+          </span>
         </p>
       )}
     </div>

@@ -56,12 +56,20 @@ const emptyForm: ServiceFormData = {
 };
 
 // ── Inline Input ──
-const F = ({ label, children }: { label: string; children: ReactElement<{ id?: string }> }) => {
+const F = ({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactElement<{ id?: string }>;
+}) => {
   const generatedId = React.useId();
   const id = children.props.id || generatedId;
   return (
     <div className="space-y-1">
-      <label htmlFor={id} className="text-xs text-slate-400">{label}</label>
+      <label htmlFor={id} className="text-xs text-slate-400">
+        {label}
+      </label>
       {React.cloneElement(children, { id })}
     </div>
   );
@@ -99,119 +107,125 @@ const ServiceModal = ({
       size="md"
       dismissible={!loading}
     >
-        <ErrorNotice message={error} />
-        <div className="space-y-4">
-          <F label="عنوان خدمت *">
+      <ErrorNotice message={error} />
+      <div className="space-y-4">
+        <F label="عنوان خدمت *">
+          <input
+            className={inp}
+            value={form.title}
+            onChange={(e) => set("title", toPersianKeyboard(e.target.value))}
+            placeholder="عنوان خدمت"
+          />
+        </F>
+        <F label="توضیحات">
+          <textarea
+            className={inp}
+            rows={2}
+            value={form.description || ""}
+            onChange={(e) =>
+              set("description", toPersianKeyboard(e.target.value))
+            }
+            placeholder="توضیح کوتاه"
+          />
+        </F>
+
+        <div className="grid grid-cols-2 gap-3">
+          <F label="مبلغ پرداختی پیش‌فرض">
+            <PriceInput
+              value={form.default_main_price}
+              onChange={(v) => set("default_main_price", v)}
+            />
+          </F>
+          <F label="مبلغ استعلامی پیش‌فرض">
+            <PriceInput
+              value={form.default_extra_price}
+              onChange={(v) => set("default_extra_price", v)}
+            />
+          </F>
+        </div>
+
+        {/* Commission */}
+        <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-4 space-y-3">
+          <p className="text-yellow-400 text-xs font-semibold flex items-center gap-1.5">
+            💼 تنظیمات کارمزد
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <F label="کارمزد پیش‌فرض">
+              <PriceInput
+                value={form.default_commission}
+                onChange={(v) => set("default_commission", v)}
+                borderColor="border-yellow-500/30"
+              />
+            </F>
+            <F label="برچسب کارمزد">
+              <input
+                type="text"
+                className={inp}
+                value={form.commission_label}
+                onChange={(e) => set("commission_label", e.target.value)}
+                placeholder="کارمزد"
+              />
+            </F>
+          </div>
+        </div>
+
+        {/* Extra */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => set("has_extra", !form.has_extra)}
+            aria-pressed={form.has_extra}
+            aria-label="فعال‌سازی خدمت اضافه"
+            className={`relative w-11 h-6 rounded-full transition-all ${form.has_extra ? "bg-blue-600" : "bg-slate-600"}`}
+          >
+            <span
+              className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${form.has_extra ? "right-0.5" : "right-5"}`}
+            />
+          </button>
+          <span className="text-slate-300 text-sm">دارای خدمت اضافه</span>
+        </div>
+        {form.has_extra && (
+          <F label="برچسب خدمت اضافه">
             <input
               className={inp}
-              value={form.title}
-              onChange={(e) => set("title", toPersianKeyboard(e.target.value))}
-              placeholder="عنوان خدمت"
+              value={form.extra_label || ""}
+              onChange={(e) => set("extra_label", e.target.value)}
+              placeholder="مثال: هزینه ارسال"
             />
           </F>
-          <F label="توضیحات">
-            <textarea
-              className={inp}
-              rows={2}
-              value={form.description || ""}
-              onChange={(e) =>
-                set("description", toPersianKeyboard(e.target.value))
-              }
-              placeholder="توضیح کوتاه"
+        )}
+
+        {/* Active toggle */}
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => set("is_active", !form.is_active)}
+            aria-pressed={form.is_active}
+            aria-label="فعال‌سازی خدمت"
+            className={`relative w-11 h-6 rounded-full transition-all ${form.is_active ? "bg-green-600" : "bg-slate-600"}`}
+          >
+            <span
+              className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${form.is_active ? "right-0.5" : "right-5"}`}
             />
-          </F>
-
-          <div className="grid grid-cols-2 gap-3">
-            <F label="مبلغ پرداختی پیش‌فرض">
-              <PriceInput
-                value={form.default_main_price}
-                onChange={(v) => set("default_main_price", v)}
-              />
-            </F>
-            <F label="مبلغ استعلامی پیش‌فرض">
-              <PriceInput
-                value={form.default_extra_price}
-                onChange={(v) => set("default_extra_price", v)}
-              />
-            </F>
-          </div>
-
-          {/* Commission */}
-          <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-4 space-y-3">
-            <p className="text-yellow-400 text-xs font-semibold flex items-center gap-1.5">
-              💼 تنظیمات کارمزد
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <F label="کارمزد پیش‌فرض">
-                <PriceInput
-                  value={form.default_commission}
-                  onChange={(v) => set("default_commission", v)}
-                  borderColor="border-yellow-500/30"
-                />
-              </F>
-              <F label="برچسب کارمزد">
-                <input
-                  type="text"
-                  className={inp}
-                  value={form.commission_label}
-                  onChange={(e) => set("commission_label", e.target.value)}
-                  placeholder="کارمزد"
-                />
-              </F>
-            </div>
-          </div>
-
-          {/* Extra */}
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => set("has_extra", !form.has_extra)}
-              aria-pressed={form.has_extra}
-              aria-label="فعال‌سازی خدمت اضافه"
-              className={`relative w-11 h-6 rounded-full transition-all ${form.has_extra ? "bg-blue-600" : "bg-slate-600"}`}
-            >
-              <span
-                className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${form.has_extra ? "right-0.5" : "right-5"}`}
-              />
-            </button>
-            <span className="text-slate-300 text-sm">دارای خدمت اضافه</span>
-          </div>
-          {form.has_extra && (
-            <F label="برچسب خدمت اضافه">
-              <input
-                className={inp}
-                value={form.extra_label || ""}
-                onChange={(e) => set("extra_label", e.target.value)}
-                placeholder="مثال: هزینه ارسال"
-              />
-            </F>
-          )}
-
-          {/* Active toggle */}
-          <div className="flex items-center gap-3 pt-1">
-            <button
-              type="button"
-              onClick={() => set("is_active", !form.is_active)}
-              aria-pressed={form.is_active}
-              aria-label="فعال‌سازی خدمت"
-              className={`relative w-11 h-6 rounded-full transition-all ${form.is_active ? "bg-green-600" : "bg-slate-600"}`}
-            >
-              <span
-                className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${form.is_active ? "right-0.5" : "right-5"}`}
-              />
-            </button>
-            <span className="text-slate-300 text-sm">
-              {form.is_active ? "خدمت فعال" : "خدمت غیرفعال"}
-            </span>
-          </div>
+          </button>
+          <span className="text-slate-300 text-sm">
+            {form.is_active ? "خدمت فعال" : "خدمت غیرفعال"}
+          </span>
         </div>
+      </div>
 
-        <div className="flex gap-3 justify-end p-5 border-t border-slate-700/50">
-          <Button variant="ghost" onClick={onClose} disabled={loading}>انصراف</Button>
-          <Button variant="primary" onClick={() => onSave(form)} loading={loading}>
-            {initial?.id ? "ذخیره تغییرات" : "افزودن"}
-          </Button>
-        </div>
+      <div className="flex gap-3 justify-end p-5 border-t border-slate-700/50">
+        <Button variant="ghost" onClick={onClose} disabled={loading}>
+          انصراف
+        </Button>
+        <Button
+          variant="primary"
+          onClick={() => onSave(form)}
+          loading={loading}
+        >
+          {initial?.id ? "ذخیره تغییرات" : "افزودن"}
+        </Button>
+      </div>
     </Modal>
   );
 };
@@ -288,7 +302,10 @@ const Services = () => {
           </p>
         </div>
         <button
-          onClick={() => { setFormError(""); setModal("add"); }}
+          onClick={() => {
+            setFormError("");
+            setModal("add");
+          }}
           className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-all"
         >
           + افزودن خدمت
@@ -297,8 +314,12 @@ const Services = () => {
 
       {loadError && (
         <div>
-          <ErrorNotice message={formatApiError(loadError, "دریافت خدمات انجام نشد.")} />
-          <Button variant="ghost" onClick={() => refetch()} disabled={loading}>تلاش دوباره</Button>
+          <ErrorNotice
+            message={formatApiError(loadError, "دریافت خدمات انجام نشد.")}
+          />
+          <Button variant="ghost" onClick={() => refetch()} disabled={loading}>
+            تلاش دوباره
+          </Button>
         </div>
       )}
 
@@ -376,13 +397,19 @@ const Services = () => {
               {/* Actions */}
               <div className="flex items-center gap-2 px-5 py-3 border-t border-slate-700/40 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity">
                 <button
-                  onClick={() => { setFormError(""); setModal(svc); }}
+                  onClick={() => {
+                    setFormError("");
+                    setModal(svc);
+                  }}
                   className="flex-1 py-1.5 text-xs rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition-all"
                 >
                   ✏️ ویرایش
                 </button>
                 <button
-                  onClick={() => { setDeleteError(""); setDeleteTarget(svc); }}
+                  onClick={() => {
+                    setDeleteError("");
+                    setDeleteTarget(svc);
+                  }}
                   className="flex-1 py-1.5 text-xs rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all"
                 >
                   🗑️ حذف
@@ -398,7 +425,9 @@ const Services = () => {
         <ServiceModal
           initial={modal === "add" ? null : modal}
           onSave={handleSave}
-          onClose={() => { if (!savingRef.current) setModal(null); }}
+          onClose={() => {
+            if (!savingRef.current) setModal(null);
+          }}
           loading={saving}
           error={formError}
         />
@@ -408,10 +437,18 @@ const Services = () => {
       {deleteTarget && (
         <ConfirmDialog
           isOpen
-          onClose={() => { if (!deletingRef.current) setDeleteTarget(null); }}
+          onClose={() => {
+            if (!deletingRef.current) setDeleteTarget(null);
+          }}
           onConfirm={handleDelete}
           title="حذف خدمت"
-          message={<>آیا از حذف خدمت «<span className="text-white">{deleteTarget.title}</span>» اطمینان دارید؟</>}
+          message={
+            <>
+              آیا از حذف خدمت «
+              <span className="text-white">{deleteTarget.title}</span>» اطمینان
+              دارید؟
+            </>
+          }
           loading={deleting}
           error={deleteError}
         />

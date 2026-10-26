@@ -459,8 +459,7 @@ const Settings = () => {
         // Let the user choose a local filename and destination when supported.
         let saveHandle: any = null;
         const showSaveFilePicker = (window as any).showSaveFilePicker as
-          | undefined
-          | ((options: unknown) => Promise<any>);
+          undefined | ((options: unknown) => Promise<any>);
         if (showSaveFilePicker) {
           try {
             saveHandle = await showSaveFilePicker({
@@ -1130,43 +1129,43 @@ const Settings = () => {
 
       {/* Customer Documents Path */}
       {isSuperuser && (
-      <Section title="مسیر ذخیره مدارک مشتریان" icon="📁">
-        <div className="space-y-3">
-          <F label="مسیر پوشه اصلی مدارک (روی سرور)">
-            <div className="flex gap-2">
-              <input
-                className={`${inp} min-w-0 flex-1`}
-                value={form.customer_documents_path}
-                readOnly
-                placeholder="پوشه‌ای از سیستم سرور انتخاب کنید"
-                dir="ltr"
-              />
-              {isSuperuser && (
-                <button
-                  type="button"
-                  onClick={() => openServerFolderPicker("documents")}
-                  className="shrink-0 rounded-xl border border-blue-500/40 bg-blue-600/20 px-4 py-2 text-sm text-blue-200 hover:bg-blue-600/30"
-                >
-                  انتخاب پوشه
-                </button>
+        <Section title="مسیر ذخیره مدارک مشتریان" icon="📁">
+          <div className="space-y-3">
+            <F label="مسیر پوشه اصلی مدارک (روی سرور)">
+              <div className="flex gap-2">
+                <input
+                  className={`${inp} min-w-0 flex-1`}
+                  value={form.customer_documents_path}
+                  readOnly
+                  placeholder="پوشه‌ای از سیستم سرور انتخاب کنید"
+                  dir="ltr"
+                />
+                {isSuperuser && (
+                  <button
+                    type="button"
+                    onClick={() => openServerFolderPicker("documents")}
+                    className="shrink-0 rounded-xl border border-blue-500/40 bg-blue-600/20 px-4 py-2 text-sm text-blue-200 hover:bg-blue-600/30"
+                  >
+                    انتخاب پوشه
+                  </button>
+                )}
+              </div>
+              {!isSuperuser && (
+                <p className="text-slate-600 text-xs">
+                  برای تغییر این مسیر، از حساب مدیر ارشد وارد شوید.
+                </p>
               )}
-            </div>
-            {!isSuperuser && (
-              <p className="text-slate-600 text-xs">
-                برای تغییر این مسیر، از حساب مدیر ارشد وارد شوید.
-              </p>
-            )}
-          </F>
-          <p className="text-slate-500 text-xs leading-relaxed">
-            📌 برای هر مشتری یک پوشه با فرمت{" "}
-            <span className="font-mono text-slate-400 bg-slate-700/50 px-1 rounded">
-              [ID]_[نام]
-            </span>{" "}
-            ایجاد می‌شود. اگر این مسیر تنظیم شود، فایل‌های آپلود شده به‌صورت
-            خودکار در این پوشه‌ها کپی می‌شوند.
-          </p>
-        </div>
-      </Section>
+            </F>
+            <p className="text-slate-500 text-xs leading-relaxed">
+              📌 برای هر مشتری یک پوشه با فرمت{" "}
+              <span className="font-mono text-slate-400 bg-slate-700/50 px-1 rounded">
+                [ID]_[نام]
+              </span>{" "}
+              ایجاد می‌شود. اگر این مسیر تنظیم شود، فایل‌های آپلود شده به‌صورت
+              خودکار در این پوشه‌ها کپی می‌شوند.
+            </p>
+          </div>
+        </Section>
       )}
 
       {/* ── Backup Section ── */}
