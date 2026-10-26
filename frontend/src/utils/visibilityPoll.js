@@ -1,5 +1,8 @@
 // One in-flight request at most; visibility changes never start a second one.
-export function startVisibilityPoll(run, { document, setTimeout, clearTimeout }) {
+export function startVisibilityPoll(
+  run,
+  { document, setTimeout, clearTimeout },
+) {
   let active = true;
   let inFlight = false;
   let timer;
@@ -11,21 +14,26 @@ export function startVisibilityPoll(run, { document, setTimeout, clearTimeout })
   const poll = async () => {
     if (!active || inFlight) return;
     inFlight = true;
-    try { await run(controller.signal, () => active); }
-    catch { /* A later poll retries transient failures. */ }
-    finally { inFlight = false; schedule(); }
+    try {
+      await run(controller.signal, () => active);
+    } catch {
+      /* A later poll retries transient failures. */
+    } finally {
+      inFlight = false;
+      schedule();
+    }
   };
   const onVisibility = () => {
     clearTimeout(timer);
     if (document.hidden) schedule();
     else void poll();
   };
-  document.addEventListener('visibilitychange', onVisibility);
+  document.addEventListener("visibilitychange", onVisibility);
   void poll();
   return () => {
     active = false;
     clearTimeout(timer);
     controller.abort();
-    document.removeEventListener('visibilitychange', onVisibility);
+    document.removeEventListener("visibilitychange", onVisibility);
   };
 }

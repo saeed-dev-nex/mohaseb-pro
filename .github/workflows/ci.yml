@@ -94,6 +94,8 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+      - name: Format check
+        run: npx prettier --check "src/**/*.{ts,tsx,js,jsx,css}" "tests/**/*.mjs" "build/**/*.js" "vite.config.js"
 
       - name: Test
         run: npm test

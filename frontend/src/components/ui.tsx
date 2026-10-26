@@ -138,11 +138,15 @@ export const EmptyState = ({
 );
 
 // ---- Modal ----
-export const ErrorNotice = ({ message }: { message?: string }) => message ? (
-  <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-    {message}
-  </div>
-) : null;
+export const ErrorNotice = ({ message }: { message?: string }) =>
+  message ? (
+    <div
+      role="alert"
+      className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+    >
+      {message}
+    </div>
+  ) : null;
 
 type ModalProps = {
   isOpen: boolean;
@@ -207,7 +211,11 @@ export const Modal = ({
     (focusable || dialogRef.current)?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented && dismissibleRef.current) {
+      if (
+        event.key === "Escape" &&
+        !event.defaultPrevented &&
+        dismissibleRef.current
+      ) {
         event.preventDefault();
         onCloseRef.current();
       }
@@ -216,16 +224,14 @@ export const Modal = ({
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      previousBackgroundState.forEach(
-        ({ element, inert, ariaHidden }) => {
-          (element as HTMLElement & { inert?: boolean }).inert = inert;
-          if (ariaHidden === null) {
-            element.removeAttribute("aria-hidden");
-          } else {
-            element.setAttribute("aria-hidden", ariaHidden);
-          }
-        },
-      );
+      previousBackgroundState.forEach(({ element, inert, ariaHidden }) => {
+        (element as HTMLElement & { inert?: boolean }).inert = inert;
+        if (ariaHidden === null) {
+          element.removeAttribute("aria-hidden");
+        } else {
+          element.setAttribute("aria-hidden", ariaHidden);
+        }
+      });
 
       const previousFocusElement = previousFocusRef.current;
       if (previousFocusElement && document.contains(previousFocusElement)) {
@@ -249,7 +255,9 @@ export const Modal = ({
     >
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={() => { if (dismissible) onClose(); }}
+        onClick={() => {
+          if (dismissible) onClose();
+        }}
         aria-hidden="true"
       />
       <div
@@ -481,7 +489,13 @@ export const ConfirmDialog = ({
   loading,
   error,
 }: ConfirmDialogProps) => (
-  <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm" dismissible={!loading}>
+  <Modal
+    isOpen={isOpen}
+    onClose={onClose}
+    title={title}
+    size="sm"
+    dismissible={!loading}
+  >
     <p className="text-slate-300 text-sm mb-6">{message}</p>
     <ErrorNotice message={error} />
     <div className="flex gap-3 justify-end">

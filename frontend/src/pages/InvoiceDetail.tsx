@@ -386,10 +386,18 @@ const InvoiceDetail = () => {
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentsUploading, setDocumentsUploading] = useState(false);
   const [documentError, setDocumentError] = useState("");
-  const [pendingDocuments, setPendingDocuments] = useState<PendingDocument[]>([]);
-  const [documentPreviews, setDocumentPreviews] = useState<Record<number, string>>({});
-  const [activeDocument, setActiveDocument] = useState<InvoiceDocument | null>(null);
-  const [activeDocumentUrl, setActiveDocumentUrl] = useState<string | null>(null);
+  const [pendingDocuments, setPendingDocuments] = useState<PendingDocument[]>(
+    [],
+  );
+  const [documentPreviews, setDocumentPreviews] = useState<
+    Record<number, string>
+  >({});
+  const [activeDocument, setActiveDocument] = useState<InvoiceDocument | null>(
+    null,
+  );
+  const [activeDocumentUrl, setActiveDocumentUrl] = useState<string | null>(
+    null,
+  );
   const printRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -518,19 +526,25 @@ const InvoiceDetail = () => {
     let active = true;
     const urls: string[] = [];
     const loadPreviews = async () => {
-      const imageDocuments = invoiceDocuments.filter((document) => document.is_image);
-      const entries = await Promise.all(imageDocuments.map(async (document) => {
-        try {
-          const { data } = await documentsAPI.preview(document.id);
-          const url = URL.createObjectURL(data);
-          urls.push(url);
-          return [document.id, url] as const;
-        } catch {
-          return null;
-        }
-      }));
+      const imageDocuments = invoiceDocuments.filter(
+        (document) => document.is_image,
+      );
+      const entries = await Promise.all(
+        imageDocuments.map(async (document) => {
+          try {
+            const { data } = await documentsAPI.preview(document.id);
+            const url = URL.createObjectURL(data);
+            urls.push(url);
+            return [document.id, url] as const;
+          } catch {
+            return null;
+          }
+        }),
+      );
       if (!active) return;
-      setDocumentPreviews(Object.fromEntries(entries.filter(Boolean) as [number, string][]));
+      setDocumentPreviews(
+        Object.fromEntries(entries.filter(Boolean) as [number, string][]),
+      );
     };
     loadPreviews();
     return () => {
@@ -539,9 +553,12 @@ const InvoiceDetail = () => {
     };
   }, [invoiceDocuments]);
 
-  useEffect(() => () => {
-    if (activeDocumentUrl) URL.revokeObjectURL(activeDocumentUrl);
-  }, [activeDocumentUrl]);
+  useEffect(
+    () => () => {
+      if (activeDocumentUrl) URL.revokeObjectURL(activeDocumentUrl);
+    },
+    [activeDocumentUrl],
+  );
 
   const handleDocumentUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -556,10 +573,12 @@ const InvoiceDetail = () => {
       return;
     }
     setDocumentError("");
-    setPendingDocuments(files.map((file) => ({
-      file,
-      title: file.name.replace(/\.[^.]+$/, ""),
-    })));
+    setPendingDocuments(
+      files.map((file) => ({
+        file,
+        title: file.name.replace(/\.[^.]+$/, ""),
+      })),
+    );
     if (documentInputRef.current) documentInputRef.current.value = "";
   };
 
@@ -572,22 +591,24 @@ const InvoiceDetail = () => {
     setDocumentsUploading(true);
     setDocumentError("");
     try {
-      await Promise.all(pendingDocuments.map(({ file, title }) => {
-        const formData = new FormData();
-        formData.append("customer", String(invoice.customer));
-        formData.append("invoice", String(invoice.id));
-        formData.append("title", title.trim());
-        formData.append("file", file);
-        return documentsAPI.create(formData);
-      }));
+      await Promise.all(
+        pendingDocuments.map(({ file, title }) => {
+          const formData = new FormData();
+          formData.append("customer", String(invoice.customer));
+          formData.append("invoice", String(invoice.id));
+          formData.append("title", title.trim());
+          formData.append("file", file);
+          return documentsAPI.create(formData);
+        }),
+      );
       setPendingDocuments([]);
       await loadInvoiceDocuments();
       window.dispatchEvent(new Event("mohaseb:data-changed"));
     } catch (error) {
       setDocumentError(
         (error as any)?.response?.data?.file?.[0] ||
-        (error as any)?.response?.data?.title?.[0] ||
-        "بارگذاری مدرک انجام نشد.",
+          (error as any)?.response?.data?.title?.[0] ||
+          "بارگذاری مدرک انجام نشد.",
       );
     } finally {
       setDocumentsUploading(false);
@@ -1398,7 +1419,11 @@ const InvoiceDetail = () => {
                 />
               </label>
             </div>
-            {documentError && <div className="mt-3"><ErrorNotice message={documentError} /></div>}
+            {documentError && (
+              <div className="mt-3">
+                <ErrorNotice message={documentError} />
+              </div>
+            )}
             {documentsLoading ? (
               <p className="mt-4 text-xs text-slate-500">
                 در حال دریافت مدارک…
@@ -1411,11 +1436,26 @@ const InvoiceDetail = () => {
                     className="flex items-center gap-3 rounded-xl border border-slate-700/60 bg-slate-900/30 px-3 py-2.5"
                   >
                     {document.is_image && documentPreviews[document.id] ? (
-                      <button type="button" onClick={() => handleOpenDocument(document)} aria-label={`نمایش ${document.title || "مدرک"}`}>
-                        <img src={documentPreviews[document.id]} alt="" className="h-12 w-12 rounded-lg object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDocument(document)}
+                        aria-label={`نمایش ${document.title || "مدرک"}`}
+                      >
+                        <img
+                          src={documentPreviews[document.id]}
+                          alt=""
+                          className="h-12 w-12 rounded-lg object-cover"
+                        />
                       </button>
                     ) : (
-                      <button type="button" onClick={() => handleOpenDocument(document)} aria-label={`نمایش ${document.title || "مدرک"}`} className="text-lg">📄</button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDocument(document)}
+                        aria-label={`نمایش ${document.title || "مدرک"}`}
+                        className="text-lg"
+                      >
+                        📄
+                      </button>
                     )}
                     <button
                       type="button"
@@ -1424,7 +1464,18 @@ const InvoiceDetail = () => {
                     >
                       {document.title || "مدرک بدون عنوان"}
                     </button>
-                    <button type="button" onClick={() => downloadDocumentFile(document.id, document.file_name || document.title || "document").catch(() => setDocumentError("دانلود مدرک ممکن نشد."))} className="text-xs text-slate-300 hover:text-white">دانلود</button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadDocumentFile(
+                          document.id,
+                          document.file_name || document.title || "document",
+                        ).catch(() => setDocumentError("دانلود مدرک ممکن نشد."))
+                      }
+                      className="text-xs text-slate-300 hover:text-white"
+                    >
+                      دانلود
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleDeleteDocument(document)}
@@ -1655,12 +1706,17 @@ const InvoiceDetail = () => {
           {pendingDocuments.length > 0 && (
             <Modal
               isOpen
-              onClose={() => { if (!documentsUploading) setPendingDocuments([]); }}
+              onClose={() => {
+                if (!documentsUploading) setPendingDocuments([]);
+              }}
               title="عنوان‌گذاری مدارک فاکتور"
               size="md"
               dismissible={!documentsUploading}
             >
-              <p className="mb-4 text-sm text-slate-400">برای هر فایل عنوان وارد کنید. نام ذخیره‌شده شامل شماره فاکتور و این عنوان خواهد بود.</p>
+              <p className="mb-4 text-sm text-slate-400">
+                برای هر فایل عنوان وارد کنید. نام ذخیره‌شده شامل شماره فاکتور و
+                این عنوان خواهد بود.
+              </p>
               <div className="space-y-3">
                 {pendingDocuments.map((document, index) => (
                   <InputField
@@ -1668,13 +1724,32 @@ const InvoiceDetail = () => {
                     label={document.file.name}
                     value={document.title}
                     disabled={documentsUploading}
-                    onChange={(event) => setPendingDocuments((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))}
+                    onChange={(event) =>
+                      setPendingDocuments((items) =>
+                        items.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, title: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
                   />
                 ))}
               </div>
               <div className="mt-6 flex justify-end gap-3">
-                <Button variant="ghost" onClick={() => setPendingDocuments([])} disabled={documentsUploading}>انصراف</Button>
-                <Button onClick={handleSubmitDocuments} loading={documentsUploading}>ذخیره مدارک</Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => setPendingDocuments([])}
+                  disabled={documentsUploading}
+                >
+                  انصراف
+                </Button>
+                <Button
+                  onClick={handleSubmitDocuments}
+                  loading={documentsUploading}
+                >
+                  ذخیره مدارک
+                </Button>
               </div>
             </Modal>
           )}
@@ -1682,22 +1757,47 @@ const InvoiceDetail = () => {
           {activeDocument && activeDocumentUrl && (
             <Modal
               isOpen
-              onClose={() => { URL.revokeObjectURL(activeDocumentUrl); setActiveDocumentUrl(null); setActiveDocument(null); }}
+              onClose={() => {
+                URL.revokeObjectURL(activeDocumentUrl);
+                setActiveDocumentUrl(null);
+                setActiveDocument(null);
+              }}
               title={activeDocument.title || "نمایش مدرک"}
               size="xl"
             >
               <div className="space-y-4">
                 {activeDocument.is_image ? (
-                  <img src={activeDocumentUrl} alt={activeDocument.title || "مدرک"} className="mx-auto max-h-[65vh] max-w-full rounded-xl object-contain" />
-                ) : activeDocument.content_type === "application/pdf" || activeDocument.content_type?.startsWith("text/") ? (
-                  <iframe src={activeDocumentUrl} title={activeDocument.title || "نمایش مدرک"} className="h-[65vh] w-full rounded-xl bg-white" />
+                  <img
+                    src={activeDocumentUrl}
+                    alt={activeDocument.title || "مدرک"}
+                    className="mx-auto max-h-[65vh] max-w-full rounded-xl object-contain"
+                  />
+                ) : activeDocument.content_type === "application/pdf" ||
+                  activeDocument.content_type?.startsWith("text/") ? (
+                  <iframe
+                    src={activeDocumentUrl}
+                    title={activeDocument.title || "نمایش مدرک"}
+                    className="h-[65vh] w-full rounded-xl bg-white"
+                  />
                 ) : (
                   <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-6 text-center text-sm text-slate-300">
-                    پیش‌نمایش این نوع فایل در مرورگر ممکن نیست؛ برای دریافت آن از دکمهٔ دانلود استفاده کنید.
+                    پیش‌نمایش این نوع فایل در مرورگر ممکن نیست؛ برای دریافت آن
+                    از دکمهٔ دانلود استفاده کنید.
                   </div>
                 )}
                 <div className="flex justify-end">
-                  <Button onClick={() => downloadDocumentFile(activeDocument.id, activeDocument.file_name || activeDocument.title || "document").catch(() => setDocumentError("دانلود مدرک ممکن نشد."))}>دانلود مدرک</Button>
+                  <Button
+                    onClick={() =>
+                      downloadDocumentFile(
+                        activeDocument.id,
+                        activeDocument.file_name ||
+                          activeDocument.title ||
+                          "document",
+                      ).catch(() => setDocumentError("دانلود مدرک ممکن نشد."))
+                    }
+                  >
+                    دانلود مدرک
+                  </Button>
                 </div>
               </div>
             </Modal>

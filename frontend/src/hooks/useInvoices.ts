@@ -6,10 +6,14 @@
 // the slice reducers across every cached page: create prepends to the
 // first page, update replaces by id, markPaid/cancel flip `status`,
 // delete filters. Rejection values mirror rejectWithValue.
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { InfiniteData, QueryClient } from '@tanstack/react-query';
-import { invoicesAPI } from '../services/api';
-import type { Id, Params, Payload } from '../services/api';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
+import type { InfiniteData, QueryClient } from "@tanstack/react-query";
+import { invoicesAPI } from "../services/api";
+import type { Id, Params, Payload } from "../services/api";
 
 export interface Invoice {
   id: number;
@@ -27,22 +31,28 @@ type InvoicePageData = Invoice[] | InvoicePage;
 type InvoiceInfiniteData = InfiniteData<InvoicePageData, number>;
 
 export const invoiceKeys = {
-  all: ['invoices'] as const,
-  list: (filters: Params = {}) => ['invoices', filters] as const,
+  all: ["invoices"] as const,
+  list: (filters: Params = {}) => ["invoices", filters] as const,
 };
 
 // Mirrors the thunks' rejectWithValue(err.response?.data || fallback).
 function apiError(err: unknown, fallback: string): unknown {
-  const data = (err as { response?: { data?: unknown } } | null)?.response?.data;
+  const data = (err as { response?: { data?: unknown } } | null)?.response
+    ?.data;
   return data || fallback;
 }
 
 function pageItems(page: InvoicePageData): Invoice[] {
-  return Array.isArray(page) ? page : page.results ?? [];
+  return Array.isArray(page) ? page : (page.results ?? []);
 }
 
-function mapPage(page: InvoicePageData, fn: (items: Invoice[]) => Invoice[]): InvoicePageData {
-  return Array.isArray(page) ? fn(page) : { ...page, results: fn(page.results ?? []) };
+function mapPage(
+  page: InvoicePageData,
+  fn: (items: Invoice[]) => Invoice[],
+): InvoicePageData {
+  return Array.isArray(page)
+    ? fn(page)
+    : { ...page, results: fn(page.results ?? []) };
 }
 
 // Apply a list transform to every cached invoices list; `firstPageOnly`
@@ -52,15 +62,18 @@ function transformInvoiceLists(
   fn: (items: Invoice[]) => Invoice[],
   firstPageOnly = false,
 ) {
-  qc.setQueriesData<InvoiceInfiniteData>({ queryKey: invoiceKeys.all }, (old) => {
-    if (!old || !Array.isArray(old.pages)) return old;
-    return {
-      ...old,
-      pages: old.pages.map((page, idx) =>
-        firstPageOnly && idx > 0 ? page : mapPage(page, fn),
-      ),
-    };
-  });
+  qc.setQueriesData<InvoiceInfiniteData>(
+    { queryKey: invoiceKeys.all },
+    (old) => {
+      if (!old || !Array.isArray(old.pages)) return old;
+      return {
+        ...old,
+        pages: old.pages.map((page, idx) =>
+          firstPageOnly && idx > 0 ? page : mapPage(page, fn),
+        ),
+      };
+    },
+  );
 }
 
 export function useInvoicesInfinite(filters: Params = {}) {
@@ -72,11 +85,15 @@ export function useInvoicesInfinite(filters: Params = {}) {
         const res = await invoicesAPI.list({ ...filters, page: pageParam });
         return res.data as InvoicePageData;
       } catch (err) {
-        throw apiError(err, 'خطا در دریافت فاکتورها');
+        throw apiError(err, "خطا در دریافت فاکتورها");
       }
     },
     getNextPageParam: (lastPage, pages) =>
-      Array.isArray(lastPage) ? undefined : lastPage?.next ? pages.length + 1 : undefined,
+      Array.isArray(lastPage)
+        ? undefined
+        : lastPage?.next
+          ? pages.length + 1
+          : undefined,
   });
 
   // Flatten pages with the slice's id-dedup accumulation.
@@ -93,7 +110,7 @@ export function useInvoicesInfinite(filters: Params = {}) {
   }
   const lastPage = pages[pages.length - 1];
   const count =
-    lastPage && !Array.isArray(lastPage) && typeof lastPage.count === 'number'
+    lastPage && !Array.isArray(lastPage) && typeof lastPage.count === "number"
       ? lastPage.count
       : list.length;
 
@@ -116,7 +133,7 @@ export function useCreateInvoice() {
         const res = await invoicesAPI.create(data);
         return res.data as Invoice;
       } catch (err) {
-        throw apiError(err, 'خطا در ثبت فاکتور');
+        throw apiError(err, "خطا در ثبت فاکتور");
       }
     },
     onSuccess: (created) => {
@@ -128,12 +145,18 @@ export function useCreateInvoice() {
 export function useUpdateInvoice() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, data }: { id: Id; data: Payload }): Promise<Invoice> => {
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: Id;
+      data: Payload;
+    }): Promise<Invoice> => {
       try {
         const res = await invoicesAPI.update(id, data);
         return res.data as Invoice;
       } catch (err) {
-        throw apiError(err, 'خطا در ویرایش فاکتور');
+        throw apiError(err, "خطا در ویرایش فاکتور");
       }
     },
     onSuccess: (updated) => {
@@ -152,14 +175,21 @@ export function useMarkInvoicePaid() {
         await invoicesAPI.markPaid(id);
         return id;
       } catch (err) {
-        throw apiError(err, 'خطا');
+        throw apiError(err, "خطا");
       }
     },
     onSuccess: (paidId) => {
       transformInvoiceLists(qc, (items) =>
-        items.map((inv) => (inv.id === paidId
-          ? { ...inv, status: 'paid', paid_amount: inv.final_amount, remaining_amount: 0 }
-          : inv)),
+        items.map((inv) =>
+          inv.id === paidId
+            ? {
+                ...inv,
+                status: "paid",
+                paid_amount: inv.final_amount,
+                remaining_amount: 0,
+              }
+            : inv,
+        ),
       );
     },
   });
@@ -173,12 +203,14 @@ export function useCancelInvoice() {
         await invoicesAPI.cancel(id);
         return id;
       } catch (err) {
-        throw apiError(err, 'خطا');
+        throw apiError(err, "خطا");
       }
     },
     onSuccess: (cancelledId) => {
       transformInvoiceLists(qc, (items) =>
-        items.map((inv) => (inv.id === cancelledId ? { ...inv, status: 'cancelled' } : inv)),
+        items.map((inv) =>
+          inv.id === cancelledId ? { ...inv, status: "cancelled" } : inv,
+        ),
       );
     },
   });
@@ -192,11 +224,13 @@ export function useDeleteInvoice() {
         await invoicesAPI.delete(id);
         return id;
       } catch (err) {
-        throw apiError(err, 'خطا در حذف فاکتور');
+        throw apiError(err, "خطا در حذف فاکتور");
       }
     },
     onSuccess: (deletedId) => {
-      transformInvoiceLists(qc, (items) => items.filter((inv) => inv.id !== deletedId));
+      transformInvoiceLists(qc, (items) =>
+        items.filter((inv) => inv.id !== deletedId),
+      );
     },
   });
 }

@@ -1,7 +1,7 @@
 // Manual browser harness: synthetic data only, every mutation deliberately
 // fails after a delay. No API requests, credentials or real customer data.
 // Run from frontend: node tests/browser-dialog-smoke.mjs
-import { createServer } from 'vite';
+import { createServer } from "vite";
 
 const fixtureApi = `
   const services = [{ id: 1, title: 'خدمت آزمایشی', default_main_price: 100000,
@@ -42,26 +42,37 @@ const entry = `
 `;
 
 const server = await createServer({
-  server: { host: '127.0.0.1', port: 4175, strictPort: true, open: false },
-  plugins: [{
-    name: 'isolated-dialog-smoke',
-    enforce: 'pre',
-    resolveId(id) { if (id === '/__dialog_smoke__.tsx') return id; },
-    load(id) {
-      if (id === '/__dialog_smoke__.tsx') return entry;
-      if (id.replaceAll('\\', '/').endsWith('/src/services/api.ts')) return fixtureApi;
+  server: { host: "127.0.0.1", port: 4175, strictPort: true, open: false },
+  plugins: [
+    {
+      name: "isolated-dialog-smoke",
+      enforce: "pre",
+      resolveId(id) {
+        if (id === "/__dialog_smoke__.tsx") return id;
+      },
+      load(id) {
+        if (id === "/__dialog_smoke__.tsx") return entry;
+        if (id.replaceAll("\\", "/").endsWith("/src/services/api.ts"))
+          return fixtureApi;
+      },
+      configureServer(dev) {
+        dev.middlewares.use("/dialog-smoke", async (_req, res) => {
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
+          res.end(
+            await dev.transformIndexHtml(
+              "/dialog-smoke",
+              `<!doctype html><html lang="fa" dir="rtl"><body class="bg-slate-900 text-white p-6"><div id="root"></div><script type="module" src="/__dialog_smoke__.tsx"></script></body></html>`,
+            ),
+          );
+        });
+      },
     },
-    configureServer(dev) {
-      dev.middlewares.use('/dialog-smoke', async (_req, res) => {
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.end(await dev.transformIndexHtml('/dialog-smoke', `<!doctype html><html lang="fa" dir="rtl"><body class="bg-slate-900 text-white p-6"><div id="root"></div><script type="module" src="/__dialog_smoke__.tsx"></script></body></html>`));
-      });
-    },
-  }],
+  ],
 });
 await server.listen();
-console.log('Synthetic dialog smoke: http://127.0.0.1:4175/dialog-smoke');
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => {
-  await server.close();
-  process.exit(0);
-});
+console.log("Synthetic dialog smoke: http://127.0.0.1:4175/dialog-smoke");
+for (const signal of ["SIGINT", "SIGTERM"])
+  process.on(signal, async () => {
+    await server.close();
+    process.exit(0);
+  });

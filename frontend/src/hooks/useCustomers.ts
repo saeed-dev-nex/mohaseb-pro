@@ -4,9 +4,9 @@
 // string) so existing try/catch + alert code behaves identically, and
 // cache updates reproduce the slice reducers (create prepends, update
 // replaces by id, delete filters) across every cached list variant.
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { customersAPI } from '../services/api';
-import type { Id, Params, Payload } from '../services/api';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { customersAPI } from "../services/api";
+import type { Id, Params, Payload } from "../services/api";
 
 export interface Customer {
   id: number;
@@ -14,13 +14,14 @@ export interface Customer {
 }
 
 export const customerKeys = {
-  all: ['customers'] as const,
-  list: (params: Params = {}) => ['customers', params] as const,
+  all: ["customers"] as const,
+  list: (params: Params = {}) => ["customers", params] as const,
 };
 
 // Mirrors the thunks' rejectWithValue(err.response?.data || fallback).
 function apiError(err: unknown, fallback: string): unknown {
-  const data = (err as { response?: { data?: unknown } } | null)?.response?.data;
+  const data = (err as { response?: { data?: unknown } } | null)?.response
+    ?.data;
   return data || fallback;
 }
 
@@ -32,7 +33,7 @@ export function useCustomers(params: Params = {}) {
         const res = await customersAPI.list(params);
         return res.data as Customer[];
       } catch (err) {
-        throw apiError(err, 'خطا در دریافت مشتریان');
+        throw apiError(err, "خطا در دریافت مشتریان");
       }
     },
   });
@@ -46,7 +47,7 @@ export function useCreateCustomer() {
         const res = await customersAPI.create(data);
         return res.data as Customer;
       } catch (err) {
-        throw apiError(err, 'خطا در ایجاد مشتری');
+        throw apiError(err, "خطا در ایجاد مشتری");
       }
     },
     onSuccess: (created) => {
@@ -60,17 +61,25 @@ export function useCreateCustomer() {
 export function useUpdateCustomer() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, data }: { id: Id; data: Payload }): Promise<Customer> => {
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: Id;
+      data: Payload;
+    }): Promise<Customer> => {
       try {
         const res = await customersAPI.update(id, data);
         return res.data as Customer;
       } catch (err) {
-        throw apiError(err, 'خطا در ویرایش مشتری');
+        throw apiError(err, "خطا در ویرایش مشتری");
       }
     },
     onSuccess: (updated) => {
       qc.setQueriesData<Customer[]>({ queryKey: customerKeys.all }, (old) =>
-        Array.isArray(old) ? old.map((c) => (c.id === updated.id ? updated : c)) : old,
+        Array.isArray(old)
+          ? old.map((c) => (c.id === updated.id ? updated : c))
+          : old,
       );
     },
   });
@@ -84,7 +93,7 @@ export function useDeleteCustomer() {
         await customersAPI.delete(id);
         return id;
       } catch (err) {
-        throw apiError(err, 'خطا در حذف مشتری');
+        throw apiError(err, "خطا در حذف مشتری");
       }
     },
     onSuccess: (deletedId) => {
