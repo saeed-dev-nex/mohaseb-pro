@@ -14,6 +14,21 @@ const Navbar = ({ onMenuToggle }: NavbarProps) => {
     localStorage.setItem("app-theme", next);
     document.querySelector("[data-theme]")?.setAttribute("data-theme", next);
   };
+  // Build channel badge: "بتا" for beta builds, "مین" for main builds, the
+  // raw branch name for anything else, nothing when the build could not
+  // tell (e.g. a detached HEAD without VITE_APP_CHANNEL).
+  const channelLabel =
+    __APP_CHANNEL__ === "beta"
+      ? "بتا"
+      : __APP_CHANNEL__ === "main"
+        ? "مین"
+        : __APP_CHANNEL__;
+  const channelClass =
+    __APP_CHANNEL__ === "beta"
+      ? "bg-amber-500/15 text-amber-300"
+      : __APP_CHANNEL__ === "main"
+        ? "bg-emerald-500/15 text-emerald-300"
+        : "bg-slate-700/70 text-slate-300";
   const now = new Date();
   const persianDate = new Intl.DateTimeFormat("fa-IR", {
     year: "numeric",
@@ -69,6 +84,13 @@ const Navbar = ({ onMenuToggle }: NavbarProps) => {
           <p className="text-slate-400 text-xs mt-0.5">
             {currentUser?.username || ""}{" "}
             <span className="text-slate-500">· نسخه {__APP_VERSION__}</span>
+            {channelLabel && (
+              <span
+                className={`mr-1.5 rounded-full px-2 py-px text-xs ${channelClass}`}
+              >
+                {channelLabel}
+              </span>
+            )}
           </p>
         </div>
         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-sm font-bold text-white shadow-lg shadow-blue-500/30">
