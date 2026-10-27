@@ -118,7 +118,8 @@ def _run_due_backup_locked():
     destination = os.path.join(config.backup_path, filename)
     temporary = destination + f'.{os.getpid()}.tmp'
     try:
-        payload = json.dumps(build_backup(), ensure_ascii=False, indent=2, default=str)
+        backup = build_backup()
+        payload = json.dumps(backup, ensure_ascii=False, indent=2, default=str)
         with open(temporary, 'w', encoding='utf-8') as backup_file:
             backup_file.write(payload)
             backup_file.flush()
@@ -131,6 +132,12 @@ def _run_due_backup_locked():
     config.last_backup_path = destination
     config.save(update_fields=['last_backup_at', 'last_backup_path'])
     logger.info('Scheduled Mohaseb backup completed')
+    missing_media_files = backup.get('missing_media_files', [])
+    if missing_media_files:
+        logger.warning(
+            'Scheduled backup completed with %d missing document file(s)',
+            len(missing_media_files),
+        )
     # Best-effort cloud copy: a cloud failure must never undo the local backup.
     try:
         from .cloud_backup import upload_local_backup
