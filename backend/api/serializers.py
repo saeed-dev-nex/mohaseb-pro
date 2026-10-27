@@ -197,8 +197,16 @@ class DocumentSerializer(serializers.ModelSerializer):
 class BackupConfigSerializer(serializers.ModelSerializer):
     class Meta:
         model = BackupConfig
-        fields = ['backup_path', 'auto_backup', 'backup_frequency', 'backup_hour', 'last_backup_at', 'last_backup_path']
-        read_only_fields = ['last_backup_at', 'last_backup_path']
+        fields = ['backup_path', 'auto_backup', 'backup_frequency', 'backup_hour', 'last_backup_at', 'last_backup_path',
+                  'cloud_enabled', 'cloud_endpoint', 'cloud_bucket', 'cloud_access_key', 'cloud_secret_key',
+                  'cloud_passphrase', 'cloud_retention', 'last_cloud_backup_at', 'last_cloud_backup_key',
+                  'last_cloud_error']
+        read_only_fields = ['last_backup_at', 'last_backup_path', 'last_cloud_backup_at', 'last_cloud_backup_key',
+                            'last_cloud_error']
+        extra_kwargs = {
+            'cloud_secret_key': {'write_only': True},
+            'cloud_passphrase': {'write_only': True},
+        }
 
 
 class InvoiceSettingsSerializer(serializers.ModelSerializer):

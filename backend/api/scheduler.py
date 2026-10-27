@@ -131,6 +131,12 @@ def _run_due_backup_locked():
     config.last_backup_path = destination
     config.save(update_fields=['last_backup_at', 'last_backup_path'])
     logger.info('Scheduled Mohaseb backup completed')
+    # Best-effort cloud copy: a cloud failure must never undo the local backup.
+    try:
+        from .cloud_backup import upload_local_backup
+        upload_local_backup(config, destination, filename)
+    except Exception:
+        logger.exception('Cloud backup upload failed after scheduled backup')
     return {'ran': True, 'saved': True, 'path': destination, 'filename': filename}
 
 
