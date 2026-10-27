@@ -1,6 +1,7 @@
 import hashlib
 import json
 import base64
+import logging
 import os
 from pathlib import Path, PurePosixPath
 
@@ -12,6 +13,8 @@ from django.utils import timezone
 
 ENCRYPTED_BACKUP_FORMAT = 'mohaseb-backup-encrypted-v1'
 _PBKDF2_ITERATIONS = 600_000
+
+logger = logging.getLogger(__name__)
 
 
 def is_encrypted_backup(payload):
@@ -123,6 +126,7 @@ def build_backup():
         model = MODEL_MAP[label]
         fixtures.extend(json.loads(serialize('json', model.objects.all().order_by('pk'))))
     media_files = {}
+    skipped_media_files = []
     for document in MODEL_MAP['api.document'].objects.exclude(file='').iterator():
         relative_path = document.file.name.replace('\\', '/')
         if not _safe_media_parts(relative_path):
@@ -131,7 +135,10 @@ def build_backup():
             with document.file.open('rb') as source_file:
                 media_files[relative_path] = base64.b64encode(source_file.read()).decode('ascii')
         except OSError as error:
-            raise ValueError(f'خواندن فایل سند برای بکاپ ممکن نشد: {relative_path}') from error
+            # One unreadable attachment must never fail the whole backup:
+            # record it and keep going with the remaining files.
+            logger.warning('Skipping unreadable document file in backup: %s (%s)', relative_path, error)
+            skipped_media_files.append(relative_path)
     payload = {
         'format': 'mohaseb-backup-v1',
         'created_at': timezone.now().isoformat(),
@@ -143,6 +150,7 @@ def build_backup():
         },
         'fixtures': fixtures,
         'media_files': media_files,
+        'skipped_media_files': skipped_media_files,
     }
     payload['sha256'] = _checksum(payload)
     return payload
