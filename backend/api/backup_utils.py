@@ -123,6 +123,7 @@ def build_backup():
         model = MODEL_MAP[label]
         fixtures.extend(json.loads(serialize('json', model.objects.all().order_by('pk'))))
     media_files = {}
+    customer_documents_root = None
     for document in MODEL_MAP['api.document'].objects.exclude(file='').iterator():
         relative_path = document.file.name.replace('\\', '/')
         if not _safe_media_parts(relative_path):
@@ -131,6 +132,35 @@ def build_backup():
             with document.file.open('rb') as source_file:
                 media_files[relative_path] = base64.b64encode(source_file.read()).decode('ascii')
         except OSError as error:
+            # Documents are also copied to the configured customer folder.
+            # Use that copy if the MEDIA_ROOT copy is missing, but only when
+            # the stored path remains inside the configured folder.
+            if customer_documents_root is None:
+                from .models import BusinessProfile
+
+                configured_root = BusinessProfile.objects.filter(pk=1).values_list(
+                    'customer_documents_path', flat=True
+                ).first()
+                customer_documents_root = (
+                    Path(configured_root).resolve() if configured_root else False
+                )
+            fallback_path = Path(document.file_path).resolve() if document.file_path else None
+            try:
+                is_within_customer_folder = (
+                    customer_documents_root
+                    and fallback_path
+                    and os.path.commonpath((str(customer_documents_root), str(fallback_path)))
+                    == str(customer_documents_root)
+                )
+            except ValueError:
+                is_within_customer_folder = False
+            if is_within_customer_folder and fallback_path.is_file():
+                try:
+                    with fallback_path.open('rb') as source_file:
+                        media_files[relative_path] = base64.b64encode(source_file.read()).decode('ascii')
+                    continue
+                except OSError:
+                    pass
             raise ValueError(f'خواندن فایل سند برای بکاپ ممکن نشد: {relative_path}') from error
     payload = {
         'format': 'mohaseb-backup-v1',
