@@ -1,7 +1,6 @@
 import hashlib
 import json
 import base64
-import logging
 import os
 from pathlib import Path, PurePosixPath
 
@@ -13,8 +12,6 @@ from django.utils import timezone
 
 ENCRYPTED_BACKUP_FORMAT = 'mohaseb-backup-encrypted-v1'
 _PBKDF2_ITERATIONS = 600_000
-
-logger = logging.getLogger(__name__)
 
 
 def is_encrypted_backup(payload):
@@ -126,7 +123,8 @@ def build_backup():
         model = MODEL_MAP[label]
         fixtures.extend(json.loads(serialize('json', model.objects.all().order_by('pk'))))
     media_files = {}
-    skipped_media_files = []
+    missing_media_files = []
+    customer_documents_root = None
     for document in MODEL_MAP['api.document'].objects.exclude(file='').iterator():
         relative_path = document.file.name.replace('\\', '/')
         if not _safe_media_parts(relative_path):
@@ -135,10 +133,48 @@ def build_backup():
             with document.file.open('rb') as source_file:
                 media_files[relative_path] = base64.b64encode(source_file.read()).decode('ascii')
         except OSError as error:
-            # One unreadable attachment must never fail the whole backup:
-            # record it and keep going with the remaining files.
-            logger.warning('Skipping unreadable document file in backup: %s (%s)', relative_path, error)
-            skipped_media_files.append(relative_path)
+            # Documents are also copied to the configured customer folder.
+            # Use that copy if the MEDIA_ROOT copy is missing, but only when
+            # the stored path remains inside the configured folder.
+            if customer_documents_root is None:
+                from .models import BusinessProfile
+
+                configured_root = BusinessProfile.objects.filter(pk=1).values_list(
+                    'customer_documents_path', flat=True
+                ).first()
+                customer_documents_root = (
+                    Path(configured_root).resolve() if configured_root else False
+                )
+            fallback_path = Path(document.file_path).resolve() if document.file_path else None
+            try:
+                is_within_customer_folder = (
+                    customer_documents_root
+                    and fallback_path
+                    and os.path.commonpath((str(customer_documents_root), str(fallback_path)))
+                    == str(customer_documents_root)
+                )
+            except ValueError:
+                is_within_customer_folder = False
+            if is_within_customer_folder and fallback_path.is_file():
+                try:
+                    with fallback_path.open('rb') as source_file:
+                        media_files[relative_path] = base64.b64encode(source_file.read()).decode('ascii')
+                    continue
+                except FileNotFoundError:
+                    if not isinstance(error, FileNotFoundError):
+                        raise ValueError(
+                            f'خواندن فایل جایگزین سند برای بکاپ ممکن نشد: {relative_path}'
+                        ) from error
+                except OSError as fallback_error:
+                    raise ValueError(
+                        f'خواندن فایل جایگزین سند برای بکاپ ممکن نشد: {relative_path}'
+                    ) from fallback_error
+            if isinstance(error, FileNotFoundError):
+                # Keep the document record and complete the backup, while
+                # recording that its referenced media was already missing.
+                missing_media_files.append(relative_path)
+                continue
+            raise ValueError(f'خواندن فایل سند برای بکاپ ممکن نشد: {relative_path}') from error
     payload = {
         'format': 'mohaseb-backup-v1',
         'created_at': timezone.now().isoformat(),
@@ -150,7 +186,7 @@ def build_backup():
         },
         'fixtures': fixtures,
         'media_files': media_files,
-        'skipped_media_files': skipped_media_files,
+        'missing_media_files': missing_media_files,
     }
     payload['sha256'] = _checksum(payload)
     return payload
@@ -169,6 +205,13 @@ def validate_backup(backup):
     media_files = backup.get('media_files', {})
     if not isinstance(media_files, dict) or len(media_files) > 100000:
         raise ValueError('ساختار فایل‌های پیوست در پشتیبان معتبر نیست.')
+    missing_media_files = backup.get('missing_media_files', [])
+    if (
+        not isinstance(missing_media_files, list)
+        or len(missing_media_files) > 100000
+        or any(not isinstance(path, str) or not _safe_media_parts(path) for path in missing_media_files)
+    ):
+        raise ValueError('فهرست فایل‌های مفقود در پشتیبان معتبر نیست.')
     try:
         for relative_path, encoded_file in media_files.items():
             if not isinstance(relative_path, str) or not _safe_media_parts(relative_path) or not isinstance(encoded_file, str):
