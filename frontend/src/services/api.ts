@@ -275,6 +275,12 @@ export const backupConfigAPI = {
   runBackupDownload: (data: Payload = {}) =>
     api.post("backup-config/run_backup/", data, { responseType: "blob" }),
   checkAuto: () => api.post("backup-config/check_auto/"),
+  testCloud: (data: Payload = {}) =>
+    api.post("backup-config/test_cloud/", data),
+  listCloud: () => api.get("backup-config/list_cloud/"),
+  uploadLatest: () => api.post("backup-config/upload_latest/"),
+  restoreCloud: (data: Payload) =>
+    api.post("backup-config/restore_cloud/", data),
 };
 
 export const invoiceSettingsAPI = {
