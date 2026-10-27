@@ -35,6 +35,6 @@
   },
   "permissions": [
     "storage",
-    "http://localhost/*"
+    "http://localhost:8000/*"
   ]
 }
