@@ -6,5 +6,6 @@ django-cors-headers
 Pillow
 cryptography
 openpyxl
+boto3
 whitenoise
 
