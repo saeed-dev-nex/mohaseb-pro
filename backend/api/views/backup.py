@@ -107,7 +107,14 @@ class BackupConfigViewSet(viewsets.ViewSet):
         cfg = BackupConfig.load()
         backup_path = (request.data.get('path') or '').strip()
         from ..backup_utils import build_backup, encrypt_backup
-        json_str = json.dumps(build_backup(), ensure_ascii=False, indent=2, default=str)
+        try:
+            backup = build_backup()
+        except ValueError as error:
+            # Invalid attachment paths and unreadable media are expected
+            # backup failures; report them to the caller instead of returning
+            # an unhandled 500 response.
+            return Response({'detail': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        json_str = json.dumps(backup, ensure_ascii=False, indent=2, default=str)
         passphrase = (request.data.get('passphrase') or '').strip()
         if passphrase:
             try:
