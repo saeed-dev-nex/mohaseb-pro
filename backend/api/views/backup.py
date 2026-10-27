@@ -147,7 +147,119 @@ class BackupConfigViewSet(viewsets.ViewSet):
         cfg.last_backup_at = timezone.now()
         cfg.last_backup_path = dest
         cfg.save()
-        return Response({'saved': True, 'path': dest, 'filename': filename})
+        # Best-effort cloud copy: a cloud failure must never undo the local backup.
+        cloud = None
+        try:
+            from ..cloud_backup import upload_local_backup
+            cloud = upload_local_backup(cfg, dest, filename)
+        except Exception:
+            cloud = {'uploaded': False, 'reason': 'خطای داخلی در آپلود ابری'}
+        return Response({'saved': True, 'path': dest, 'filename': filename, 'cloud': cloud})
+
+    def _cloud_error_response(self, error):
+        from ..cloud_backup import CloudBackupError
+        if isinstance(error, CloudBackupError):
+            detail = str(error)
+        else:
+            detail = f'خطای ابری: {str(error)[:300]}'
+        return Response({'detail': detail}, status=status.HTTP_400_BAD_REQUEST)
+
+    def _cloud_config_or_error(self, cfg, overrides=None):
+        """Stored cloud config, optionally overridden (for test-before-save)."""
+        from ..cloud_backup import is_configured
+        candidate = BackupConfig(
+            cloud_endpoint=((overrides or {}).get('cloud_endpoint') or cfg.cloud_endpoint or '').strip(),
+            cloud_bucket=((overrides or {}).get('cloud_bucket') or cfg.cloud_bucket or '').strip(),
+            cloud_access_key=((overrides or {}).get('cloud_access_key') or cfg.cloud_access_key or '').strip(),
+            cloud_secret_key=((overrides or {}).get('cloud_secret_key') or cfg.cloud_secret_key or '').strip(),
+        )
+        if not is_configured(candidate):
+            return None, Response(
+                {'detail': 'پیکربندی ابری کامل نیست؛ نقطهٔ پایانی، باکت و کلیدها را وارد کنید.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return candidate, None
+
+    @action(detail=False, methods=['post'])
+    def test_cloud(self, request):
+        """Check endpoint/bucket/credentials without saving them."""
+        from ..cloud_backup import test_connection
+        cfg = BackupConfig.load()
+        candidate, error = self._cloud_config_or_error(cfg, request.data)
+        if error is not None:
+            return error
+        try:
+            test_connection(candidate)
+        except Exception as error:
+            return self._cloud_error_response(error)
+        return Response({'ok': True})
+
+    @action(detail=False, methods=['get'])
+    def list_cloud(self, request):
+        """Newest-first list of backup objects in the configured bucket."""
+        from ..cloud_backup import get_s3_client, list_backups
+        cfg = BackupConfig.load()
+        candidate, error = self._cloud_config_or_error(cfg)
+        if error is not None:
+            return error
+        try:
+            backups = list_backups(get_s3_client(candidate), candidate.cloud_bucket)
+        except Exception as error:
+            return self._cloud_error_response(error)
+        return Response({'backups': backups})
+
+    @action(detail=False, methods=['post'])
+    def upload_latest(self, request):
+        """Upload the last server-side backup file to the cloud now."""
+        from ..cloud_backup import upload_local_backup
+        cfg = BackupConfig.load()
+        if not cfg.last_backup_path or not os.path.isfile(cfg.last_backup_path):
+            return Response(
+                {'detail': 'آخرین بکاپ روی سرور پیدا نشد.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        result = upload_local_backup(
+            cfg, cfg.last_backup_path, os.path.basename(cfg.last_backup_path))
+        if not result.get('uploaded'):
+            return Response({'detail': result.get('reason', 'آپلود ابری ناموفق بود.')},
+                            status=status.HTTP_400_BAD_REQUEST)
+        return Response(result)
+
+    @action(detail=False, methods=['post'])
+    def restore_cloud(self, request):
+        """Download one cloud backup and restore it (two-step, like restore).
+
+        Without ``confirm_replace`` this only validates and returns counts;
+        with it, the current data is replaced, exactly like a file restore.
+        """
+        from ..cloud_backup import download_object, get_s3_client
+        from ..backup_utils import decrypt_backup, is_encrypted_backup, restore_backup, validate_backup
+        cfg = BackupConfig.load()
+        key = (request.data.get('key') or '').strip()
+        if not key:
+            return Response({'detail': 'کلید بکاپ ابری مشخص نشده است.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        candidate, error = self._cloud_config_or_error(cfg)
+        if error is not None:
+            return error
+        try:
+            raw = download_object(get_s3_client(candidate), candidate.cloud_bucket, key)
+            backup = json.loads(raw.decode('utf-8'))
+            if is_encrypted_backup(backup):
+                passphrase = (request.data.get('passphrase') or '').strip()
+                if not passphrase:
+                    return Response(
+                        {'detail': 'این بکاپ رمزنگاری شده است؛ گذرواژهٔ بکاپ ابری لازم است.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+                backup = decrypt_backup(backup, passphrase)
+            counts = validate_backup(backup)
+            if request.data.get('confirm_replace') is not True:
+                return Response({'valid': True, 'counts': counts, 'requires_confirmation': True})
+            restore_backup(backup, fallback_user_id=request.user.pk)
+            return Response({'valid': True, 'restored': True, 'counts': counts})
+        except Exception as error:
+            return Response({'detail': str(error) or 'بازیابی از بکاپ ابری انجام نشد.'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['post'], permission_classes=[IsSuperuser])
     def check_auto(self, request):
