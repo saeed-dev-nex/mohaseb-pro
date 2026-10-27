@@ -404,6 +404,16 @@ class BackupConfig(models.Model):
     backup_hour = models.IntegerField(default=13, verbose_name='ساعت بکاپ خودکار (0-23)')
     last_backup_at = models.DateTimeField(null=True, blank=True, verbose_name='آخرین بکاپ')
     last_backup_path = models.CharField(max_length=1000, blank=True, verbose_name='مسیر آخرین بکاپ')
+    cloud_enabled = models.BooleanField(default=False, verbose_name='بکاپ ابری')
+    cloud_endpoint = models.CharField(max_length=1000, blank=True, default='https://s3.ir-thr-at1.arvanstorage.ir', verbose_name='نقطهٔ پایانی S3')
+    cloud_bucket = models.CharField(max_length=255, blank=True, default='', verbose_name='نام باکت ابری')
+    cloud_access_key = models.CharField(max_length=255, blank=True, default='', verbose_name='کلید دسترسی ابری')
+    cloud_secret_key = models.CharField(max_length=1000, blank=True, default='', verbose_name='کلید محرمانهٔ ابری')
+    cloud_passphrase = models.CharField(max_length=1000, blank=True, default='', verbose_name='گذرواژهٔ رمزنگاری بکاپ ابری')
+    cloud_retention = models.IntegerField(default=30, verbose_name='نگهداری نسخه‌های ابری (تعداد)')
+    last_cloud_backup_at = models.DateTimeField(null=True, blank=True, verbose_name='آخرین بکاپ ابری')
+    last_cloud_backup_key = models.CharField(max_length=1000, blank=True, verbose_name='کلید آخرین بکاپ ابری')
+    last_cloud_error = models.CharField(max_length=1000, blank=True, verbose_name='آخرین خطای بکاپ ابری')
 
     class Meta:
         verbose_name = 'تنظیمات بکاپ'

@@ -176,6 +176,12 @@ CORS_ALLOWED_ORIGINS = [
     ).split(',')
     if origin.strip()
 ]
+# Firefox assigns each installed extension an opaque ``moz-extension://``
+# origin at runtime, so it cannot be listed in the static origin allow-list.
+# Permit only Firefox extension origins; API endpoints still require the
+# usual bearer token, and the extension's host permission scopes access to the
+# local API host.
+CORS_ALLOWED_ORIGIN_REGEXES = [r'^moz-extension://[a-zA-Z0-9-]+$']
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
