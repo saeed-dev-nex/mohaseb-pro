@@ -7,6 +7,7 @@ import {
   invoiceSettingsAPI,
 } from "../services/api";
 import PriceInput from "./PriceInput";
+import PlateInput from "./PlateInput";
 import { toPersianKeyboard } from "../utils/persian";
 
 const fmt = (n: number | string | null | undefined) =>
@@ -299,6 +300,12 @@ const QuickInvoiceModal = ({
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
   const [packages, setPackages] = useState<any[]>([]);
+  const [step, setStep] = useState(1);
+  const [vehiclePlate, setVehiclePlate] = useState("");
+  const [vehicleVin, setVehicleVin] = useState("");
+  const [vehicleModel, setVehicleModel] = useState("");
+  const [vehicleType, setVehicleType] = useState("");
+  const [vehicleYear, setVehicleYear] = useState("");
 
   const resetForm = useCallback(() => {
     setCustomerName("");
@@ -320,6 +327,12 @@ const QuickInvoiceModal = ({
     setError("");
     setStatus("pending");
     setCardPaymentSource("customer");
+    setStep(1);
+    setVehiclePlate("");
+    setVehicleVin("");
+    setVehicleModel("");
+    setVehicleType("");
+    setVehicleYear("");
   }, []);
 
   useEffect(() => {
@@ -414,13 +427,36 @@ const QuickInvoiceModal = ({
       : 0;
   const grandTotal = subtotal + commissionAmt + officeCardFee;
 
+  const goNext = () => {
+    if (step === 1 && !customerName.trim()) {
+      setError("نام مشتری الزامی است");
+      return;
+    }
+    if (
+      step === 2 &&
+      items.every((it) => !it.service_title_snapshot && !it.main_price)
+    ) {
+      setError("حداقل یک ردیف خدمت لازم است");
+      return;
+    }
+    setError("");
+    setStep((s) => Math.min(4, s + 1));
+  };
+
+  const goBack = () => {
+    setError("");
+    setStep((s) => Math.max(1, s - 1));
+  };
+
   const handleSubmit = async () => {
     if (!customerName.trim()) {
       setError("نام مشتری الزامی است");
+      setStep(1);
       return;
     }
     if (items.every((it) => !it.service_title_snapshot && !it.main_price)) {
       setError("حداقل یک ردیف خدمت لازم است");
+      setStep(2);
       return;
     }
     setError("");
@@ -433,6 +469,11 @@ const QuickInvoiceModal = ({
         card_payment_source: cardPaymentSource,
         description,
         commission_total: commissionAmt,
+        vehicle_plate: vehiclePlate,
+        vehicle_vin: vehicleVin,
+        vehicle_model: vehicleModel,
+        vehicle_type: vehicleType,
+        vehicle_year: vehicleYear,
         items: items
           .filter((it) => it.service_title_snapshot || it.main_price)
           .map((it) => ({
@@ -459,15 +500,15 @@ const QuickInvoiceModal = ({
     }
   };
 
-  // Ctrl+Enter submits from anywhere inside the modal.
-  const submitRef = useRef(handleSubmit);
-  submitRef.current = handleSubmit;
+  // Ctrl+Enter runs the primary action: next step, or submit on step 4.
+  const primaryRef = useRef<() => void>(() => {});
+  primaryRef.current = step < 4 ? goNext : handleSubmit;
   useEffect(() => {
     if (!isOpen || result) return undefined;
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === "Enter") {
         e.preventDefault();
-        void submitRef.current();
+        void primaryRef.current();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -515,26 +556,34 @@ const QuickInvoiceModal = ({
                 </span>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={onClose}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition-all"
+                onClick={resetForm}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm transition-all"
               >
-                بستن
+                ⚡ ایجاد فاکتور جدید
+              </button>
+              <button
+                onClick={() => {
+                  window.location.href = `/invoices/${result.invoice?.id}`;
+                }}
+                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm transition-all"
+              >
+                🧾 رفتن به جزئیات فاکتور
               </button>
               <button
                 onClick={() => {
                   window.location.href = `/invoices/${result.invoice?.id}?print=1`;
                 }}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm transition-all"
+                className="px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-all"
               >
                 🖨️ مشاهده و چاپ
               </button>
               <button
-                onClick={resetForm}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm transition-all"
+                onClick={onClose}
+                className="px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition-all"
               >
-                ⚡ فاکتور جدید
+                بستن
               </button>
             </div>
           </div>
@@ -573,6 +622,38 @@ const QuickInvoiceModal = ({
           </button>
         </div>
 
+        {/* Steps */}
+        <div className="flex items-center gap-1.5 px-5 pt-4 shrink-0">
+          {[
+            { n: 1, l: "مشتری و خودرو" },
+            { n: 2, l: "خدمات" },
+            { n: 3, l: "کارمزد و توضیحات" },
+            { n: 4, l: "وضعیت و ثبت" },
+          ].map((s, i) => (
+            <React.Fragment key={s.n}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (s.n < step) {
+                    setError("");
+                    setStep(s.n);
+                  }
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] whitespace-nowrap transition-all ${
+                  step === s.n
+                    ? "bg-blue-500/20 border border-blue-500/40 text-blue-300"
+                    : s.n < step
+                      ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 hover:bg-emerald-500/20"
+                      : "bg-slate-700/30 border border-slate-600/30 text-slate-500"
+                }`}
+              >
+                <span className="font-bold">{fmt(s.n)}</span> {s.l}
+              </button>
+              {i < 3 && <div className="flex-1 h-px bg-slate-700/60" />}
+            </React.Fragment>
+          ))}
+        </div>
+
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {error && (
@@ -581,211 +662,327 @@ const QuickInvoiceModal = ({
             </div>
           )}
 
-          {/* Customer */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-slate-400 mb-1 block">
-                👤 نام مشتری *
-              </label>
-              <CustomerAutoComplete
-                value={customerName}
-                onChange={setCustomerName}
-                onPhoneChange={setCustomerPhone}
-                phone={customerPhone}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 mb-1 block">
-                📱 تلفن مشتری
-              </label>
-              <input
-                className={inp}
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="09..."
-              />
-            </div>
-          </div>
-
-          {/* Services */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs text-slate-400 font-medium">
-                🔧 خدمات
-              </label>
-              <button
-                type="button"
-                onClick={addRow}
-                className="text-[11px] px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-all"
-              >
-                + ردیف جدید
-              </button>
-            </div>
-            {packages.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                <span className="text-[11px] text-slate-500">
-                  📦 پکیج آماده:
-                </span>
-                {packages.map((pkg: any) => (
-                  <button
-                    key={pkg.id}
-                    type="button"
-                    onClick={() => applyPackage(pkg)}
-                    className="text-[11px] px-2.5 py-1 rounded-lg bg-violet-500/10 text-violet-300 border border-violet-500/25 hover:bg-violet-500/20 transition-all"
-                  >
-                    📦 {pkg.name}
-                  </button>
-                ))}
+          {step === 1 && (
+            <>
+              {/* Customer */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">
+                    👤 نام مشتری *
+                  </label>
+                  <CustomerAutoComplete
+                    value={customerName}
+                    onChange={setCustomerName}
+                    onPhoneChange={setCustomerPhone}
+                    phone={customerPhone}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">
+                    📱 تلفن مشتری
+                  </label>
+                  <input
+                    className={inp}
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="09..."
+                  />
+                </div>
               </div>
-            )}
-            <div className="space-y-2">
-              {items.map((item, idx) => (
-                <ServiceRow
-                  key={item._key}
-                  item={item}
-                  index={idx}
-                  services={services}
-                  onChange={updateRow}
-                  onRemove={removeRow}
+
+              {/* Vehicle */}
+              <div className="bg-slate-700/20 border border-slate-700/50 rounded-xl p-3 space-y-3">
+                <label className="text-xs text-slate-400 font-medium block">
+                  🚗 اطلاعات خودرو (اختیاری)
+                </label>
+                <div>
+                  <label className="text-[10px] text-slate-500 mb-1 block">
+                    شماره پلاک
+                  </label>
+                  <PlateInput value={vehiclePlate} onChange={setVehiclePlate} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] text-slate-500 mb-1 block">
+                      نام / مدل خودرو
+                    </label>
+                    <input
+                      className={inp}
+                      value={vehicleModel}
+                      onChange={(e) =>
+                        setVehicleModel(toPersianKeyboard(e.target.value))
+                      }
+                      placeholder="مثال: پژو ۲۰۶"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 mb-1 block">
+                      نوع خودرو
+                    </label>
+                    <input
+                      className={inp}
+                      value={vehicleType}
+                      onChange={(e) =>
+                        setVehicleType(toPersianKeyboard(e.target.value))
+                      }
+                      placeholder="مثال: سواری"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 mb-1 block">
+                      سال ساخت
+                    </label>
+                    <input
+                      className={inp}
+                      value={vehicleYear}
+                      onChange={(e) => setVehicleYear(e.target.value)}
+                      placeholder="۱۳۹۸"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 mb-1 block">
+                      شماره شاسی (VIN)
+                    </label>
+                    <input
+                      className={inp}
+                      dir="ltr"
+                      maxLength={17}
+                      value={vehicleVin}
+                      onChange={(e) => setVehicleVin(e.target.value)}
+                      placeholder="17 کاراکتر"
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              {/* Services */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-slate-400 font-medium">
+                    🔧 خدمات
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addRow}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-all"
+                  >
+                    + ردیف جدید
+                  </button>
+                </div>
+                {packages.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                    <span className="text-[11px] text-slate-500">
+                      📦 پکیج آماده:
+                    </span>
+                    {packages.map((pkg: any) => (
+                      <button
+                        key={pkg.id}
+                        type="button"
+                        onClick={() => applyPackage(pkg)}
+                        className="text-[11px] px-2.5 py-1 rounded-lg bg-violet-500/10 text-violet-300 border border-violet-500/25 hover:bg-violet-500/20 transition-all"
+                      >
+                        📦 {pkg.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  {items.map((item, idx) => (
+                    <ServiceRow
+                      key={item._key}
+                      item={item}
+                      index={idx}
+                      services={services}
+                      onChange={updateRow}
+                      onRemove={removeRow}
+                    />
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {step === 3 && (
+            <>
+              {/* Commission */}
+              <div className="bg-yellow-500/5 border border-yellow-500/25 rounded-xl p-3">
+                <label className="text-xs text-yellow-400/80 mb-1 block">
+                  💼 کارمزد کلی (اصلی)
+                </label>
+                <PriceInput
+                  value={commissionTotal}
+                  onChange={(v) => setCommissionTotal(v)}
                 />
-              ))}
-            </div>
-          </div>
+                <p className="text-yellow-500/50 text-[10px] mt-1">
+                  کارمزد به مبلغ کل اضافه می‌شود
+                </p>
+              </div>
 
-          {/* Commission */}
-          <div className="bg-yellow-500/5 border border-yellow-500/25 rounded-xl p-3">
-            <label className="text-xs text-yellow-400/80 mb-1 block">
-              💼 کارمزد کلی (اصلی)
-            </label>
-            <PriceInput
-              value={commissionTotal}
-              onChange={(v) => setCommissionTotal(v)}
-            />
-            <p className="text-yellow-500/50 text-[10px] mt-1">
-              کارمزد به مبلغ کل اضافه می‌شود
-            </p>
-          </div>
+              {/* Description */}
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">
+                  📝 توضیحات
+                </label>
+                <textarea
+                  className={inp}
+                  rows={2}
+                  value={description}
+                  onChange={(e) =>
+                    setDescription(toPersianKeyboard(e.target.value))
+                  }
+                  placeholder="توضیحات اختیاری..."
+                />
+              </div>
+            </>
+          )}
 
-          {/* Description */}
-          <div>
-            <label className="text-xs text-slate-400 mb-1 block">
-              📝 توضیحات
-            </label>
-            <textarea
-              className={inp}
-              rows={2}
-              value={description}
-              onChange={(e) =>
-                setDescription(toPersianKeyboard(e.target.value))
-              }
-              placeholder="توضیحات اختیاری..."
-            />
-          </div>
+          {step === 4 && (
+            <>
+              {/* Payment source */}
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">
+                  کارت پرداخت
+                </label>
+                <div className="flex gap-2">
+                  {[
+                    { value: "customer", label: "کارت مشتری" },
+                    { value: "office", label: "کارت دفتر" },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setCardPaymentSource(option.value)}
+                      className={`flex-1 text-xs py-2 rounded-xl border transition-all ${cardPaymentSource === option.value ? "bg-blue-500/20 border-blue-500/40 text-blue-300" : "bg-slate-700/30 border-slate-600/30 text-slate-400"}`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                {officeCardFee > 0 && (
+                  <p className="text-amber-300 text-[11px] mt-2">
+                    ردیف واریزی خودکار: {fmt(officeCardFee)} تومان
+                  </p>
+                )}
+              </div>
 
-          {/* Status */}
-          <div>
-            <label className="text-xs text-slate-400 mb-1 block">
-              کارت پرداخت
-            </label>
-            <div className="flex gap-2">
-              {[
-                { value: "customer", label: "کارت مشتری" },
-                { value: "office", label: "کارت دفتر" },
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setCardPaymentSource(option.value)}
-                  className={`flex-1 text-xs py-2 rounded-xl border transition-all ${cardPaymentSource === option.value ? "bg-blue-500/20 border-blue-500/40 text-blue-300" : "bg-slate-700/30 border-slate-600/30 text-slate-400"}`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            {officeCardFee > 0 && (
-              <p className="text-amber-300 text-[11px] mt-2">
-                ردیف واریزی خودکار: {fmt(officeCardFee)} تومان
-              </p>
-            )}
-          </div>
+              {/* Status */}
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">
+                  وضعیت
+                </label>
+                <div className="flex gap-2">
+                  {[
+                    { v: "pending", l: "پرداخت نشده", c: "yellow" },
+                    { v: "paid", l: "پرداخت شده", c: "green" },
+                  ].map((s) => (
+                    <button
+                      key={s.v}
+                      type="button"
+                      onClick={() => setStatus(s.v)}
+                      className={`flex-1 text-xs py-2 rounded-xl border transition-all ${
+                        status === s.v
+                          ? `bg-${s.c}-500/20 border-${s.c}-500/40 text-${s.c}-400`
+                          : "bg-slate-700/30 border-slate-600/30 text-slate-400 hover:bg-slate-700/50"
+                      }`}
+                    >
+                      {s.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-          {/* Status */}
-          <div>
-            <label className="text-xs text-slate-400 mb-1 block">وضعیت</label>
-            <div className="flex gap-2">
-              {[
-                { v: "pending", l: "پرداخت نشده", c: "yellow" },
-                { v: "paid", l: "پرداخت شده", c: "green" },
-              ].map((s) => (
-                <button
-                  key={s.v}
-                  type="button"
-                  onClick={() => setStatus(s.v)}
-                  className={`flex-1 text-xs py-2 rounded-xl border transition-all ${
-                    status === s.v
-                      ? `bg-${s.c}-500/20 border-${s.c}-500/40 text-${s.c}-400`
-                      : "bg-slate-700/30 border-slate-600/30 text-slate-400 hover:bg-slate-700/50"
-                  }`}
-                >
-                  {s.l}
-                </button>
-              ))}
-            </div>
-          </div>
+              {/* Totals recap */}
+              <div className="bg-slate-700/30 rounded-xl p-4 space-y-1.5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">جمع خدمات</span>
+                  <span className="text-slate-200">
+                    {fmt(subtotal)}{" "}
+                    <span className="text-xs font-normal">تومان</span>
+                  </span>
+                </div>
+                {officeCardFee > 0 && (
+                  <div className="flex justify-between text-sm text-amber-300">
+                    <span>واریزی کارت دفتر</span>
+                    <span>+{fmt(officeCardFee)} تومان</span>
+                  </div>
+                )}
+                {commissionAmt > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-yellow-400/80">💼 کارمزد</span>
+                    <span className="text-yellow-400">
+                      +{fmt(commissionAmt)}{" "}
+                      <span className="text-xs font-normal">تومان</span>
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm font-bold border-t border-slate-600/50 pt-1.5">
+                  <span className="text-slate-100">مبلغ کل قابل پرداخت</span>
+                  <span className="text-white text-lg">
+                    {fmt(grandTotal)}{" "}
+                    <span className="text-xs font-normal">تومان</span>
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 border-t border-slate-700/50 p-5 space-y-3">
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-400">جمع خدمات</span>
-              <span className="text-slate-200">
-                {fmt(subtotal)}{" "}
-                <span className="text-xs font-normal">تومان</span>
+        <div className="shrink-0 border-t border-slate-700/50 p-4 space-y-3">
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-slate-400">
+              مبلغ کل قابل پرداخت
+              <span className="text-slate-500 text-[11px]">
+                {" "}
+                (مرحله {fmt(step)} از {fmt(4)})
               </span>
-            </div>
-            {officeCardFee > 0 && (
-              <div className="flex justify-between text-sm text-amber-300">
-                <span>واریزی کارت دفتر</span>
-                <span>+{fmt(officeCardFee)} تومان</span>
-              </div>
-            )}
-            {commissionAmt > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-yellow-400/80">💼 کارمزد</span>
-                <span className="text-yellow-400">
-                  +{fmt(commissionAmt)}{" "}
-                  <span className="text-xs font-normal">تومان</span>
-                </span>
-              </div>
-            )}
-            <div className="flex justify-between text-sm font-bold border-t border-slate-600/50 pt-1.5">
-              <span className="text-slate-100">مبلغ کل قابل پرداخت</span>
-              <span className="text-white text-lg">
-                {fmt(grandTotal)}{" "}
-                <span className="text-xs font-normal">تومان</span>
-              </span>
-            </div>
+            </span>
+            <span className="text-white font-bold text-lg">
+              {fmt(grandTotal)}{" "}
+              <span className="text-xs font-normal">تومان</span>
+            </span>
           </div>
           <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm hover:bg-slate-700 transition-all"
-            >
-              انصراف
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={saving}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-l from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-medium transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25"
-            >
-              {saving ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                "⚡"
-              )}
-              صدور فاکتور
-            </button>
+            {step > 1 ? (
+              <button
+                onClick={goBack}
+                className="px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm hover:bg-slate-700 transition-all"
+              >
+                مرحله قبل
+              </button>
+            ) : (
+              <button
+                onClick={onClose}
+                className="px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm hover:bg-slate-700 transition-all"
+              >
+                انصراف
+              </button>
+            )}
+            {step < 4 ? (
+              <button
+                onClick={goNext}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-l from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-medium transition-all shadow-lg shadow-blue-500/25"
+              >
+                مرحله بعد
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={saving}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-l from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-medium transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25"
+              >
+                {saving ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  "⚡"
+                )}
+                صدور فاکتور
+              </button>
+            )}
           </div>
         </div>
       </div>
