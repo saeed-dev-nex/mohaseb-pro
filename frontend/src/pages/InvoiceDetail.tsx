@@ -1728,7 +1728,7 @@ const InvoiceDetail = () => {
                     />
                     <button
                       disabled={paymentSaving || !paymentForm.amount}
-                      className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                      className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
                     >
                       {paymentSaving ? "در حال ثبت..." : "ثبت پرداخت"}
                     </button>
@@ -2444,7 +2444,7 @@ const InvoiceDetail = () => {
               <div
                 style={{
                   fontSize: "9px",
-                  color: "#9ca3af",
+                  color: "#6b7280",
                   marginBottom: "2px",
                   textTransform: "uppercase",
                   letterSpacing: "0.05em",
@@ -2493,7 +2493,7 @@ const InvoiceDetail = () => {
                   fontSize: "11px",
                 }}
               >
-                <span style={{ color: "#9ca3af", fontSize: "9px" }}>پلاک</span>
+                <span style={{ color: "#6b7280", fontSize: "9px" }}>پلاک</span>
                 <span style={{ fontFamily: "monospace" }}>
                   {invoice.vehicle_plate}
                 </span>
@@ -2512,7 +2512,7 @@ const InvoiceDetail = () => {
                   fontSize: "11px",
                 }}
               >
-                <span style={{ color: "#9ca3af", fontSize: "9px" }}>نوع</span>
+                <span style={{ color: "#6b7280", fontSize: "9px" }}>نوع</span>
                 {invoice.vehicle_type}
               </div>
             )}
@@ -2529,7 +2529,7 @@ const InvoiceDetail = () => {
                   fontSize: "11px",
                 }}
               >
-                <span style={{ color: "#9ca3af", fontSize: "9px" }}>مدل</span>
+                <span style={{ color: "#6b7280", fontSize: "9px" }}>مدل</span>
                 {invoice.vehicle_model}
               </div>
             )}
@@ -2547,7 +2547,7 @@ const InvoiceDetail = () => {
                 }}
               >
                 <span style={{ color: "#6b7280", fontSize: "9px" }}>سال</span>
-                <span style={{ color: "#16a34a", fontWeight: "600" }}>
+                <span style={{ color: "#15803d", fontWeight: "600" }}>
                   {invoice.vehicle_year}
                 </span>
               </div>
@@ -2565,7 +2565,7 @@ const InvoiceDetail = () => {
                   fontSize: "10px",
                 }}
               >
-                <span style={{ color: "#9ca3af", fontSize: "9px" }}>VIN</span>
+                <span style={{ color: "#6b7280", fontSize: "9px" }}>VIN</span>
                 <span style={{ fontFamily: "monospace" }}>
                   {invoice.vehicle_vin}
                 </span>
@@ -2659,7 +2659,7 @@ const InvoiceDetail = () => {
                 style={{ borderBottom: "1px solid #e5e7eb" }}
               >
                 <td
-                  style={{ padding: "8px", color: "#9ca3af", fontSize: "11px" }}
+                  style={{ padding: "8px", color: "#6b7280", fontSize: "11px" }}
                 >
                   {i + 1}
                 </td>
@@ -2761,7 +2761,7 @@ const InvoiceDetail = () => {
                 <span style={{ color: "#6b7280" }}>
                   مالیات ({invoice?.tax}%)
                 </span>
-                <span style={{ color: "#d97706" }}>+{fmt(taxAmount)}</span>
+                <span style={{ color: "#92400e" }}>+{fmt(taxAmount)}</span>
               </div>
             )}
             {invoiceFields.show_discount_field &&
@@ -2775,7 +2775,7 @@ const InvoiceDetail = () => {
                   }}
                 >
                   <span style={{ color: "#6b7280" }}>تخفیف</span>
-                  <span style={{ color: "#059669" }}>
+                  <span style={{ color: "#047857" }}>
                     −{fmt(Number(invoice?.discount))}
                   </span>
                 </div>
