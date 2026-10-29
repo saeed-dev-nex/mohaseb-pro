@@ -421,7 +421,23 @@ class BackupConfig(models.Model):
 
     def save(self, *args, **kwargs):
         self.pk = 1
+        # Cloud credentials never rest as plaintext: encrypt on every save
+        # (idempotent — already-encrypted values pass through unchanged).
+        from .secret_store import encrypt_secret
+
+        self.cloud_secret_key = encrypt_secret(self.cloud_secret_key)
+        self.cloud_passphrase = encrypt_secret(self.cloud_passphrase)
         super().save(*args, **kwargs)
+
+    def decrypted_cloud_secret_key(self):
+        from .secret_store import decrypt_secret
+
+        return decrypt_secret(self.cloud_secret_key)
+
+    def decrypted_cloud_passphrase(self):
+        from .secret_store import decrypt_secret
+
+        return decrypt_secret(self.cloud_passphrase)
 
     @classmethod
     def load(cls):

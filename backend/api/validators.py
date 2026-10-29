@@ -68,3 +68,72 @@ def validate_tax_id(value):
     if len(normalized) != 11 or not normalized.isdigit():
         raise serializers.ValidationError('شناسه مالیاتی باید ۱۱ رقم باشد.')
     return normalized
+
+
+# First path components (after the drive/root) that must never receive
+# copied customer documents: operating-system locations. Writing uploaded
+# files there could overwrite or pollute system files.
+_WINDOWS_SYSTEM_DIRS = {
+    'windows', 'program files', 'program files (x86)', 'programdata',
+    'system volume information', '$recycle.bin', 'recovery',
+}
+_POSIX_SYSTEM_DIRS = {
+    'etc', 'usr', 'bin', 'sbin', 'boot', 'sys', 'proc', 'dev',
+    'lib', 'lib64', 'root',
+}
+
+
+def validate_customer_documents_path(value):
+    """Validate BusinessProfile.customer_documents_path.
+
+    The path is an admin-chosen folder on the server that receives copies
+    of uploaded customer documents. It stays free-form (any data volume is
+    fine), but it must be absolute, must not be a filesystem root, and
+    must not point into an operating-system directory. Both Windows and
+    POSIX shapes are checked, because the value is interpreted by the
+    server OS, not by the machine validating the request.
+    """
+    import ntpath
+    import posixpath
+    import re
+
+    if value in (None, ''):
+        return value
+    value = str(value).strip()
+    if not value:
+        return value
+    # Pick the path style by shape first: ntpath.isabs() also accepts
+    # POSIX-looking '/usr/...' paths, which would misroute the checks.
+    if re.match(r'^[A-Za-z]:', value) or value.startswith('\\\\'):
+        is_windows = True
+    elif value.startswith('/'):
+        is_windows = False
+    elif ntpath.isabs(value):
+        is_windows = True  # rooted on the current drive, e.g. '\docs'
+    else:
+        is_windows = False
+    if is_windows:
+        absolute = ntpath.isabs(value)
+    else:
+        absolute = posixpath.isabs(value)
+    if not absolute:
+        raise serializers.ValidationError(
+            'مسیر ذخیره‌سازی مدارک باید یک مسیر کامل باشد (مثل D:\\MohasebDocuments).'
+        )
+    if is_windows:
+        normalized = ntpath.normpath(value)
+        parts = [p for p in normalized.replace('/', '\\').split('\\') if p]
+        # parts[0] is the drive ('D:') or UNC server name.
+        rest = [p.lower() for p in parts[1:]]
+        if not rest or rest[0] in _WINDOWS_SYSTEM_DIRS:
+            raise serializers.ValidationError(
+                'مسیر ذخیره‌سازی مدارک نمی‌تواند پوشهٔ سیستمی یا ریشهٔ درایو باشد.'
+            )
+    else:
+        normalized = posixpath.normpath(value)
+        parts = [p for p in normalized.split('/') if p]
+        if not parts or parts[0].lower() in _POSIX_SYSTEM_DIRS:
+            raise serializers.ValidationError(
+                'مسیر ذخیره‌سازی مدارک نمی‌تواند پوشهٔ سیستمی یا ریشهٔ فایل‌سیستم باشد.'
+            )
+    return value

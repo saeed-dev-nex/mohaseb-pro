@@ -178,7 +178,7 @@ class BackupConfigViewSet(viewsets.ViewSet):
             cloud_endpoint=((overrides or {}).get('cloud_endpoint') or cfg.cloud_endpoint or '').strip(),
             cloud_bucket=((overrides or {}).get('cloud_bucket') or cfg.cloud_bucket or '').strip(),
             cloud_access_key=((overrides or {}).get('cloud_access_key') or cfg.cloud_access_key or '').strip(),
-            cloud_secret_key=((overrides or {}).get('cloud_secret_key') or cfg.cloud_secret_key or '').strip(),
+            cloud_secret_key=((overrides or {}).get('cloud_secret_key') or cfg.decrypted_cloud_secret_key() or '').strip(),
         )
         if not is_configured(candidate):
             return None, Response(
