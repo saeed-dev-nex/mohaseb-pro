@@ -17,6 +17,8 @@ import re
 
 from django.utils import timezone
 
+from .secret_store import decrypt_secret
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_ENDPOINT = 'https://s3.ir-thr-at1.arvanstorage.ir'
@@ -50,7 +52,9 @@ def get_s3_client(config):
         's3',
         endpoint_url=endpoint,
         aws_access_key_id=config.cloud_access_key,
-        aws_secret_access_key=config.cloud_secret_key,
+        # Stored values are encrypted at rest (plaintext test-before-save
+        # overrides pass through decrypt_secret unchanged).
+        aws_secret_access_key=decrypt_secret(config.cloud_secret_key),
         region_name=region_from_endpoint(endpoint),
         config=Config(signature_version='s3v4'),
     )
@@ -62,7 +66,7 @@ def is_configured(config):
         (config.cloud_endpoint or '').strip()
         and (config.cloud_bucket or '').strip()
         and (config.cloud_access_key or '').strip()
-        and (config.cloud_secret_key or '').strip()
+        and decrypt_secret(config.cloud_secret_key).strip()
     )
 
 
@@ -83,7 +87,7 @@ def prepare_cloud_payload(local_path, config):
         raise CloudBackupError('فایل بکاپ محلی خوانا نیست.') from error
     if is_encrypted_backup(payload):
         return text.encode('utf-8')
-    passphrase = (config.cloud_passphrase or '').strip()
+    passphrase = decrypt_secret(config.cloud_passphrase).strip()
     if not passphrase:
         raise CloudBackupError(
             'برای آپلود ابری بکاپ بدون رمز، گذرواژهٔ بکاپ ابری تنظیم نشده است.'

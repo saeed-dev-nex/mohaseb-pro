@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 /**
  * PlateInput — کامپوننت ورود پلاک خودرو
@@ -121,6 +121,35 @@ const PlateInput = ({ value, onChange }: PlateInputProps) => {
     onChange(buildPlate(plateType, next));
   };
 
+  // Fast keyboard entry: when a segment fills up, focus moves to the next
+  // segment on its own; Backspace on an empty segment returns to the
+  // previous one. Only one plate tree (car/moto) is mounted at a time, so
+  // the refs can be shared between both layouts.
+  const num1Ref = useRef<HTMLInputElement>(null);
+  const letterRef = useRef<HTMLSelectElement>(null);
+  const num2Ref = useRef<HTMLInputElement>(null);
+  const regionRef = useRef<HTMLInputElement>(null);
+
+  const focusField = (
+    ref: React.RefObject<HTMLInputElement | HTMLSelectElement | null>,
+  ) => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    if (el instanceof HTMLInputElement) el.select();
+  };
+
+  const backOnEmpty =
+    (ref: React.RefObject<HTMLInputElement | HTMLSelectElement | null>) =>
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Backspace" && !e.currentTarget.value) {
+        e.preventDefault();
+        focusField(ref);
+      }
+    };
+
+  const digits = (raw: string) => raw.replace(/\D/g, "");
+
   const switchType = (t: PlateType) => {
     setPlateType(t);
     const next: PlateParts = { num1: "", letter: "الف", num2: "", region: "" };
@@ -156,17 +185,27 @@ const PlateInput = ({ value, onChange }: PlateInputProps) => {
         >
           {/* num1: 2 digits */}
           <input
+            ref={num1Ref}
             type="text"
+            inputMode="numeric"
             maxLength={2}
             value={parts.num1}
-            onChange={(e) => update("num1", e.target.value.replace(/\D/g, ""))}
+            onChange={(e) => {
+              const v = digits(e.target.value);
+              update("num1", v);
+              if (v.length >= 2) focusField(letterRef);
+            }}
             placeholder="12"
             className={`${inputCls} w-10`}
           />
           {/* letter */}
           <select
+            ref={letterRef}
             value={parts.letter}
-            onChange={(e) => update("letter", e.target.value)}
+            onChange={(e) => {
+              update("letter", e.target.value);
+              focusField(num2Ref);
+            }}
             className={`${inputCls} w-14`}
             dir="rtl"
           >
@@ -178,10 +217,17 @@ const PlateInput = ({ value, onChange }: PlateInputProps) => {
           </select>
           {/* num2: 3 digits */}
           <input
+            ref={num2Ref}
             type="text"
+            inputMode="numeric"
             maxLength={3}
             value={parts.num2}
-            onChange={(e) => update("num2", e.target.value.replace(/\D/g, ""))}
+            onChange={(e) => {
+              const v = digits(e.target.value);
+              update("num2", v);
+              if (v.length >= 3) focusField(regionRef);
+            }}
+            onKeyDown={backOnEmpty(letterRef)}
             placeholder="123"
             className={`${inputCls} w-12`}
           />
@@ -189,12 +235,13 @@ const PlateInput = ({ value, onChange }: PlateInputProps) => {
           <span className="text-slate-400 text-xs">ایران</span>
           {/* region: 2 digits */}
           <input
+            ref={regionRef}
             type="text"
+            inputMode="numeric"
             maxLength={2}
             value={parts.region}
-            onChange={(e) =>
-              update("region", e.target.value.replace(/\D/g, ""))
-            }
+            onChange={(e) => update("region", digits(e.target.value))}
+            onKeyDown={backOnEmpty(num2Ref)}
             placeholder="41"
             className={`${inputCls} w-10`}
           />
@@ -208,19 +255,28 @@ const PlateInput = ({ value, onChange }: PlateInputProps) => {
           dir="ltr"
         >
           <input
+            ref={num1Ref}
             type="text"
+            inputMode="numeric"
             maxLength={3}
             value={parts.num1}
-            onChange={(e) => update("num1", e.target.value.replace(/\D/g, ""))}
+            onChange={(e) => {
+              const v = digits(e.target.value);
+              update("num1", v);
+              if (v.length >= 3) focusField(num2Ref);
+            }}
             placeholder="543"
             className={`${inputCls} w-16`}
           />
           <span className="text-slate-500 text-xs">-</span>
           <input
+            ref={num2Ref}
             type="text"
+            inputMode="numeric"
             maxLength={5}
             value={parts.num2}
-            onChange={(e) => update("num2", e.target.value.replace(/\D/g, ""))}
+            onChange={(e) => update("num2", digits(e.target.value))}
+            onKeyDown={backOnEmpty(num1Ref)}
             placeholder="35728"
             className={`${inputCls} w-20`}
           />

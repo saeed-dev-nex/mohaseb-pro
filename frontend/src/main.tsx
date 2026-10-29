@@ -42,9 +42,27 @@ window.addEventListener(
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/service-worker.js").catch(() => {
-      // The app remains usable when the browser cannot register a worker.
-    });
+    navigator.serviceWorker
+      .register("/service-worker.js")
+      .then((registration) => {
+        registration.addEventListener("updatefound", () => {
+          const installing = registration.installing;
+          if (!installing) return;
+          installing.addEventListener("statechange", () => {
+            // A newer build finished installing while an older worker
+            // still controls this page: let the app offer a refresh.
+            if (
+              installing.state === "installed" &&
+              navigator.serviceWorker.controller
+            ) {
+              window.dispatchEvent(new CustomEvent("mohaseb:sw-update"));
+            }
+          });
+        });
+      })
+      .catch(() => {
+        // The app remains usable when the browser cannot register a worker.
+      });
   });
 }
 

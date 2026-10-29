@@ -19,6 +19,83 @@ import { startVisibilityPoll } from "../utils/visibilityPoll";
 
 type ChatNotice = { sender: string; text: string };
 
+const BASE_TITLE = "محاسب پرو - سیستم یکپارچه مالی";
+
+const faDigits = (n: number) =>
+  String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
+
+/** Reflect the unread chat count in the tab title: «(۲ پیام جدید) - محاسب پرو». */
+const applyTitleBadge = (count: number) => {
+  document.title =
+    count > 0 ? `(${faDigits(count)} پیام جدید) - محاسب پرو` : BASE_TITLE;
+};
+
+let chimeContext: AudioContext | null = null;
+
+/** Short, soft two-tone chime for a new chat message. Best-effort only:
+ * browsers may keep the context suspended until the user interacts. */
+const playChatChime = () => {
+  try {
+    const Ctor =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctor) return;
+    chimeContext = chimeContext || new Ctor();
+    if (chimeContext.state === "suspended") void chimeContext.resume();
+    const ctx = chimeContext;
+    const now = ctx.currentTime;
+    [880, 1174.66].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const start = now + i * 0.11;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.07, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.1);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.12);
+    });
+  } catch {
+    /* Sound is optional. */
+  }
+};
+
+/** Toast shown when the service worker installed a newer app build. */
+const SwUpdateToast = () => {
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(() => {
+    const show = () => setVisible(true);
+    window.addEventListener("mohaseb:sw-update", show);
+    return () => window.removeEventListener("mohaseb:sw-update", show);
+  }, []);
+  if (!visible) return null;
+  return (
+    <div className="fixed bottom-4 left-4 z-[90] flex items-center gap-3 rounded-2xl border border-emerald-400/40 bg-slate-800 px-4 py-3 shadow-2xl shadow-black/40">
+      <span className="text-sm text-slate-100">
+        نسخهٔ جدید نرم‌افزار آماده است
+      </span>
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
+      >
+        بروزرسانی
+      </button>
+      <button
+        type="button"
+        onClick={() => setVisible(false)}
+        className="text-xs text-slate-400 hover:text-slate-200"
+      >
+        بعداً
+      </button>
+    </div>
+  );
+};
+
 const ChatRealtimeBridge = () => {
   const user = useSelector((state: any) => state.auth.currentUser);
   const isAuthenticated = useSelector(
@@ -45,21 +122,24 @@ const ChatRealtimeBridge = () => {
       chatAPI
         .unread()
         .then(({ data }) => {
-          if (active)
-            window.dispatchEvent(
-              new CustomEvent("mohaseb:chat-unread", {
-                detail: { count: data.count || 0 },
-              }),
-            );
+          if (!active) return;
+          applyTitleBadge(data.count || 0);
+          window.dispatchEvent(
+            new CustomEvent("mohaseb:chat-unread", {
+              detail: { count: data.count || 0 },
+            }),
+          );
         })
         .catch(() => {});
     const handleVisibility = () => {
       if (!document.hidden) refreshUnread();
     };
-    const handleRead = () =>
+    const handleRead = () => {
+      applyTitleBadge(0);
       window.dispatchEvent(
         new CustomEvent("mohaseb:chat-unread", { detail: { count: 0 } }),
       );
+    };
 
     const connect = () => {
       if (!active) return;
@@ -112,6 +192,7 @@ const ChatRealtimeBridge = () => {
             sender: message.sender_name,
             text: message.text || `فایل پیوست: ${message.file_name}`,
           });
+          playChatChime();
           window.clearTimeout(noticeTimer);
           noticeTimer = window.setTimeout(() => setNotice(null), 7000);
         }
@@ -161,6 +242,7 @@ const ChatRealtimeBridge = () => {
     connect();
     return () => {
       active = false;
+      applyTitleBadge(0);
       window.removeEventListener("mohaseb:chat-read", handleRead);
       document.removeEventListener("visibilitychange", handleVisibility);
       window.clearTimeout(reconnectTimer);
@@ -207,6 +289,20 @@ const Layout = () => {
   const currentUser = useSelector((state: any) => state.auth.currentUser);
   const isSuperuser = !!currentUser?.is_superuser;
   const canQuickInvoice = hasModule(currentUser, "invoices");
+
+  // Global shortcut: Alt+N opens the quick-invoice modal from anywhere.
+  // e.code is layout-independent, so it also works with a Persian keyboard.
+  React.useEffect(() => {
+    if (!canQuickInvoice) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && e.code === "KeyN") {
+        e.preventDefault();
+        setQuickInvoice(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canQuickInvoice]);
 
   React.useEffect(() => {
     if (!isAuthenticated) return;
@@ -286,6 +382,7 @@ const Layout = () => {
       />
       <ChatRealtimeBridge />
       <InvoiceEditRequestAlerts />
+      <SwUpdateToast />
       {welcomeMessage && (
         <WelcomeModal
           message={welcomeMessage}
@@ -321,7 +418,7 @@ const Layout = () => {
           bg-slate-800 text-white text-[11px] font-medium px-3 py-1.5 rounded-lg border border-slate-700
           opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none"
           >
-            فاکتور سریع
+            فاکتور سریع (Alt+N)
           </span>
         </button>
       )}

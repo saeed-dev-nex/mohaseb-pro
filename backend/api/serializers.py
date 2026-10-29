@@ -11,7 +11,7 @@ from .models import (
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
     Cheque, InvoiceSettings, ChatMessage, SocialNetwork, UserModuleAccess
 )
-from .validators import validate_customer_identifier, validate_national_code_field, validate_tax_id
+from .validators import validate_customer_documents_path, validate_customer_identifier, validate_national_code_field, validate_tax_id
 from .services.money import invoice_payment_totals, final_amount, office_card_fee, MAX_INVOICE_AMOUNT, MAX_ITEM_AMOUNT
 
 
@@ -670,6 +670,9 @@ class BusinessProfileSerializer(serializers.ModelSerializer):
 
     def validate_tax_id(self, value):
         return validate_tax_id(value)
+
+    def validate_customer_documents_path(self, value):
+        return validate_customer_documents_path(value)
 
 class ExpenseCategorySerializer(serializers.ModelSerializer):
     class Meta:

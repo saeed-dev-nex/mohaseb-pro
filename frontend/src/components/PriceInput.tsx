@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
 import type { InputHTMLAttributes } from "react";
+import { numberToWords } from "../utils/persian";
 
 /**
  * PriceInput — ورود قیمت به هزار تومان
@@ -89,15 +90,18 @@ const PriceInput = ({
         />
       </div>
 
-      {/* Persian text preview of full amount */}
+      {/* Persian text preview of full amount, digits and words */}
       {realAmount > 0 && (
         <p
-          className="text-[10px] text-emerald-400/70 pr-1 flex items-center justify-end gap-1"
+          className="text-[10px] text-emerald-400/70 pr-1 flex items-center justify-end gap-1 flex-wrap"
           dir="rtl"
         >
           <span>=</span>
           <span className="font-semibold text-emerald-400">
             {fmt(realAmount)} تومان
+          </span>
+          <span className="text-emerald-400/60">
+            ({numberToWords(realAmount)})
           </span>
         </p>
       )}

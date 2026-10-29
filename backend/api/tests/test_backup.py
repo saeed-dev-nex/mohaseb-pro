@@ -11,7 +11,7 @@ from api.backup_utils import (
     build_backup, decrypt_backup, encrypt_backup, is_encrypted_backup, restore_backup,
     validate_backup,
 )
-from api.models import Customer, Invoice, InvoiceNumberCounter
+from api.models import Customer, Document, Invoice, InvoiceNumberCounter
 
 
 class BackupTests(TestCase):
@@ -115,3 +115,21 @@ class BackupRestoreCounterTests(TestCase):
             customer=customer, total_amount=3000, status='pending'
         )
         self.assertEqual(new_invoice.invoice_number, 'INV-00003')
+
+
+class BackupMissingMediaTests(TestCase):
+    """Regression: one missing document file must not fail the backup.
+
+    build_backup used to raise ValueError on the first OSError while
+    reading a document file, so a single missing attachment blocked every
+    manual and scheduled backup. Missing files are now recorded in the
+    payload (recovered from the customer-folder copy when available)
+    instead."""
+
+    def test_missing_document_file_is_recorded_not_fatal(self):
+        customer = Customer.objects.create(name='مشتری سند', phone='09120000000')
+        Document.objects.create(customer=customer, title='سند گمشده', file='customer_docs/missing.png')
+        payload = build_backup()
+        self.assertNotIn('customer_docs/missing.png', payload['media_files'])
+        self.assertIn('customer_docs/missing.png', payload['missing_media_files'])
+        validate_backup(payload)
