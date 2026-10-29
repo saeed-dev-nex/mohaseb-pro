@@ -4,7 +4,7 @@
 [Keep a Changelog](https://keepachangelog.com/) و نسخه‌بندی بر اساس
 [Semantic Versioning](https://semver.org/) است؛ منبع واحد نسخه فایل `VERSION` است.
 
-## [Unreleased]
+## [3.3.0] — ۲۰۲۶-۱۰-۳۰
 
 ### راحتی و سرعت کار با فاکتور سریع (۲۰۲۶-۱۰-۲۹)
 - **پیشنهاد پلاک مثل فرم کامل:** با کامل‌شدن پلاک در مرحلهٔ اول، آخرین

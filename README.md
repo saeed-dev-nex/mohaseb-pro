@@ -1,12 +1,12 @@
 # محاسب پرو | Mohaseb Pro
 
 [![CI](https://github.com/saeed-dev-nex/mohaseb-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/saeed-dev-nex/mohaseb-pro/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-3.2.0-blue.svg)](VERSION)
+[![Version](https://img.shields.io/badge/version-3.3.0-blue.svg)](VERSION)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 سامانهٔ فارسی مدیریت مالی و صدور فاکتور برای کسب‌وکارهای خدماتی — با تمرکز بر سرعت صدور فاکتور، دقت اطلاعات خودرو و پشتیبان‌گیری امن. رابط کاربری کاملاً راست‌چین است و تاریخ شمسی، ارقام فارسی و چاپ استاندارد فاکتور را پشتیبانی می‌کند.
 
-**نسخهٔ فعلی: 3.2.0** — جزئیات تغییرات در [CHANGELOG](CHANGELOG.md) و برنامهٔ توسعه در [ROADMAP](ROADMAP.md)
+**نسخهٔ فعلی: 3.3.0** — جزئیات تغییرات در [CHANGELOG](CHANGELOG.md) و برنامهٔ توسعه در [ROADMAP](ROADMAP.md)
 
 ## نمایی از برنامه
 
