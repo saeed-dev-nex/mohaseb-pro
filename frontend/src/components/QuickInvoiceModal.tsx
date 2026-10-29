@@ -1058,7 +1058,14 @@ const QuickInvoiceModal = ({
               >
                 مرحله قبل
               </button>
-            ) : null}
+            ) : (
+              <button
+                onClick={onClose}
+                className="px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm hover:bg-slate-700 transition-all"
+              >
+                انصراف
+              </button>
+            )}
             {step < 4 ? (
               <button
                 onClick={goNext}
