@@ -17,7 +17,7 @@ import {
   ConfirmDialog,
   formatPrice,
 } from "../components/ui";
-import { invoicesAPI } from "../services/api";
+import { invoicesAPI, invoiceSettingsAPI } from "../services/api";
 import JalaliDatePicker from "../components/JalaliDatePicker";
 
 type FilterUser = {
@@ -96,6 +96,13 @@ const Invoices = () => {
     currentUser?.is_staff || currentUser?.is_superuser,
   );
   const isManager = Boolean(currentUser?.is_staff || currentUser?.is_superuser);
+  const [cloneEnabled, setCloneEnabled] = useState(true);
+  useEffect(() => {
+    invoiceSettingsAPI
+      .get()
+      .then(({ data }) => setCloneEnabled(data.enable_invoice_clone !== false))
+      .catch(() => {});
+  }, []);
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -305,7 +312,7 @@ const Invoices = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">فاکتورها</h2>
+          <h2 className="text-2xl font-bold text-white">🧾 فاکتورها</h2>
           <p className="text-slate-400 text-sm mt-1">
             مدیریت و پیگیری فاکتورها
           </p>
@@ -579,32 +586,32 @@ const Invoices = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-700/30 text-slate-400">
-                  <th className="text-right py-4 px-5 font-medium">شماره</th>
-                  <th className="text-right py-4 px-5 font-medium">مشتری</th>
-                  <th className="text-right py-4 px-5 font-medium">
+                  <th className="text-right py-3.5 px-4 font-medium">شماره</th>
+                  <th className="text-right py-3.5 px-4 font-medium">مشتری</th>
+                  <th className="text-right py-3.5 px-4 font-medium">
                     زمان ایجاد
                   </th>
-                  <th className="text-right py-4 px-5 font-medium">
+                  <th className="text-right py-3.5 px-4 font-medium">
                     مجموع مبلغ فاکتور
                   </th>
-                  <th className="text-right py-4 px-5 font-medium">
+                  <th className="text-right py-3.5 px-4 font-medium">
                     مجموع مبلغ پرداختی
                   </th>
                   {showPaymentType && (
-                    <th className="text-right py-4 px-5 font-medium">
+                    <th className="text-right py-3.5 px-4 font-medium">
                       نوع پرداخت
                     </th>
                   )}
-                  <th className="text-right py-4 px-5 font-medium">وضعیت</th>
-                  <th className="text-right py-4 px-5 font-medium">
+                  <th className="text-right py-3.5 px-4 font-medium">وضعیت</th>
+                  <th className="text-right py-3.5 px-4 font-medium">
                     پرداخت‌کننده
                   </th>
                   {canSeeIssuer && (
-                    <th className="text-right py-4 px-5 font-medium">
+                    <th className="text-right py-3.5 px-4 font-medium">
                       صادرکننده
                     </th>
                   )}
-                  <th className="py-4 px-5 font-medium text-right">عملیات</th>
+                  <th className="py-3.5 px-4 font-medium text-right">عملیات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/30">
@@ -613,12 +620,12 @@ const Invoices = () => {
                     key={inv.id}
                     className="hover:bg-slate-700/20 transition-colors"
                   >
-                    <td className="py-4 px-5">
+                    <td className="py-3.5 px-4">
                       <span className="text-blue-400 font-mono text-xs bg-blue-500/10 px-2 py-1 rounded-lg">
                         {inv.invoice_number}
                       </span>
                     </td>
-                    <td className="py-4 px-5">
+                    <td className="py-3.5 px-4">
                       <span className="text-slate-200">
                         {inv.customer_name || "---"}
                       </span>
@@ -628,7 +635,7 @@ const Invoices = () => {
                         </span>
                       )}
                     </td>
-                    <td className="py-4 px-5 text-slate-400 text-xs">
+                    <td className="py-3.5 px-4 text-slate-400 text-xs">
                       {persianDate(inv.created_at)}
                       <span className="block text-slate-500 mt-1">
                         {inv.created_at
@@ -639,7 +646,7 @@ const Invoices = () => {
                           : ""}
                       </span>
                     </td>
-                    <td className="py-4 px-5 text-slate-300">
+                    <td className="py-3.5 px-4 text-slate-300">
                       {formatPrice(inv.final_amount)}
                       {Number(
                         inv.paid_amount ??
@@ -652,14 +659,14 @@ const Invoices = () => {
                           </span>
                         )}
                     </td>
-                    <td className="py-4 px-5 text-white font-semibold">
+                    <td className="py-3.5 px-4 text-white font-semibold">
                       {formatPrice(
                         inv.paid_amount ??
                           (inv.status === "paid" ? inv.final_amount : 0),
                       )}
                     </td>
                     {showPaymentType && (
-                      <td className="py-4 px-5 text-slate-300">
+                      <td className="py-3.5 px-4 text-slate-300">
                         {inv.status === "paid"
                           ? inv.card_payment_source === "office"
                             ? "کارت دفتر"
@@ -667,7 +674,7 @@ const Invoices = () => {
                           : "—"}
                       </td>
                     )}
-                    <td className="py-4 px-5">
+                    <td className="py-3.5 px-4">
                       <StatusBadge
                         status={
                           inv.commission_paid && inv.status !== "paid"
@@ -676,15 +683,15 @@ const Invoices = () => {
                         }
                       />
                     </td>
-                    <td className="py-4 px-5 text-slate-300">
+                    <td className="py-3.5 px-4 text-slate-300">
                       {inv.paid_by_name || "—"}
                     </td>
                     {canSeeIssuer && (
-                      <td className="py-4 px-5 text-slate-300">
+                      <td className="py-3.5 px-4 text-slate-300">
                         {inv.operator_name || "—"}
                       </td>
                     )}
-                    <td className="py-4 px-5">
+                    <td className="py-3.5 px-4">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <Link
                           to={`/invoices/${inv.id}`}
@@ -722,6 +729,15 @@ const Invoices = () => {
                             className="text-xs px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/20 transition-all"
                           >
                             ✏️ ویرایش
+                          </Link>
+                        )}
+                        {cloneEnabled && (
+                          <Link
+                            to={`/invoices/new?clone=${inv.id}`}
+                            className="text-xs px-2.5 py-1 rounded-lg bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 border border-teal-500/20 transition-all"
+                            title="صدور فاکتور جدید با همین مشخصات و ردیف‌ها"
+                          >
+                            📋 صدور مشابه
                           </Link>
                         )}
                         {inv.status === "pending" && (

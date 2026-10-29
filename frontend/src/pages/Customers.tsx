@@ -161,6 +161,21 @@ const Customers = () => {
     return () => window.removeEventListener("mohaseb:data-changed", refresh);
   }, [queryClient]);
 
+  // Keyboard shortcut (Settings -> keyboard shortcuts) lands here with ?new=1.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new")) {
+      openAdd();
+      params.delete("new");
+      const qs = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + (qs ? `?${qs}` : ""),
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const openAdd = () => {
     setEditTarget(null);
     setModalOpen(true);
@@ -201,7 +216,7 @@ const Customers = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">مشتریان</h2>
+          <h2 className="text-2xl font-bold text-white">👥 مشتریان</h2>
           <p className="text-slate-400 text-sm mt-1">مدیریت اطلاعات مشتریان</p>
         </div>
         <Button variant="primary" onClick={openAdd}>
@@ -238,18 +253,18 @@ const Customers = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-700/30 text-slate-400">
-                  <th className="text-right py-4 px-5 font-medium">#</th>
-                  <th className="text-right py-4 px-5 font-medium">نام</th>
-                  <th className="text-right py-4 px-5 font-medium">تلفن</th>
-                  <th className="text-right py-4 px-5 font-medium">ایمیل</th>
-                  <th className="text-right py-4 px-5 font-medium">کد ملی</th>
-                  <th className="text-right py-4 px-5 font-medium">
+                  <th className="text-right py-3.5 px-4 font-medium">#</th>
+                  <th className="text-right py-3.5 px-4 font-medium">نام</th>
+                  <th className="text-right py-3.5 px-4 font-medium">تلفن</th>
+                  <th className="text-right py-3.5 px-4 font-medium">ایمیل</th>
+                  <th className="text-right py-3.5 px-4 font-medium">کد ملی</th>
+                  <th className="text-right py-3.5 px-4 font-medium">
                     تعداد فاکتور
                   </th>
-                  <th className="text-right py-4 px-5 font-medium">
+                  <th className="text-right py-3.5 px-4 font-medium">
                     مجموع پرداختی
                   </th>
-                  <th className="py-4 px-5" />
+                  <th className="py-3.5 px-4" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/30">
@@ -258,10 +273,10 @@ const Customers = () => {
                     key={c.id}
                     className="hover:bg-slate-700/20 transition-colors group"
                   >
-                    <td className="py-4 px-5 text-slate-500">
+                    <td className="py-3.5 px-4 text-slate-500">
                       {new Intl.NumberFormat("fa-IR").format(i + 1)}
                     </td>
-                    <td className="py-4 px-5">
+                    <td className="py-3.5 px-4">
                       <Link
                         to={`/customers/${c.id}`}
                         className="text-white font-medium hover:text-blue-400 transition-colors"
@@ -269,24 +284,24 @@ const Customers = () => {
                         {c.name}
                       </Link>
                     </td>
-                    <td className="py-4 px-5 text-slate-300">
+                    <td className="py-3.5 px-4 text-slate-300">
                       {c.phone || "---"}
                     </td>
-                    <td className="py-4 px-5 text-slate-300">
+                    <td className="py-3.5 px-4 text-slate-300">
                       {c.email || "---"}
                     </td>
-                    <td className="py-4 px-5 text-slate-400 font-mono text-xs">
+                    <td className="py-3.5 px-4 text-slate-400 font-mono text-xs">
                       {c.national_id || "---"}
                     </td>
-                    <td className="py-4 px-5 text-slate-300">
+                    <td className="py-3.5 px-4 text-slate-300">
                       {new Intl.NumberFormat("fa-IR").format(
                         c.total_invoices || 0,
                       )}
                     </td>
-                    <td className="py-4 px-5 text-green-400 text-xs">
+                    <td className="py-3.5 px-4 text-green-400 text-xs">
                       {formatPrice(c.total_paid || 0)}
                     </td>
-                    <td className="py-4 px-5">
+                    <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Link
                           to={`/customers/${c.id}`}

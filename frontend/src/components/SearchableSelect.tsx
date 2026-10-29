@@ -27,6 +27,7 @@ type SearchableSelectProps = {
   emptyText?: string;
   clearable?: boolean;
   creatable?: boolean;
+  createFirst?: boolean;
   onCreateOption?: (label: string) => Promise<SelectOption | null | undefined>;
   createLabel?: (inputValue: string) => ReactNode;
   creating?: boolean;
@@ -47,6 +48,9 @@ type SearchableSelectProps = {
  *  - emptyText          : text shown when no results
  *  - clearable          : show clear button (default true)
  *  - creatable          : allow creating new options (default false)
+ *  - createFirst        : show the create entry at the TOP of the list (also
+ *                         with an empty search) and make it the default
+ *                         Enter target while typing (default false)
  *  - onCreateOption     : async (label: string) => {value, label} — called when user creates
  *  - createLabel        : (inputValue: string) => string — custom create button label
  *  - creating           : boolean — shows a spinner while create is in progress
@@ -63,6 +67,7 @@ const SearchableSelect = ({
   emptyText = "موردی یافت نشد",
   clearable = true,
   creatable = false,
+  createFirst = false,
   onCreateOption,
   createLabel,
   creating = false,
@@ -100,6 +105,13 @@ const SearchableSelect = ({
     (o) => String(o.label).toLowerCase() === trimmedSearch.toLowerCase(),
   );
   const showCreate = creatable && trimmedSearch && !exactMatch;
+  // With createFirst, the create entry is also offered with an empty
+  // search (it opens the creator with an empty label).
+  const showCreateEntry =
+    showCreate || (creatable && createFirst && !trimmedSearch);
+  // Visual index offset: with createFirst the create entry is item 0
+  // and the options shift by one.
+  const createOffset = createFirst && showCreateEntry ? 1 : 0;
 
   // ─── Selected option ─────────────────────────────────────────
   const selectedOption = useMemo(
@@ -174,7 +186,8 @@ const SearchableSelect = ({
 
   // ─── Create new option ───────────────────────────────────────
   const handleCreate = useCallback(async () => {
-    if (!trimmedSearch || !onCreateOption || isCreating) return;
+    if (!onCreateOption || isCreating) return;
+    if (!trimmedSearch && !createFirst) return;
     // A creator may open a modal; the dropdown portal must not cover it.
     setIsOpen(false);
     setLocalCreating(true);
@@ -190,10 +203,10 @@ const SearchableSelect = ({
     } finally {
       setLocalCreating(false);
     }
-  }, [trimmedSearch, onCreateOption, onChange, isCreating]);
+  }, [trimmedSearch, onCreateOption, onChange, isCreating, createFirst]);
 
   // ─── Keyboard navigation ─────────────────────────────────────
-  const totalItems = filtered.length + (showCreate ? 1 : 0);
+  const totalItems = filtered.length + (showCreateEntry ? 1 : 0);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!isOpen) {
@@ -216,13 +229,19 @@ const SearchableSelect = ({
       setActiveIdx((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (
-        activeIdx >= 0 &&
-        activeIdx < filtered.length &&
-        filtered[activeIdx]
+      if (activeIdx < 0) return;
+      if (createOffset === 1 && activeIdx === 0) {
+        handleCreate();
+        return;
+      }
+      const optIdx = activeIdx - createOffset;
+      if (optIdx >= 0 && optIdx < filtered.length && filtered[optIdx]) {
+        handleSelect(filtered[optIdx]);
+      } else if (
+        createOffset === 0 &&
+        activeIdx === filtered.length &&
+        showCreateEntry
       ) {
-        handleSelect(filtered[activeIdx]);
-      } else if (activeIdx === filtered.length && showCreate) {
         handleCreate();
       }
     }
@@ -235,6 +254,59 @@ const SearchableSelect = ({
     setIsOpen(false);
     setSearch("");
   };
+
+  // ─── Create entry (top with createFirst, bottom otherwise) ───
+  const createIsActive = createFirst
+    ? activeIdx === 0
+    : activeIdx === filtered.length;
+  const createButton = showCreateEntry ? (
+    <button
+      ref={createIsActive ? activeItemRef : null}
+      type="button"
+      onClick={handleCreate}
+      disabled={isCreating}
+      className={`
+        w-full px-4 py-3 text-right text-sm flex items-center gap-3 transition-all
+        ${
+          createFirst
+            ? "border-b border-slate-700/40 mb-1"
+            : "border-t border-slate-700/40 mt-1"
+        }
+        ${
+          createIsActive
+            ? "bg-emerald-500/15 text-emerald-300"
+            : "text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+        }
+        ${isCreating ? "opacity-60 cursor-wait" : "cursor-pointer"}
+      `}
+    >
+      {isCreating ? (
+        <>
+          <div className="w-4 h-4 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin shrink-0" />
+          <span>در حال ذخیره...</span>
+        </>
+      ) : (
+        <>
+          <span className="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-xs shrink-0">
+            +
+          </span>
+          <span className="flex-1 min-w-0">
+            {createLabel ? (
+              createLabel(trimmedSearch)
+            ) : trimmedSearch ? (
+              <>
+                <span className="text-slate-400">افزودن: </span>
+                <span className="font-medium">«{trimmedSearch}»</span>
+              </>
+            ) : (
+              <span className="font-medium">افزودن جدید</span>
+            )}
+          </span>
+          <span className="text-[10px] text-emerald-600 shrink-0">Enter ↵</span>
+        </>
+      )}
+    </button>
+  ) : null;
 
   // ─── Dropdown portal ─────────────────────────────────────────
   const dropdown = isOpen
@@ -289,6 +361,9 @@ const SearchableSelect = ({
 
             {/* Options list */}
             <div ref={listRef} className="overflow-y-auto max-h-[240px] py-1">
+              {/* Create entry first (createFirst) */}
+              {createFirst && createButton}
+
               {/* Clear option */}
               {clearable &&
                 value !== "" &&
@@ -309,7 +384,7 @@ const SearchableSelect = ({
                 )}
 
               {/* No results */}
-              {filtered.length === 0 && !showCreate && (
+              {filtered.length === 0 && !showCreateEntry && (
                 <div className="px-4 py-6 text-center text-slate-500 text-sm">
                   <div className="text-2xl mb-1">🔍</div>
                   {emptyText}
@@ -319,7 +394,7 @@ const SearchableSelect = ({
               {/* Existing options */}
               {filtered.map((opt, idx) => {
                 const isSelected = String(opt.value) === String(value);
-                const isActive = idx === activeIdx;
+                const isActive = idx + createOffset === activeIdx;
                 return (
                   <button
                     key={opt.value}
@@ -360,61 +435,16 @@ const SearchableSelect = ({
                 );
               })}
 
-              {/* ── Create new option button ── */}
-              {showCreate && (
-                <button
-                  ref={activeIdx === filtered.length ? activeItemRef : null}
-                  type="button"
-                  onClick={handleCreate}
-                  disabled={isCreating}
-                  className={`
-                    w-full px-4 py-3 text-right text-sm flex items-center gap-3 transition-all
-                    border-t border-slate-700/40 mt-1
-                    ${
-                      activeIdx === filtered.length
-                        ? "bg-emerald-500/15 text-emerald-300"
-                        : "text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
-                    }
-                    ${isCreating ? "opacity-60 cursor-wait" : "cursor-pointer"}
-                  `}
-                >
-                  {isCreating ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin shrink-0" />
-                      <span>در حال ذخیره...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-xs shrink-0">
-                        +
-                      </span>
-                      <span className="flex-1 min-w-0">
-                        {createLabel ? (
-                          createLabel(trimmedSearch)
-                        ) : (
-                          <>
-                            <span className="text-slate-400">افزودن: </span>
-                            <span className="font-medium">
-                              «{trimmedSearch}»
-                            </span>
-                          </>
-                        )}
-                      </span>
-                      <span className="text-[10px] text-emerald-600 shrink-0">
-                        Enter ↵
-                      </span>
-                    </>
-                  )}
-                </button>
-              )}
+              {/* Create entry last (default) */}
+              {!createFirst && createButton}
             </div>
 
             {/* Footer */}
-            {(filtered.length > 0 || showCreate) && (
+            {(filtered.length > 0 || showCreateEntry) && (
               <div className="border-t border-slate-700/40 px-3 py-1.5 flex items-center justify-between">
                 <span className="text-[10px] text-slate-600">
                   {filtered.length} مورد{search ? ` از ${options.length}` : ""}
-                  {showCreate && " + جدید"}
+                  {showCreateEntry && " + جدید"}
                 </span>
                 <span className="text-[10px] text-slate-600">
                   ↑↓ جابجایی · Enter انتخاب

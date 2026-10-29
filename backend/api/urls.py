@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .auth_views import ThrottledTokenObtainPairView, ThrottledTokenRefreshView, TokenLogoutView
 from .views import (
-    CustomerViewSet, ServiceViewSet, InvoiceViewSet,
+    CustomerViewSet, ServiceViewSet, ServicePackageViewSet, InvoiceViewSet,
     DocumentViewSet, DashboardViewSet,
     BusinessProfileViewSet, ExpenseCategoryViewSet,
     ExpenseViewSet, StaffViewSet, BackupViewSet, VehicleTypeViewSet,
@@ -15,6 +15,7 @@ from .views import database_revision
 router = DefaultRouter()
 router.register(r'customers', CustomerViewSet, basename='customer')
 router.register(r'services', ServiceViewSet, basename='service')
+router.register(r'service-packages', ServicePackageViewSet, basename='service-package')
 router.register(r'invoices', InvoiceViewSet, basename='invoice')
 router.register(r'documents', DocumentViewSet, basename='document')
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')

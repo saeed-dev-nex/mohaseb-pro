@@ -1,6 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { dashboardAPI, invoicesAPI } from "../services/api";
-import { StatCard, StatusBadge, Spinner, formatPrice } from "../components/ui";
+import {
+  Button,
+  StatCard,
+  StatusBadge,
+  Spinner,
+  formatPrice,
+} from "../components/ui";
 import { Link } from "react-router-dom";
 import { toJalali } from "../utils/persian";
 
@@ -288,15 +294,13 @@ const Dashboard = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">داشبورد</h2>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <h2 className="text-2xl font-bold text-white">📊 داشبورد</h2>
+          <p className="text-slate-400 text-sm mt-1">
             خلاصه وضعیت مالی و تحلیلی
           </p>
         </div>
         <Link to="/invoices/new">
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-all shadow-lg shadow-blue-500/25">
-            <span>+</span> فاکتور جدید
-          </button>
+          <Button variant="primary">+ فاکتور جدید</Button>
         </Link>
       </div>
 

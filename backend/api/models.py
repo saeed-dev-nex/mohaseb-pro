@@ -92,6 +92,30 @@ class Service(models.Model):
         return self.title
 
 
+class ServicePackage(models.Model):
+    """A named, manager-defined bundle of services for one-click invoicing.
+
+    Packages are arranged in Settings by the manager (one per recurring
+    need, e.g. «خلافی و عوارض») and applied from the invoice form: every
+    service in the package becomes an invoice row with its default prices.
+    """
+
+    name = models.CharField(max_length=255, verbose_name='نام پکیج')
+    services = models.ManyToManyField(
+        Service, related_name='packages', blank=True, verbose_name='خدمات پکیج'
+    )
+    is_active = models.BooleanField(default=True, verbose_name='فعال')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'پکیج خدمات'
+        verbose_name_plural = 'پکیج‌های خدمات'
+
+    def __str__(self):
+        return self.name
+
+
 class InvoiceNumberCounter(models.Model):
     """Singleton row that allocates sequential invoice numbers atomically.
 
@@ -458,6 +482,7 @@ class InvoiceSettings(models.Model):
     show_tax_field = models.BooleanField(default=True, verbose_name='نمایش فیلد مالیات در فاکتور')
     show_seller_signature = models.BooleanField(default=True, verbose_name='نمایش مهر و امضای فروشنده')
     show_buyer_signature = models.BooleanField(default=True, verbose_name='نمایش امضای خریدار')
+    enable_invoice_clone = models.BooleanField(default=True, verbose_name='فعال بودن صدور مشابه فاکتور')
 
     class Meta:
         verbose_name = 'تنظیمات فاکتور'

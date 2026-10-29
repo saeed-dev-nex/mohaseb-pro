@@ -2,7 +2,9 @@ import React, { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { usersAPI } from "../services/api";
 import { ALL_MODULES, MODULE_LABELS, ceilingFor } from "../utils/modules";
+import PasswordInput from "../components/PasswordInput";
 import type { ModuleName } from "../utils/modules";
+import { Button } from "../components/ui";
 
 type RoleInfo = {
   label: string;
@@ -233,29 +235,15 @@ export default function UsersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <span
-              className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600
-              flex items-center justify-center text-lg shadow-lg shadow-purple-500/30"
-            >
-              👥
-            </span>
-            مدیریت کاربران
-          </h1>
-          <p className="text-slate-400 text-sm mt-1 mr-13">
+          <h2 className="text-2xl font-bold text-white">🔐 مدیریت کاربران</h2>
+          <p className="text-slate-400 text-sm mt-1">
             تعریف کارمند با نام کاربری و رمز ورود اختصاصی برای نظارت بر رفتار
             کارکنان
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-l from-purple-600 to-indigo-600
-            hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-medium text-sm
-            shadow-lg shadow-purple-500/20 transition-all duration-200 hover:scale-105 active:scale-95"
-        >
-          <span>➕</span>
-          <span>کاربر جدید</span>
-        </button>
+        <Button variant="primary" onClick={openCreate}>
+          + کاربر جدید
+        </Button>
       </div>
 
       {/* Error */}
@@ -294,23 +282,23 @@ export default function UsersPage() {
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-700/50 bg-slate-900/50">
-                <th className="text-right px-6 py-4 text-slate-400 font-medium">
+              <tr className="bg-slate-700/30 text-slate-400 border-b border-slate-700/50">
+                <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
                   کاربر
                 </th>
-                <th className="text-right px-6 py-4 text-slate-400 font-medium">
+                <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
                   نام کاربری
                 </th>
-                <th className="text-right px-6 py-4 text-slate-400 font-medium">
+                <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
                   سطح دسترسی
                 </th>
-                <th className="text-right px-6 py-4 text-slate-400 font-medium">
+                <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
                   وضعیت
                 </th>
-                <th className="text-right px-6 py-4 text-slate-400 font-medium">
+                <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
                   تاریخ ایجاد
                 </th>
-                <th className="px-6 py-4 text-slate-400 font-medium text-center">
+                <th className="px-4 py-3.5 text-slate-400 font-medium text-center">
                   عملیات
                 </th>
               </tr>
@@ -325,7 +313,7 @@ export default function UsersPage() {
                     className={`border-b border-slate-700/30 transition-colors hover:bg-slate-700/20
                       ${idx % 2 === 0 ? "" : "bg-slate-800/20"}`}
                   >
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3.5">
                       <div className="flex items-center gap-3">
                         <div
                           className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-600 to-slate-700
@@ -356,12 +344,12 @@ export default function UsersPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3.5">
                       <code className="text-slate-300 bg-slate-900/50 px-2 py-1 rounded-lg text-xs">
                         {user.username}
                       </code>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3.5">
                       <span
                         className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${role.color}`}
                       >
@@ -369,7 +357,7 @@ export default function UsersPage() {
                         {role.label}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3.5">
                       <button
                         onClick={() => !isMe && handleToggleActive(user)}
                         disabled={isMe}
@@ -386,12 +374,12 @@ export default function UsersPage() {
                         {user.is_active ? "فعال" : "غیرفعال"}
                       </button>
                     </td>
-                    <td className="px-6 py-4 text-slate-400 text-xs">
+                    <td className="px-4 py-3.5 text-slate-400 text-xs">
                       {user.date_joined
                         ? new Date(user.date_joined).toLocaleDateString("fa-IR")
                         : "-"}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3.5">
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => openEdit(user)}
@@ -430,7 +418,7 @@ export default function UsersPage() {
       {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl">
             <div className="p-6 border-b border-slate-700 flex items-center justify-between">
               <h2 className="text-lg font-bold text-white">
                 {editingUser ? "✏️ ویرایش کاربر" : "➕ کاربر جدید"}
@@ -518,8 +506,7 @@ export default function UsersPage() {
                     </span>
                   )}
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={form.password}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, password: e.target.value }))
@@ -701,7 +688,7 @@ export default function UsersPage() {
       {/* Delete Confirm Modal */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-red-500/30 rounded-2xl p-6 w-full max-w-sm shadow-2xl text-center">
+          <div className="bg-slate-800 border border-red-500/30 rounded-2xl p-6 w-full max-w-sm shadow-2xl text-center">
             <div className="text-4xl mb-4">⚠️</div>
             <h3 className="text-lg font-bold text-white mb-2">حذف کاربر</h3>
             <p className="text-slate-400 text-sm mb-6">

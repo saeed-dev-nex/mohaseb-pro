@@ -479,7 +479,7 @@ const Cheques = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-white">🎫 مدیریت چک‌ها</h2>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <p className="text-slate-400 text-sm mt-1">
             ثبت، پیگیری و یادآوری چک‌های دریافتی و پرداختی
           </p>
         </div>
@@ -488,7 +488,7 @@ const Cheques = () => {
             setFormError("");
             setModal("add");
           }}
-          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-medium transition-all shadow-lg shadow-blue-500/25"
+          className="inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/25 px-5 py-2.5 text-sm"
         >
           + ثبت چک جدید
         </button>
@@ -607,26 +607,22 @@ const Cheques = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-700/50 text-slate-400 text-xs bg-slate-900/20">
-                  <th className="text-right py-3.5 px-4 font-semibold">
+                <tr className="bg-slate-700/30 text-slate-400 border-b border-slate-700/50">
+                  <th className="text-right py-3.5 px-4 font-medium">
                     مشخصات چک
                   </th>
-                  <th className="text-right py-3.5 px-4 font-semibold">
-                    مشتری
-                  </th>
-                  <th className="text-right py-3.5 px-4 font-semibold">
+                  <th className="text-right py-3.5 px-4 font-medium">مشتری</th>
+                  <th className="text-right py-3.5 px-4 font-medium">
                     نوع / وضعیت
                   </th>
-                  <th className="text-right py-3.5 px-4 font-semibold">مبلغ</th>
-                  <th className="text-right py-3.5 px-4 font-semibold">
+                  <th className="text-right py-3.5 px-4 font-medium">مبلغ</th>
+                  <th className="text-right py-3.5 px-4 font-medium">
                     سررسید (شمسی)
                   </th>
-                  <th className="text-center py-3.5 px-4 font-semibold">
+                  <th className="text-center py-3.5 px-4 font-medium">
                     عملیات سریع
                   </th>
-                  <th className="text-left py-3.5 px-4 font-semibold">
-                    مدیریت
-                  </th>
+                  <th className="text-left py-3.5 px-4 font-medium">مدیریت</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/30">

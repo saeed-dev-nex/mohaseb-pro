@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
@@ -16,6 +16,13 @@ import {
 import api from "../services/api";
 import { hasModule } from "../utils/modules";
 import { startVisibilityPoll } from "../utils/visibilityPoll";
+import {
+  SHORTCUTS_CHANGED_EVENT,
+  eventMatchesCombo,
+  loadShortcuts,
+} from "../lib/shortcuts";
+import type { ShortcutMap } from "../lib/shortcuts";
+import WaitingModal from "./WaitingModal";
 
 type ChatNotice = { sender: string; text: string };
 
@@ -290,19 +297,63 @@ const Layout = () => {
   const isSuperuser = !!currentUser?.is_superuser;
   const canQuickInvoice = hasModule(currentUser, "invoices");
 
-  // Global shortcut: Alt+N opens the quick-invoice modal from anywhere.
-  // e.code is layout-independent, so it also works with a Persian keyboard.
+  // Global keyboard shortcuts — editable in Settings → میانبرهای
+  // صفحه‌کلید (defaults: Alt+N quick invoice, Alt+Shift+N new invoice,
+  // Alt+Shift+C new customer). Matching uses e.code, so combos work with
+  // a Persian keyboard layout too. Listens for in-app changes so edits
+  // apply without a reload.
+  const navigate = useNavigate();
+  const [shortcutMap, setShortcutMap] = useState<ShortcutMap>(() =>
+    loadShortcuts(),
+  );
   React.useEffect(() => {
-    if (!canQuickInvoice) return undefined;
+    const refresh = () => setShortcutMap(loadShortcuts());
+    window.addEventListener(SHORTCUTS_CHANGED_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(SHORTCUTS_CHANGED_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+  React.useEffect(() => {
+    const run = (id: string): boolean => {
+      switch (id) {
+        case "quick_invoice":
+          if (!hasModule(currentUser, "invoices")) return false;
+          setQuickInvoice(true);
+          return true;
+        case "new_invoice":
+          if (!hasModule(currentUser, "invoices")) return false;
+          navigate("/invoices/new");
+          return true;
+        case "new_customer":
+          if (!hasModule(currentUser, "customers")) return false;
+          navigate("/customers?new=1");
+          return true;
+        case "new_service":
+          if (!hasModule(currentUser, "services")) return false;
+          navigate("/services?new=1");
+          return true;
+        case "new_expense":
+          if (!hasModule(currentUser, "expenses")) return false;
+          navigate("/expenses?new=1");
+          return true;
+        default:
+          return false;
+      }
+    };
     const onKey = (e: KeyboardEvent) => {
-      if (e.altKey && e.code === "KeyN") {
-        e.preventDefault();
-        setQuickInvoice(true);
+      if (e.repeat) return;
+      for (const [id, combo] of Object.entries(shortcutMap)) {
+        if (combo && eventMatchesCombo(e, combo)) {
+          if (run(id)) e.preventDefault();
+          return;
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canQuickInvoice]);
+  }, [shortcutMap, currentUser, navigate]);
 
   React.useEffect(() => {
     if (!isAuthenticated) return;
@@ -422,6 +473,9 @@ const Layout = () => {
           </span>
         </button>
       )}
+
+      {/* Global waiting overlay for long-running operations */}
+      <WaitingModal />
 
       {/* Quick Invoice Modal */}
       {canQuickInvoice && (

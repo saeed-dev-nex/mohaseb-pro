@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { staffAPI } from "../services/api";
+import { Button, Spinner } from "../components/ui";
 
 const fmt = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0);
@@ -207,23 +208,18 @@ const StaffPage = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">👥 مدیریت پرسنل</h2>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <h2 className="text-2xl font-bold text-white">👷 مدیریت پرسنل</h2>
+          <p className="text-slate-400 text-sm mt-1">
             تکنسین‌ها، پورسانت و عملکرد
           </p>
         </div>
-        <button
-          onClick={() => setModal("add")}
-          className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-all"
-        >
+        <Button variant="primary" onClick={() => setModal("add")}>
           + افزودن پرسنل
-        </button>
+        </Button>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        </div>
+        <Spinner size="lg" />
       ) : list.length === 0 ? (
         <div className="text-center py-16 bg-slate-800/50 border border-slate-700/50 rounded-2xl">
           <p className="text-4xl mb-3">👷</p>

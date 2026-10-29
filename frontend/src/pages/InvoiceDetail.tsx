@@ -1,5 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import {
+  useParams,
+  useNavigate,
+  Link,
+  useSearchParams,
+} from "react-router-dom";
 import {
   invoicesAPI,
   profileAPI,
@@ -11,7 +16,13 @@ import {
 import { useSelector } from "react-redux";
 import { toJalali, numberToWords } from "../utils/persian";
 import PriceInput from "../components/PriceInput";
-import { Button, ErrorNotice, InputField, Modal } from "../components/ui";
+import {
+  Button,
+  ErrorNotice,
+  InputField,
+  Modal,
+  Spinner,
+} from "../components/ui";
 
 // ─── helpers ──────────────────────────────────────────────────
 const fmt = (n: number | string | null | undefined) =>
@@ -211,7 +222,15 @@ const StatusBadge = ({ status }: { status: string }) => {
 
 // ─── Print CSS builder ─────────────────────────────────────────
 const buildPrintCSS = (size: string) => {
-  const pageSize = size === "a4" ? "A4" : size === "a6" ? "A6" : "A5";
+  // Chromium does not know the "A6" keyword in @page size (it silently
+  // falls back to Letter), so A6 is given as explicit dimensions.
+  const pageSize = size === "a4" ? "A4" : size === "a6" ? "105mm 148mm" : "A5";
+  // The print area is laid out with rem-based (screen) sizes, so on small
+  // paper it overflows to a second page. Scale it down with zoom so a
+  // normal invoice fits exactly one page: A5 measured to need <= 0.78
+  // for a tall invoice (6 items + vehicle + both signatures + footer);
+  // 0.72 leaves headroom for slightly longer ones.
+  const zoom = size === "a6" ? 0.5 : size === "a5" ? 0.72 : 1;
   return `
     @media print {
       @page { size: ${pageSize}; margin: 8mm; }
@@ -230,6 +249,7 @@ const buildPrintCSS = (size: string) => {
         margin: 0;
         background: white; color: #111;
         padding: 0;
+        ${zoom !== 1 ? `zoom: ${zoom};` : ""}
         font-family: Vazirmatn, sans-serif;
         font-size: ${size === "a6" ? "9px" : size === "a5" ? "10px" : "12px"};
         direction: rtl;
@@ -335,6 +355,7 @@ type InvoiceFields = {
   show_tax_field: boolean;
   show_seller_signature: boolean;
   show_buyer_signature: boolean;
+  enable_invoice_clone: boolean;
 };
 
 // ─── Main Component ───────────────────────────────────────────
@@ -350,6 +371,7 @@ const InvoiceDetail = () => {
     show_tax_field: true,
     show_seller_signature: true,
     show_buyer_signature: true,
+    enable_invoice_clone: true,
   });
   const [loading, setLoading] = useState(true);
   const [statusChanging, setStatusChanging] = useState(false);
@@ -411,6 +433,7 @@ const InvoiceDetail = () => {
           show_tax_field: data.show_tax_field !== false,
           show_seller_signature: data.show_seller_signature !== false,
           show_buyer_signature: data.show_buyer_signature !== false,
+          enable_invoice_clone: data.enable_invoice_clone !== false,
         }),
       )
       .catch(() => {});
@@ -787,6 +810,24 @@ const InvoiceDetail = () => {
 
   const handlePrint = () => window.print();
 
+  // ?print=1 (e.g. from the quick-invoice success screen) prints once the
+  // invoice has loaded.
+  const [searchParams] = useSearchParams();
+  const autoPrintedRef = useRef(false);
+  useEffect(() => {
+    if (
+      !loading &&
+      invoice &&
+      searchParams.get("print") === "1" &&
+      !autoPrintedRef.current
+    ) {
+      autoPrintedRef.current = true;
+      const timer = setTimeout(() => window.print(), 400);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [loading, invoice, searchParams]);
+
   const captureCanvas = async () => {
     const { default: html2canvas } = await import("html2canvas");
     const el = exportRef.current;
@@ -861,7 +902,7 @@ const InvoiceDetail = () => {
   if (loading)
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+        <Spinner size="lg" />
       </div>
     );
   if (!invoice) return null;
@@ -1064,6 +1105,16 @@ const InvoiceDetail = () => {
                     : "درخواست ویرایش از مدیر"}
                 </button>
               ))}
+
+            {invoiceFields.enable_invoice_clone && (
+              <Link
+                to={`/invoices/new?clone=${id}`}
+                className="px-3 py-2 rounded-xl bg-teal-600/80 hover:bg-teal-600 text-white text-sm border border-teal-500/50 transition-all flex items-center gap-2"
+                title="صدور فاکتور جدید با همین مشخصات و ردیف‌ها"
+              >
+                📋 صدور مشابه
+              </Link>
+            )}
 
             <button
               onClick={handlePrint}
@@ -1686,7 +1737,7 @@ const InvoiceDetail = () => {
                     />
                     <button
                       disabled={paymentSaving || !paymentForm.amount}
-                      className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                      className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
                     >
                       {paymentSaving ? "در حال ثبت..." : "ثبت پرداخت"}
                     </button>
@@ -2402,7 +2453,7 @@ const InvoiceDetail = () => {
               <div
                 style={{
                   fontSize: "9px",
-                  color: "#9ca3af",
+                  color: "#6b7280",
                   marginBottom: "2px",
                   textTransform: "uppercase",
                   letterSpacing: "0.05em",
@@ -2451,7 +2502,7 @@ const InvoiceDetail = () => {
                   fontSize: "11px",
                 }}
               >
-                <span style={{ color: "#9ca3af", fontSize: "9px" }}>پلاک</span>
+                <span style={{ color: "#6b7280", fontSize: "9px" }}>پلاک</span>
                 <span style={{ fontFamily: "monospace" }}>
                   {invoice.vehicle_plate}
                 </span>
@@ -2470,7 +2521,7 @@ const InvoiceDetail = () => {
                   fontSize: "11px",
                 }}
               >
-                <span style={{ color: "#9ca3af", fontSize: "9px" }}>نوع</span>
+                <span style={{ color: "#6b7280", fontSize: "9px" }}>نوع</span>
                 {invoice.vehicle_type}
               </div>
             )}
@@ -2487,7 +2538,7 @@ const InvoiceDetail = () => {
                   fontSize: "11px",
                 }}
               >
-                <span style={{ color: "#9ca3af", fontSize: "9px" }}>مدل</span>
+                <span style={{ color: "#6b7280", fontSize: "9px" }}>مدل</span>
                 {invoice.vehicle_model}
               </div>
             )}
@@ -2505,7 +2556,7 @@ const InvoiceDetail = () => {
                 }}
               >
                 <span style={{ color: "#6b7280", fontSize: "9px" }}>سال</span>
-                <span style={{ color: "#16a34a", fontWeight: "600" }}>
+                <span style={{ color: "#15803d", fontWeight: "600" }}>
                   {invoice.vehicle_year}
                 </span>
               </div>
@@ -2523,7 +2574,7 @@ const InvoiceDetail = () => {
                   fontSize: "10px",
                 }}
               >
-                <span style={{ color: "#9ca3af", fontSize: "9px" }}>VIN</span>
+                <span style={{ color: "#6b7280", fontSize: "9px" }}>VIN</span>
                 <span style={{ fontFamily: "monospace" }}>
                   {invoice.vehicle_vin}
                 </span>
@@ -2617,7 +2668,7 @@ const InvoiceDetail = () => {
                 style={{ borderBottom: "1px solid #e5e7eb" }}
               >
                 <td
-                  style={{ padding: "8px", color: "#9ca3af", fontSize: "11px" }}
+                  style={{ padding: "8px", color: "#6b7280", fontSize: "11px" }}
                 >
                   {i + 1}
                 </td>
@@ -2719,7 +2770,7 @@ const InvoiceDetail = () => {
                 <span style={{ color: "#6b7280" }}>
                   مالیات ({invoice?.tax}%)
                 </span>
-                <span style={{ color: "#d97706" }}>+{fmt(taxAmount)}</span>
+                <span style={{ color: "#92400e" }}>+{fmt(taxAmount)}</span>
               </div>
             )}
             {invoiceFields.show_discount_field &&
@@ -2733,7 +2784,7 @@ const InvoiceDetail = () => {
                   }}
                 >
                   <span style={{ color: "#6b7280" }}>تخفیف</span>
-                  <span style={{ color: "#059669" }}>
+                  <span style={{ color: "#047857" }}>
                     −{fmt(Number(invoice?.discount))}
                   </span>
                 </div>
