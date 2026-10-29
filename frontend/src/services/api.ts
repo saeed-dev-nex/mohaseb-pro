@@ -107,6 +107,13 @@ export const servicesAPI = {
   delete: (id: Id) => api.delete(`services/${id}/`),
 };
 
+export const servicePackagesAPI = {
+  list: (params: Params = {}) => api.get("service-packages/", { params }),
+  create: (data: Payload) => api.post("service-packages/", data),
+  update: (id: Id, data: Payload) => api.put(`service-packages/${id}/`, data),
+  delete: (id: Id) => api.delete(`service-packages/${id}/`),
+};
+
 // ---- Invoices ----
 export const invoicesAPI = {
   list: (params: Params = {}) => api.get("invoices/", { params }),

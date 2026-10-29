@@ -7,7 +7,7 @@ re-exported here, so no import paths changed.
 
 from .common import IsManagerOrAdmin, IsSuperuser, database_revision
 from .customers import CustomerViewSet
-from .catalog import ServiceViewSet, VehicleTypeViewSet
+from .catalog import ServicePackageViewSet, ServiceViewSet, VehicleTypeViewSet
 from .invoices import InvoiceViewSet
 from .documents import DocumentViewSet
 from .chat import ChatMessageViewSet

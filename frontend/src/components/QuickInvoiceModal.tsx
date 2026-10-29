@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   invoicesAPI,
   servicesAPI,
+  servicePackagesAPI,
   customersAPI,
   invoiceSettingsAPI,
 } from "../services/api";
@@ -297,20 +298,9 @@ const QuickInvoiceModal = ({
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
+  const [packages, setPackages] = useState<any[]>([]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    servicesAPI
-      .list()
-      .then(({ data }) => setServices(data.results || data))
-      .catch(() => {});
-    invoiceSettingsAPI
-      .get()
-      .then(({ data }) =>
-        setOfficeCardThreshold(Number(data.office_card_fee_threshold) || 0),
-      )
-      .catch(() => {});
-    // Reset form on open
+  const resetForm = useCallback(() => {
     setCustomerName("");
     setCustomerPhone("");
     setDescription("");
@@ -330,7 +320,27 @@ const QuickInvoiceModal = ({
     setError("");
     setStatus("pending");
     setCardPaymentSource("customer");
-  }, [isOpen]);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    servicesAPI
+      .list()
+      .then(({ data }) => setServices(data.results || data))
+      .catch(() => {});
+    invoiceSettingsAPI
+      .get()
+      .then(({ data }) =>
+        setOfficeCardThreshold(Number(data.office_card_fee_threshold) || 0),
+      )
+      .catch(() => {});
+    servicePackagesAPI
+      .list({ active: 1 })
+      .then(({ data }) => setPackages(data?.results || data || []))
+      .catch(() => {});
+    // Reset form on open
+    resetForm();
+  }, [isOpen, resetForm]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -364,6 +374,23 @@ const QuickInvoiceModal = ({
         notes: "",
       },
     ]);
+  };
+
+  const applyPackage = (pkg: any) => {
+    const rows: QuickItem[] = (pkg.services || [])
+      .map((sid: number) => services.find((s) => s.id === sid))
+      .filter((s: any) => s && s.is_active !== false)
+      .map((s: any) => ({
+        _key: Math.random(),
+        service: s.id,
+        service_title_snapshot: s.title,
+        quantity: 1,
+        main_price: s.default_main_price || 0,
+        extra_price: s.default_extra_price || 0,
+        notes: "",
+      }));
+    if (rows.length === 0) return;
+    setItems((prev) => [...prev.filter((it) => it.service), ...rows]);
   };
 
   const updateRow = (idx: number, updated: QuickItem) =>
@@ -497,11 +524,17 @@ const QuickInvoiceModal = ({
               </button>
               <button
                 onClick={() => {
-                  window.location.href = `/invoices/${result.invoice?.id}`;
+                  window.location.href = `/invoices/${result.invoice?.id}?print=1`;
                 }}
                 className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm transition-all"
               >
-                مشاهده فاکتور
+                🖨️ مشاهده و چاپ
+              </button>
+              <button
+                onClick={resetForm}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm transition-all"
+              >
+                ⚡ فاکتور جدید
               </button>
             </div>
           </div>
@@ -588,6 +621,23 @@ const QuickInvoiceModal = ({
                 + ردیف جدید
               </button>
             </div>
+            {packages.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                <span className="text-[11px] text-slate-500">
+                  📦 پکیج آماده:
+                </span>
+                {packages.map((pkg: any) => (
+                  <button
+                    key={pkg.id}
+                    type="button"
+                    onClick={() => applyPackage(pkg)}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-violet-500/10 text-violet-300 border border-violet-500/25 hover:bg-violet-500/20 transition-all"
+                  >
+                    📦 {pkg.name}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="space-y-2">
               {items.map((item, idx) => (
                 <ServiceRow

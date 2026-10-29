@@ -1,6 +1,12 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
 import type { ReactNode } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServices, serviceKeys } from "../hooks/useServices";
 import {
@@ -13,6 +19,7 @@ import {
   vehicleTypesAPI,
   invoiceSettingsAPI,
   documentsAPI,
+  servicePackagesAPI,
 } from "../services/api";
 import PriceInput from "../components/PriceInput";
 import PlateInput from "../components/PlateInput";
@@ -27,6 +34,27 @@ import {
 const fmt = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0) + " تومان";
 const YEAR_OPTIONS = jalaliYearRange(1360, currentJalaliYear());
+
+// ── Speed helpers: draft autosave + remembered operator defaults ──
+const DRAFT_KEY = "mohaseb:invoice-draft:v1";
+const DEFAULTS_KEY = "mohaseb:invoice-defaults:v1";
+
+type InvoiceDefaults = { status?: string; card_payment_source?: string };
+
+function loadInvoiceDefaults(): InvoiceDefaults {
+  try {
+    return JSON.parse(localStorage.getItem(DEFAULTS_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
+}
+
+type ServicePackageOption = {
+  id: number;
+  name: string;
+  services: number[];
+  is_active: boolean;
+};
 
 const STATUS_OPTIONS = [
   { value: "draft", label: "پیش‌نویس" },
@@ -688,6 +716,9 @@ const ItemRow = ({ item, idx, services, onChange, onRemove }: ItemRowProps) => {
 const InvoiceForm = () => {
   const { id } = useParams();
   const isEdit = Boolean(id);
+  const [searchParams] = useSearchParams();
+  // «صدور مشابه»: /invoices/new?clone=<id> prefills the form from that invoice.
+  const cloneId = !isEdit ? searchParams.get("clone") : null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: servicesData } = useServices();
@@ -784,27 +815,37 @@ const InvoiceForm = () => {
     }
   }, []);
 
-  const [form, setForm] = useState<InvoiceFormState>({
-    customer: "",
-    status: "pending",
-    card_payment_source: "customer",
-    date: new Date().toISOString().slice(0, 10),
-    due_date: "",
-    description: "",
-    discount: 0,
-    tax: 0,
-    commission_total: 0,
-    paper_size: "a5",
-    vehicle_plate: "",
-    vehicle_vin: "",
-    vehicle_model: "",
-    vehicle_type: "",
-    vehicle_year: "",
-    green_card_owner_name: "",
-    green_card_owner_national_id: "",
-    tags: [],
+  const [form, setForm] = useState<InvoiceFormState>(() => {
+    // New invoices start from the operator's last-used status/card source.
+    const defaults = loadInvoiceDefaults();
+    return {
+      customer: "",
+      status: defaults.status || "pending",
+      card_payment_source: defaults.card_payment_source || "customer",
+      date: new Date().toISOString().slice(0, 10),
+      due_date: "",
+      description: "",
+      discount: 0,
+      tax: 0,
+      commission_total: 0,
+      paper_size: "a5",
+      vehicle_plate: "",
+      vehicle_vin: "",
+      vehicle_model: "",
+      vehicle_type: "",
+      vehicle_year: "",
+      green_card_owner_name: "",
+      green_card_owner_national_id: "",
+      tags: [],
+    };
   });
   const [items, setItems] = useState<InvoiceItemForm[]>([]);
+  const [packages, setPackages] = useState<ServicePackageOption[]>([]);
+  const [plateSuggestion, setPlateSuggestion] = useState<any>(null);
+  const [plateDismissedFor, setPlateDismissedFor] = useState("");
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [showGreenCard, setShowGreenCard] = useState(false);
+  const appliedPlateRef = useRef("");
   const [officeCardThreshold, setOfficeCardThreshold] = useState(0);
   const [invoiceFields, setInvoiceFields] = useState({
     show_discount_field: true,
@@ -831,49 +872,247 @@ const InvoiceForm = () => {
       window.removeEventListener("mohaseb:data-changed", refreshReferences);
   }, [queryClient]);
 
+  // Maps an API invoice into form state. In clone mode the copy becomes a
+  // fresh invoice: today's date, no due date, and the operator's default
+  // status — payments are never carried over.
+  const applyInvoiceData = useCallback((data: any, forClone: boolean) => {
+    const defaults = loadInvoiceDefaults();
+    setForm({
+      customer: data.customer || "",
+      status: forClone
+        ? defaults.status || "pending"
+        : data.status || "pending",
+      card_payment_source: data.card_payment_source || "customer",
+      date: forClone
+        ? new Date().toISOString().slice(0, 10)
+        : data.date
+          ? data.date.slice(0, 10)
+          : "",
+      due_date: forClone ? "" : data.due_date || "",
+      description: data.description || "",
+      discount: data.discount || 0,
+      tax: data.tax || 0,
+      commission_total: data.commission_total || 0,
+      paper_size: data.paper_size || "a5",
+      vehicle_plate: data.vehicle_plate || "",
+      vehicle_vin: data.vehicle_vin || "",
+      vehicle_model: data.vehicle_model || "",
+      vehicle_type: data.vehicle_type || "",
+      vehicle_year: data.vehicle_year || "",
+      green_card_owner_name: data.green_card_owner_name || "",
+      green_card_owner_national_id: data.green_card_owner_national_id || "",
+      tags: data.tags || [],
+    });
+    setItems(
+      (data.items || [])
+        .filter((it: any) => !it.is_office_card_fee)
+        .map((it: any) => ({
+          _key: Math.random(),
+          service: it.service || "",
+          service_title_snapshot:
+            it.service_title_snapshot || it.service_title || "",
+          quantity: it.quantity || 1,
+          main_price: it.main_price || "",
+          extra_price: it.extra_price || "",
+          notes: it.notes || "",
+        })),
+    );
+  }, []);
+
   useEffect(() => {
     if (!isEdit) return;
     invoicesAPI
       .detail(id)
-      .then(({ data }) => {
-        setForm({
-          customer: data.customer || "",
-          status: data.status || "pending",
-          card_payment_source: data.card_payment_source || "customer",
-          date: data.date ? data.date.slice(0, 10) : "",
-          due_date: data.due_date || "",
-          description: data.description || "",
-          discount: data.discount || 0,
-          tax: data.tax || 0,
-          commission_total: data.commission_total || 0,
-          paper_size: data.paper_size || "a5",
-          vehicle_plate: data.vehicle_plate || "",
-          vehicle_vin: data.vehicle_vin || "",
-          vehicle_model: data.vehicle_model || "",
-          vehicle_type: data.vehicle_type || "",
-          vehicle_year: data.vehicle_year || "",
-          green_card_owner_name: data.green_card_owner_name || "",
-          green_card_owner_national_id: data.green_card_owner_national_id || "",
-          tags: data.tags || [],
-        });
-        setItems(
-          (data.items || [])
-            .filter((it) => !it.is_office_card_fee)
-            .map((it) => ({
-              _key: Math.random(),
-              service: it.service || "",
-              service_title_snapshot:
-                it.service_title_snapshot || it.service_title || "",
-              quantity: it.quantity || 1,
-              main_price: it.main_price || "",
-              extra_price: it.extra_price || "",
-              notes: it.notes || "",
-            })),
-        );
-      })
+      .then(({ data }) => applyInvoiceData(data, false))
       .catch(() => navigate("/invoices"))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, isEdit, applyInvoiceData, navigate]);
+
+  // Clone mode («صدور مشابه»): prefill from the referenced invoice.
+  useEffect(() => {
+    if (isEdit || !cloneId) return;
+    invoicesAPI
+      .detail(cloneId)
+      .then(({ data }) => {
+        applyInvoiceData(data, true);
+        setInlineNotice(
+          `📋 بر اساس فاکتور ${data.invoice_number} بارگذاری شد — بررسی کنید و ثبت بزنید`,
+        );
+        setTimeout(() => setInlineNotice(""), 6000);
+      })
+      .catch(() => setError("بارگذاری فاکتور مرجع ممکن نشد"));
+  }, [cloneId, isEdit, applyInvoiceData]);
+
+  // Service packages (arranged by the manager in Settings).
+  useEffect(() => {
+    servicePackagesAPI
+      .list({ active: 1 })
+      .then(({ data }) =>
+        setPackages((data?.results || data || []) as ServicePackageOption[]),
+      )
+      .catch(() => {});
+  }, []);
+
+  // Plate-first: once a complete plate is typed, offer the latest invoice
+  // issued for it so the operator can reuse its customer/vehicle/rows.
+  useEffect(() => {
+    if (isEdit) return undefined;
+    const plate = (form.vehicle_plate || "").trim();
+    const isComplete =
+      /^\d{2}\s+\S+\s+\d{3}\s*-\s*ایران\s*\d{2}$/.test(plate) ||
+      /^\d{3}-\d{5}$/.test(plate);
+    if (
+      !isComplete ||
+      plate === plateDismissedFor ||
+      plate === appliedPlateRef.current
+    ) {
+      setPlateSuggestion(null);
+      return undefined;
+    }
+    const timer = setTimeout(() => {
+      invoicesAPI
+        .list({ vehicle_plate: plate })
+        .then(({ data }) => {
+          const rows = (data?.results || data || []) as any[];
+          const found =
+            rows.find((r) => (r.vehicle_plate || "").trim() === plate) ||
+            rows[0];
+          setPlateSuggestion(
+            found && String(found.id) !== String(cloneId) ? found : null,
+          );
+        })
+        .catch(() => {});
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [form.vehicle_plate, isEdit, plateDismissedFor, cloneId]);
+
+  const handleUsePlateSuggestion = useCallback(() => {
+    if (!plateSuggestion) return;
+    invoicesAPI
+      .detail(plateSuggestion.id)
+      .then(({ data }) => {
+        applyInvoiceData(data, true);
+        appliedPlateRef.current = (form.vehicle_plate || "").trim();
+        setPlateSuggestion(null);
+        setInlineNotice(
+          `🔁 مشخصات و ردیف‌های فاکتور ${data.invoice_number} بارگذاری شد`,
+        );
+        setTimeout(() => setInlineNotice(""), 6000);
+      })
+      .catch(() => setError("بارگذاری فاکتور قبلی ممکن نشد"));
+  }, [plateSuggestion, applyInvoiceData, form.vehicle_plate]);
+
+  const handleApplyPackage = useCallback(
+    (pkg: ServicePackageOption) => {
+      const rows = pkg.services
+        .map((serviceId) => services.find((s) => s.id === serviceId))
+        .filter((s): s is ServiceOption => Boolean(s && s.is_active))
+        .map((s) => ({
+          _key: Math.random(),
+          service: String(s.id),
+          service_title_snapshot: s.title,
+          quantity: 1,
+          main_price:
+            Number(s.default_main_price) > 0 ? s.default_main_price : "",
+          extra_price: s.default_extra_price || 0,
+          notes: "",
+        }));
+      if (rows.length === 0) {
+        setError("این پکیج خدمت فعالی ندارد");
+        return;
+      }
+      setItems((prev) => [...prev, ...rows]);
+      setInlineNotice(`📦 پکیج «${pkg.name}» اضافه شد (${rows.length} ردیف)`);
+      setTimeout(() => setInlineNotice(""), 4000);
+    },
+    [services],
+  );
+
+  // ── Draft autosave (new invoices only) ──────────────────────────
+  const draftReadyRef = useRef(false);
+  useEffect(() => {
+    if (!isEdit && !cloneId) {
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (
+            draft?.form &&
+            (draft.form.customer ||
+              draft.form.vehicle_plate ||
+              draft.form.vehicle_vin ||
+              draft.form.vehicle_model ||
+              draft.form.description ||
+              draft.form.green_card_owner_name ||
+              Number(draft.form.discount) > 0 ||
+              Number(draft.form.tax) > 0 ||
+              Number(draft.form.commission_total) > 0 ||
+              (draft.items || []).length > 0)
+          ) {
+            setForm(draft.form);
+            setItems(draft.items || []);
+            setDraftRestored(true);
+          }
+        }
+      } catch {
+        /* corrupted draft: ignore */
+      }
+    }
+    draftReadyRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (isEdit || !draftReadyRef.current) return undefined;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(
+          DRAFT_KEY,
+          JSON.stringify({ form, items, savedAt: Date.now() }),
+        );
+      } catch {
+        /* storage full/blocked: autosave is best-effort */
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [form, items, isEdit]);
+
+  const handleDiscardDraft = useCallback(() => {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
+    const defaults = loadInvoiceDefaults();
+    setForm({
+      customer: "",
+      status: defaults.status || "pending",
+      card_payment_source: defaults.card_payment_source || "customer",
+      date: new Date().toISOString().slice(0, 10),
+      due_date: "",
+      description: "",
+      discount: 0,
+      tax: 0,
+      commission_total: 0,
+      paper_size: "a5",
+      vehicle_plate: "",
+      vehicle_vin: "",
+      vehicle_model: "",
+      vehicle_type: "",
+      vehicle_year: "",
+      green_card_owner_name: "",
+      green_card_owner_national_id: "",
+      tags: [],
+    });
+    setItems([]);
+    setDraftRestored(false);
+  }, []);
+
+  // Expand the optional green-card section once it carries values.
+  useEffect(() => {
+    if (form.green_card_owner_name || form.green_card_owner_national_id)
+      setShowGreenCard(true);
+  }, [form.green_card_owner_name, form.green_card_owner_national_id]);
 
   // Calculations
   const subtotal = items.reduce(
@@ -966,6 +1205,20 @@ const InvoiceForm = () => {
         navigate(`/invoices/${id}`);
       } else {
         const { data } = await invoicesAPI.create(payload);
+        // A saved invoice ends the draft; remember the operator's
+        // status/card choices as the next invoice's defaults.
+        try {
+          localStorage.removeItem(DRAFT_KEY);
+          localStorage.setItem(
+            DEFAULTS_KEY,
+            JSON.stringify({
+              status: form.status,
+              card_payment_source: form.card_payment_source,
+            }),
+          );
+        } catch {
+          /* storage blocked: non-fatal */
+        }
         for (const file of invoiceDocuments) {
           const fd = new FormData();
           fd.append("customer", String(form.customer));
@@ -1002,6 +1255,36 @@ const InvoiceForm = () => {
           if (e.ctrlKey && e.key === "Enter") {
             e.preventDefault();
             e.currentTarget.requestSubmit();
+            return;
+          }
+          // Enter moves to the next field instead of submitting, so the
+          // whole form can be filled keyboard-only. Left alone: textareas,
+          // buttons, open combobox dropdowns (Enter picks an option there),
+          // and anything inside a listbox.
+          if (e.key !== "Enter" || e.shiftKey || e.altKey || e.metaKey) return;
+          const target = e.target as HTMLElement;
+          if (
+            target.tagName === "TEXTAREA" ||
+            target.tagName === "BUTTON" ||
+            target.closest('[role="listbox"]') ||
+            target.getAttribute("aria-expanded") === "true" ||
+            (!(target instanceof HTMLInputElement) &&
+              target.tagName !== "SELECT")
+          )
+            return;
+          const input = target as HTMLInputElement;
+          if (input.type === "file" || input.type === "checkbox") return;
+          const focusables = Array.from(
+            e.currentTarget.querySelectorAll<HTMLElement>(
+              'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])',
+            ),
+          ).filter((el) => el.offsetParent !== null);
+          const idx = focusables.indexOf(target);
+          if (idx >= 0 && idx < focusables.length - 1) {
+            e.preventDefault();
+            const next = focusables[idx + 1];
+            next.focus();
+            if (next instanceof HTMLInputElement) next.select?.();
           }
         }}
         className="space-y-5 max-w-5xl mx-auto"
@@ -1055,6 +1338,18 @@ const InvoiceForm = () => {
         {inlineNotice && (
           <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-emerald-400 text-sm flex items-center gap-2">
             {inlineNotice}
+          </div>
+        )}
+        {draftRestored && !isEdit && (
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 text-blue-300 text-sm flex flex-wrap items-center gap-3">
+            <span>💾 پیش‌نویس ناتمام شما بازیابی شد تا از اول شروع نکنید.</span>
+            <button
+              type="button"
+              onClick={handleDiscardDraft}
+              className="px-3 py-1 rounded-lg border border-blue-500/40 text-blue-200 text-xs hover:bg-blue-500/20 transition-all"
+            >
+              شروع تازه (حذف پیش‌نویس)
+            </button>
           </div>
         )}
 
@@ -1171,6 +1466,32 @@ const InvoiceForm = () => {
                   />
                 </Field>
 
+                {plateSuggestion && (
+                  <div className="md:col-span-2 flex flex-wrap items-center gap-3 rounded-xl border border-teal-500/30 bg-teal-500/10 px-4 py-3 text-sm text-teal-200">
+                    <span>
+                      🔁 برای این پلاک، فاکتور {plateSuggestion.invoice_number}{" "}
+                      برای «{plateSuggestion.customer_name}» ثبت شده (
+                      {fmt(plateSuggestion.final_amount)})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleUsePlateSuggestion}
+                      className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-medium transition-all"
+                    >
+                      استفاده از همان مشخصات و ردیف‌ها
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPlateDismissedFor((form.vehicle_plate || "").trim())
+                      }
+                      className="text-teal-300/70 hover:text-teal-200 text-xs"
+                    >
+                      ✕ صرف‌نظر
+                    </button>
+                  </div>
+                )}
+
                 {/* VIN */}
                 <Field label="شماره شاسی (VIN)">
                   <input
@@ -1277,41 +1598,77 @@ const InvoiceForm = () => {
           );
         })()}
 
-        <Section title="صاحب برگ سبز" icon="🪪">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="نام مندرج روی برگ سبز">
-              <input
-                type="text"
-                value={form.green_card_owner_name}
-                onChange={(e) =>
-                  setField(
-                    "green_card_owner_name",
-                    toPersianKeyboard(e.target.value),
-                  )
-                }
-                className={inputCls}
-                placeholder="نام صاحب خودرو"
-                maxLength={255}
-              />
-            </Field>
-            <Field label="کد ملی صاحب خودرو">
-              <input
-                type="text"
-                value={form.green_card_owner_national_id}
-                onChange={(e) =>
-                  setField("green_card_owner_national_id", e.target.value)
-                }
-                className={inputCls}
-                placeholder="کد ملی"
-                dir="ltr"
-                maxLength={20}
-              />
-            </Field>
-          </div>
-        </Section>
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowGreenCard((v) => !v)}
+            className="w-full flex items-center gap-2 px-6 py-4 bg-slate-700/20 hover:bg-slate-700/30 transition-colors text-right"
+            aria-expanded={showGreenCard}
+          >
+            <span className="text-lg">🪪</span>
+            <h3 className="text-white font-semibold text-sm">صاحب برگ سبز</h3>
+            <span className="text-[11px] text-slate-500">(اختیاری)</span>
+            <span className="mr-auto text-slate-400 text-xs">
+              {showGreenCard ? "▾ بستن" : "▸ باز کردن"}
+            </span>
+          </button>
+          {showGreenCard && (
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field label="نام مندرج روی برگ سبز">
+                  <input
+                    type="text"
+                    value={form.green_card_owner_name}
+                    onChange={(e) =>
+                      setField(
+                        "green_card_owner_name",
+                        toPersianKeyboard(e.target.value),
+                      )
+                    }
+                    className={inputCls}
+                    placeholder="نام صاحب خودرو"
+                    maxLength={255}
+                  />
+                </Field>
+                <Field label="کد ملی صاحب خودرو">
+                  <input
+                    type="text"
+                    value={form.green_card_owner_national_id}
+                    onChange={(e) =>
+                      setField("green_card_owner_national_id", e.target.value)
+                    }
+                    className={inputCls}
+                    placeholder="کد ملی"
+                    dir="ltr"
+                    maxLength={20}
+                  />
+                </Field>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Items */}
         <Section title={`ردیف‌های فاکتور (${items.length})`} icon="🧾">
+          {packages.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <span className="text-xs text-slate-400">📦 پکیج‌های آماده:</span>
+              {packages.map((pkg) => (
+                <button
+                  key={pkg.id}
+                  type="button"
+                  onClick={() => handleApplyPackage(pkg)}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-violet-500/10 text-violet-300 border border-violet-500/25 hover:bg-violet-500/20 transition-all"
+                >
+                  📦 {pkg.name}
+                  <span className="opacity-60">
+                    {" "}
+                    ({pkg.services.length} خدمت)
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="space-y-2">
             {items.map((item, idx) => (
               <ItemRow

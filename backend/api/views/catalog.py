@@ -2,7 +2,7 @@
 
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import BasePermission, IsAuthenticated, IsAdminUser
+from rest_framework.permissions import BasePermission, IsAuthenticated, IsAdminUser, SAFE_METHODS
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.db.models import Sum, Count, Q, OuterRef, Subquery, DecimalField, Value, Case, When, F, ExpressionWrapper
@@ -22,14 +22,14 @@ import json, calendar, os, shutil
 from zoneinfo import ZoneInfo
 
 from ..models import (
-    Customer, Service, Invoice, InvoiceEditRequest, InvoicePayment, AuditLog, Document,
+    Customer, Service, ServicePackage, Invoice, InvoiceEditRequest, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
     Cheque, InvoiceSettings, ChatMessage, ChatNotification, ChatPresence,
     WelcomeSettings, UserWelcomeMessage, WelcomeMessageShown, SocialNetwork
 )
 from ..serializers import (
     CustomerListSerializer, CustomerDetailSerializer,
-    ServiceSerializer, InvoiceSerializer, DocumentSerializer,
+    ServiceSerializer, ServicePackageSerializer, InvoiceSerializer, DocumentSerializer,
     BusinessProfileSerializer, ExpenseCategorySerializer,
     ExpenseSerializer, StaffSerializer, VehicleTypeSerializer,
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
@@ -40,7 +40,36 @@ from ..pagination import OptionalPageNumberPagination
 
 
 
-from .common import HasModuleAccess
+from .common import CanManageSettings, HasModuleAccess
+
+
+class ServicePackagePermission(BasePermission):
+    """Reads: operators who can invoice or work with services/settings.
+    Writes: settings managers only — packages are arranged in Settings."""
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.method in SAFE_METHODS:
+            from ..module_access import effective_modules
+
+            return bool(
+                effective_modules(request.user)
+                & {'invoices', 'services', 'settings'}
+            )
+        return CanManageSettings().has_permission(request, view)
+
+
+class ServicePackageViewSet(viewsets.ModelViewSet):
+    permission_classes = [ServicePackagePermission]
+    serializer_class = ServicePackageSerializer
+    pagination_class = OptionalPageNumberPagination
+
+    def get_queryset(self):
+        qs = ServicePackage.objects.prefetch_related('services').all()
+        if self.request.query_params.get('active'):
+            qs = qs.filter(is_active=True)
+        return qs
 
 class ServiceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasModuleAccess]

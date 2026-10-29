@@ -1,5 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import {
+  useParams,
+  useNavigate,
+  Link,
+  useSearchParams,
+} from "react-router-dom";
 import {
   invoicesAPI,
   profileAPI,
@@ -787,6 +792,24 @@ const InvoiceDetail = () => {
 
   const handlePrint = () => window.print();
 
+  // ?print=1 (e.g. from the quick-invoice success screen) prints once the
+  // invoice has loaded.
+  const [searchParams] = useSearchParams();
+  const autoPrintedRef = useRef(false);
+  useEffect(() => {
+    if (
+      !loading &&
+      invoice &&
+      searchParams.get("print") === "1" &&
+      !autoPrintedRef.current
+    ) {
+      autoPrintedRef.current = true;
+      const timer = setTimeout(() => window.print(), 400);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [loading, invoice, searchParams]);
+
   const captureCanvas = async () => {
     const { default: html2canvas } = await import("html2canvas");
     const el = exportRef.current;
@@ -1064,6 +1087,14 @@ const InvoiceDetail = () => {
                     : "درخواست ویرایش از مدیر"}
                 </button>
               ))}
+
+            <Link
+              to={`/invoices/new?clone=${id}`}
+              className="px-3 py-2 rounded-xl bg-teal-600/80 hover:bg-teal-600 text-white text-sm border border-teal-500/50 transition-all flex items-center gap-2"
+              title="صدور فاکتور جدید با همین مشخصات و ردیف‌ها"
+            >
+              📋 صدور مشابه
+            </Link>
 
             <button
               onClick={handlePrint}

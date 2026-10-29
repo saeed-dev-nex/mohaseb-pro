@@ -7,7 +7,7 @@ from decimal import Decimal
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from .models import (
-    Customer, Service, Invoice, InvoiceItem, InvoicePayment, AuditLog, Document,
+    Customer, Service, ServicePackage, Invoice, InvoiceItem, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
     Cheque, InvoiceSettings, ChatMessage, SocialNetwork, UserModuleAccess
 )
@@ -374,6 +374,21 @@ class ServiceSerializer(serializers.ModelSerializer):
             'is_active', 'created_at'
         ]
         read_only_fields = ['created_at']
+
+
+class ServicePackageSerializer(serializers.ModelSerializer):
+    services = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Service.objects.all()
+    )
+    service_titles = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ServicePackage
+        fields = ['id', 'name', 'services', 'service_titles', 'is_active', 'created_at']
+        read_only_fields = ['created_at']
+
+    def get_service_titles(self, obj):
+        return [{'id': s.id, 'title': s.title} for s in obj.services.all()]
 
 
 class InvoiceItemSerializer(serializers.ModelSerializer):

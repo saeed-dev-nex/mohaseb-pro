@@ -724,6 +724,13 @@ const Invoices = () => {
                             ✏️ ویرایش
                           </Link>
                         )}
+                        <Link
+                          to={`/invoices/new?clone=${inv.id}`}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 border border-teal-500/20 transition-all"
+                          title="صدور فاکتور جدید با همین مشخصات و ردیف‌ها"
+                        >
+                          📋 صدور مشابه
+                        </Link>
                         {inv.status === "pending" && (
                           <button
                             onClick={() => handleMarkPaid(inv.id)}
