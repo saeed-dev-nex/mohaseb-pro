@@ -432,6 +432,21 @@ const QuickInvoiceModal = ({
     }
   };
 
+  // Ctrl+Enter submits from anywhere inside the modal.
+  const submitRef = useRef(handleSubmit);
+  submitRef.current = handleSubmit;
+  useEffect(() => {
+    if (!isOpen || result) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === "Enter") {
+        e.preventDefault();
+        void submitRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOpen, result]);
+
   if (!isOpen) return null;
 
   // Success view
