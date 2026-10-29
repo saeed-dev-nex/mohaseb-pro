@@ -17,7 +17,7 @@ import {
   ConfirmDialog,
   formatPrice,
 } from "../components/ui";
-import { invoicesAPI } from "../services/api";
+import { invoicesAPI, invoiceSettingsAPI } from "../services/api";
 import JalaliDatePicker from "../components/JalaliDatePicker";
 
 type FilterUser = {
@@ -96,6 +96,13 @@ const Invoices = () => {
     currentUser?.is_staff || currentUser?.is_superuser,
   );
   const isManager = Boolean(currentUser?.is_staff || currentUser?.is_superuser);
+  const [cloneEnabled, setCloneEnabled] = useState(true);
+  useEffect(() => {
+    invoiceSettingsAPI
+      .get()
+      .then(({ data }) => setCloneEnabled(data.enable_invoice_clone !== false))
+      .catch(() => {});
+  }, []);
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -724,13 +731,15 @@ const Invoices = () => {
                             ✏️ ویرایش
                           </Link>
                         )}
-                        <Link
-                          to={`/invoices/new?clone=${inv.id}`}
-                          className="text-xs px-2.5 py-1 rounded-lg bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 border border-teal-500/20 transition-all"
-                          title="صدور فاکتور جدید با همین مشخصات و ردیف‌ها"
-                        >
-                          📋 صدور مشابه
-                        </Link>
+                        {cloneEnabled && (
+                          <Link
+                            to={`/invoices/new?clone=${inv.id}`}
+                            className="text-xs px-2.5 py-1 rounded-lg bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 border border-teal-500/20 transition-all"
+                            title="صدور فاکتور جدید با همین مشخصات و ردیف‌ها"
+                          >
+                            📋 صدور مشابه
+                          </Link>
+                        )}
                         {inv.status === "pending" && (
                           <button
                             onClick={() => handleMarkPaid(inv.id)}

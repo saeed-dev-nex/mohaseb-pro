@@ -851,6 +851,8 @@ const InvoiceForm = () => {
     show_discount_field: true,
     show_tax_field: true,
   });
+  // null = invoice settings not loaded yet; clone prefill waits for it.
+  const [cloneEnabled, setCloneEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
     const refreshReferences = () => {
@@ -866,8 +868,9 @@ const InvoiceForm = () => {
           show_discount_field: data.show_discount_field !== false,
           show_tax_field: data.show_tax_field !== false,
         });
+        setCloneEnabled(data.enable_invoice_clone !== false);
       })
-      .catch(() => {});
+      .catch(() => setCloneEnabled(true));
     return () =>
       window.removeEventListener("mohaseb:data-changed", refreshReferences);
   }, [queryClient]);
@@ -929,8 +932,9 @@ const InvoiceForm = () => {
   }, [id, isEdit, applyInvoiceData, navigate]);
 
   // Clone mode («صدور مشابه»): prefill from the referenced invoice.
+  // Gated on the enable_invoice_clone setting (Settings → تنظیمات فاکتور).
   useEffect(() => {
-    if (isEdit || !cloneId) return;
+    if (isEdit || !cloneId || cloneEnabled !== true) return;
     invoicesAPI
       .detail(cloneId)
       .then(({ data }) => {
@@ -941,7 +945,7 @@ const InvoiceForm = () => {
         setTimeout(() => setInlineNotice(""), 6000);
       })
       .catch(() => setError("بارگذاری فاکتور مرجع ممکن نشد"));
-  }, [cloneId, isEdit, applyInvoiceData]);
+  }, [cloneId, isEdit, applyInvoiceData, cloneEnabled]);
 
   // Service packages (arranged by the manager in Settings).
   useEffect(() => {

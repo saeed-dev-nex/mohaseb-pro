@@ -340,6 +340,7 @@ type InvoiceFields = {
   show_tax_field: boolean;
   show_seller_signature: boolean;
   show_buyer_signature: boolean;
+  enable_invoice_clone: boolean;
 };
 
 // ─── Main Component ───────────────────────────────────────────
@@ -355,6 +356,7 @@ const InvoiceDetail = () => {
     show_tax_field: true,
     show_seller_signature: true,
     show_buyer_signature: true,
+    enable_invoice_clone: true,
   });
   const [loading, setLoading] = useState(true);
   const [statusChanging, setStatusChanging] = useState(false);
@@ -416,6 +418,7 @@ const InvoiceDetail = () => {
           show_tax_field: data.show_tax_field !== false,
           show_seller_signature: data.show_seller_signature !== false,
           show_buyer_signature: data.show_buyer_signature !== false,
+          enable_invoice_clone: data.enable_invoice_clone !== false,
         }),
       )
       .catch(() => {});
@@ -1088,13 +1091,15 @@ const InvoiceDetail = () => {
                 </button>
               ))}
 
-            <Link
-              to={`/invoices/new?clone=${id}`}
-              className="px-3 py-2 rounded-xl bg-teal-600/80 hover:bg-teal-600 text-white text-sm border border-teal-500/50 transition-all flex items-center gap-2"
-              title="صدور فاکتور جدید با همین مشخصات و ردیف‌ها"
-            >
-              📋 صدور مشابه
-            </Link>
+            {invoiceFields.enable_invoice_clone && (
+              <Link
+                to={`/invoices/new?clone=${id}`}
+                className="px-3 py-2 rounded-xl bg-teal-600/80 hover:bg-teal-600 text-white text-sm border border-teal-500/50 transition-all flex items-center gap-2"
+                title="صدور فاکتور جدید با همین مشخصات و ردیف‌ها"
+              >
+                📋 صدور مشابه
+              </Link>
+            )}
 
             <button
               onClick={handlePrint}

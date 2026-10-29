@@ -216,7 +216,7 @@ class InvoiceSettingsSerializer(serializers.ModelSerializer):
         model = InvoiceSettings
         fields = [
             'office_card_fee_threshold', 'show_discount_field', 'show_tax_field',
-            'show_seller_signature', 'show_buyer_signature',
+            'show_seller_signature', 'show_buyer_signature', 'enable_invoice_clone',
         ]
 
 
