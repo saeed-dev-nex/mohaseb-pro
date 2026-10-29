@@ -5,6 +5,7 @@ import axios from "axios";
 import { setTokens, setCurrentUser } from "../features/authSlice";
 import api, { API_BASE_URL } from "../services/api";
 import { queryClient } from "../lib/queryClient";
+import PasswordInput from "../components/PasswordInput";
 
 const Login = () => {
   const [username, setUsername] = useState("");
@@ -102,8 +103,7 @@ const Login = () => {
             <label className="block text-sm font-medium text-blue-100 mb-2">
               رمز عبور
             </label>
-            <input
-              type="password"
+            <PasswordInput
               value={password}
               dir="ltr"
               onChange={(e) => setPassword(e.target.value)}

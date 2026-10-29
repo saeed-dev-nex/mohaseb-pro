@@ -161,6 +161,21 @@ const Customers = () => {
     return () => window.removeEventListener("mohaseb:data-changed", refresh);
   }, [queryClient]);
 
+  // Keyboard shortcut (Settings -> keyboard shortcuts) lands here with ?new=1.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new")) {
+      openAdd();
+      params.delete("new");
+      const qs = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + (qs ? `?${qs}` : ""),
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const openAdd = () => {
     setEditTarget(null);
     setModalOpen(true);

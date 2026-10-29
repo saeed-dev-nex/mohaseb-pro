@@ -240,6 +240,22 @@ const Services = () => {
   const updateService = useUpdateService();
   const deleteService = useDeleteService();
   const [modal, setModal] = useState<ServiceRow | "add" | null>(null); // null | 'add' | {service}
+
+  // Keyboard shortcut (Settings -> keyboard shortcuts) lands here with ?new=1.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new")) {
+      setModal("add");
+      params.delete("new");
+      const qs = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + (qs ? `?${qs}` : ""),
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ServiceRow | null>(null);
   const [deleting, setDeleting] = useState(false);

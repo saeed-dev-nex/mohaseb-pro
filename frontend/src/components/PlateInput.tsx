@@ -127,6 +127,9 @@ const PlateInput = ({ value, onChange }: PlateInputProps) => {
   // the refs can be shared between both layouts.
   const num1Ref = useRef<HTMLInputElement>(null);
   const letterRef = useRef<HTMLSelectElement>(null);
+  // True while the open letter dropdown is being driven by the mouse, so a
+  // committed mouse pick advances but keyboard browsing does not.
+  const letterMouseRef = useRef(false);
   const num2Ref = useRef<HTMLInputElement>(null);
   const regionRef = useRef<HTMLInputElement>(null);
 
@@ -198,13 +201,32 @@ const PlateInput = ({ value, onChange }: PlateInputProps) => {
             placeholder="12"
             className={`${inputCls} w-10`}
           />
-          {/* letter */}
+          {/* letter — advance to num2 only when the choice is COMMITTED:
+              a mouse pick, or Enter. Arrow-key browsing in a focused select
+              fires change on every step, and advancing on the first step
+              made it impossible to browse to the intended letter. */}
           <select
             ref={letterRef}
             value={parts.letter}
+            onPointerDown={() => {
+              letterMouseRef.current = true;
+            }}
+            onBlur={() => {
+              letterMouseRef.current = false;
+            }}
             onChange={(e) => {
               update("letter", e.target.value);
-              focusField(num2Ref);
+              if (letterMouseRef.current) {
+                letterMouseRef.current = false;
+                focusField(num2Ref);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.stopPropagation();
+                focusField(num2Ref);
+              }
             }}
             className={`${inputCls} w-14`}
             dir="rtl"

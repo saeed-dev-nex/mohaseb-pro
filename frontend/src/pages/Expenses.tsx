@@ -192,6 +192,22 @@ const Expenses = () => {
   });
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<ExpenseRow | "add" | null>(null); // null | 'add' | {expense}
+
+  // Keyboard shortcut (Settings -> keyboard shortcuts) lands here with ?new=1.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new")) {
+      setModal("add");
+      params.delete("new");
+      const qs = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + (qs ? `?${qs}` : ""),
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ExpenseRow | null>(null);
 

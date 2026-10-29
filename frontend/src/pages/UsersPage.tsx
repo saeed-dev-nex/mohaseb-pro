@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { usersAPI } from "../services/api";
 import { ALL_MODULES, MODULE_LABELS, ceilingFor } from "../utils/modules";
+import PasswordInput from "../components/PasswordInput";
 import type { ModuleName } from "../utils/modules";
 
 type RoleInfo = {
@@ -518,8 +519,7 @@ export default function UsersPage() {
                     </span>
                   )}
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={form.password}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, password: e.target.value }))

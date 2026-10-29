@@ -11,6 +11,17 @@ import {
   servicesAPI,
   servicePackagesAPI,
 } from "../services/api";
+import PasswordInput from "../components/PasswordInput";
+import { hideWaiting, showWaiting } from "../lib/waiting";
+import {
+  SHORTCUT_ACTIONS,
+  comboFromEvent,
+  findConflict,
+  loadShortcuts,
+  resetShortcuts,
+  saveShortcuts,
+} from "../lib/shortcuts";
+import type { ShortcutMap } from "../lib/shortcuts";
 
 const inp =
   "w-full px-3 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all";
@@ -331,6 +342,115 @@ const ServicePackagesSection = () => {
   );
 };
 
+// ─── Keyboard shortcuts editor ─────────────────────────────────────
+// Per-user shortcuts (localStorage — see lib/shortcuts). Click «تغییر»
+// and press the desired combo; Esc cancels. A combo must include
+// Ctrl/Alt/Meta so plain typing is never hijacked; assigning a combo
+// that another action already uses is rejected with a message.
+const ShortcutsSection: React.FC = () => {
+  const [map, setMap] = useState<ShortcutMap>(() => loadShortcuts());
+  const [capturing, setCapturing] = useState<string | null>(null);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    if (!capturing) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        setCapturing(null);
+        return;
+      }
+      const combo = comboFromEvent(e);
+      if (!combo) return; // modifier-only so far — keep waiting
+      const conflict = findConflict(map, combo, capturing);
+      if (conflict) {
+        setMsg(`⚠️ این میانبر قبلاً برای «${conflict.label}» ثبت شده است`);
+        return;
+      }
+      const next = { ...map, [capturing]: combo };
+      setMap(next);
+      saveShortcuts(next);
+      setCapturing(null);
+      setMsg("✅ میانبر ذخیره شد و همین حالا فعال است");
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [capturing, map]);
+
+  const clearOne = (id: string) => {
+    const next = { ...map, [id]: "" };
+    setMap(next);
+    saveShortcuts(next);
+    setMsg("میانبر حذف شد");
+  };
+
+  return (
+    <Section title="میانبرهای صفحه‌کلید" icon="⌨️">
+      <div className="space-y-3">
+        <p className="text-xs leading-relaxed text-slate-400">
+          برای تغییر، روی «تغییر» بزنید و ترکیب کلید دلخواه را فشار دهید (Esc =
+          لغو). میانبر باید دست‌کم یکی از کلیدهای Ctrl یا Alt را داشته باشد تا
+          با تایپ عادی تداخل نکند. میانبرها برای کاربر فعلی روی همین سیستم و
+          مرورگر ذخیره می‌شوند و بلافاصله فعال‌اند.
+        </p>
+        {SHORTCUT_ACTIONS.map((a) => (
+          <div
+            key={a.id}
+            className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3"
+          >
+            <span className="flex-1 text-sm text-slate-200">{a.label}</span>
+            {capturing === a.id ? (
+              <span className="animate-pulse text-xs text-amber-300">
+                ⌨️ کلیدها را فشار دهید… (Esc = لغو)
+              </span>
+            ) : (
+              <kbd
+                className="rounded-lg border border-slate-600 bg-slate-900 px-2.5 py-1 text-xs text-slate-200"
+                dir="ltr"
+              >
+                {map[a.id] || "تعریف نشده"}
+              </kbd>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setMsg("");
+                setCapturing(a.id);
+              }}
+              className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-xs text-blue-300 transition-all hover:bg-blue-500/20"
+            >
+              ✏️ تغییر
+            </button>
+            {map[a.id] && capturing !== a.id && (
+              <button
+                type="button"
+                onClick={() => clearOne(a.id)}
+                className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-300 transition-all hover:bg-red-500/20"
+              >
+                🗑 حذف
+              </button>
+            )}
+          </div>
+        ))}
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => {
+              setMap(resetShortcuts());
+              setMsg("میانبرها به پیش‌فرض برگشتند");
+            }}
+            className="rounded-lg border border-slate-600 bg-slate-700/40 px-3 py-1.5 text-xs text-slate-200 transition-all hover:bg-slate-700/70"
+          >
+            ↩️ بازنشانی همه به پیش‌فرض
+          </button>
+          {msg && <span className="text-xs text-slate-300">{msg}</span>}
+        </div>
+      </div>
+    </Section>
+  );
+};
+
 const Settings = () => {
   const isSuperuser = useSelector(
     (state: any) => state.auth.currentUser?.is_superuser,
@@ -396,6 +516,12 @@ const Settings = () => {
     { id: "brand", label: "برند و تماس", icon: "🎨", visible: true },
     { id: "invoice", label: "تنظیمات فاکتور", icon: "🧾", visible: isManager },
     { id: "packages", label: "پکیج‌های خدمات", icon: "📦", visible: true },
+    {
+      id: "shortcuts",
+      label: "میانبرهای صفحه‌کلید",
+      icon: "⌨️",
+      visible: true,
+    },
     {
       id: "welcome",
       label: "خوش‌آمدگویی روزانه",
@@ -712,6 +838,7 @@ const Settings = () => {
   const handleRunBackup = async (saveToPath: boolean) => {
     setBackupRunning(true);
     setBackupMsg("");
+    showWaiting("در حال تهیهٔ نسخهٔ پشتیبان…");
     try {
       if (saveToPath && backupCfg.backup_path) {
         // Save to disk
@@ -798,6 +925,7 @@ const Settings = () => {
       setTimeout(() => setBackupMsg(""), 4000);
     } finally {
       setBackupRunning(false);
+      hideWaiting();
     }
   };
 
@@ -837,6 +965,7 @@ const Settings = () => {
 
   const handleUploadLatest = async () => {
     setCloudMsg("در حال آپلود آخرین بکاپ…");
+    showWaiting("در حال آپلود بکاپ به فضای ابری…");
     try {
       const { data } = await backupConfigAPI.uploadLatest();
       if (data.uploaded) {
@@ -846,12 +975,15 @@ const Settings = () => {
       }
     } catch (e) {
       setCloudMsg(`❌ ${e.response?.data?.detail || "آپلود ابری ناموفق بود"}`);
+    } finally {
+      hideWaiting();
     }
   };
 
   const handleCloudRestoreValidate = async () => {
     setCloudMsg("");
     setCloudRestoreCounts(null);
+    showWaiting("در حال بررسی فایل پشتیبان ابری…");
     try {
       const { data } = await backupConfigAPI.restoreCloud({
         key: cloudRestoreKey,
@@ -865,10 +997,13 @@ const Settings = () => {
       setCloudMsg(
         `❌ ${e.response?.data?.detail || "بررسی فایل ابری ناموفق بود"}`,
       );
+    } finally {
+      hideWaiting();
     }
   };
 
   const handleCloudRestoreConfirm = async () => {
+    showWaiting("در حال بازیابی از بکاپ ابری…");
     try {
       const { data } = await backupConfigAPI.restoreCloud({
         key: cloudRestoreKey,
@@ -884,6 +1019,8 @@ const Settings = () => {
       setCloudMsg(
         `❌ ${e.response?.data?.detail || "بازیابی از بکاپ ابری ناموفق بود"}`,
       );
+    } finally {
+      hideWaiting();
     }
   };
 
@@ -893,6 +1030,7 @@ const Settings = () => {
     setRestoreBackup(null);
     setRestoreCounts(null);
     setRestorePhrase("");
+    showWaiting("در حال بررسی فایل پشتیبان…");
     try {
       const rawBackup = await file.text();
       const { data } = await backupAPI.restore({
@@ -907,12 +1045,15 @@ const Settings = () => {
       setBackupMsg(
         `❌ ${error.response?.data?.detail || "فایل انتخاب‌شده معتبر نیست."}`,
       );
+    } finally {
+      hideWaiting();
     }
   };
 
   const handleRestore = async () => {
     if (!restoreBackup || !isRestoreConfirmed) return;
     setRestoreBusy(true);
+    showWaiting("در حال بازیابی اطلاعات…");
     try {
       await backupAPI.restore({
         backup_json: restoreBackup,
@@ -927,6 +1068,7 @@ const Settings = () => {
       );
     } finally {
       setRestoreBusy(false);
+      hideWaiting();
     }
   };
 
@@ -1403,6 +1545,8 @@ const Settings = () => {
 
           {activeTab === "packages" && <ServicePackagesSection />}
 
+          {activeTab === "shortcuts" && <ShortcutsSection />}
+
           {activeTab === "welcome" && isManager && (
             <Section title="پیام خوش‌آمدگویی روزانه" icon="🎉">
               <div className="space-y-5">
@@ -1829,8 +1973,7 @@ const Settings = () => {
 
                 {/* Optional backup encryption */}
                 <F label="🔐 گذرواژهٔ رمزنگاری بکاپ (اختیاری)">
-                  <input
-                    type="password"
+                  <PasswordInput
                     className={inp}
                     value={backupPassphrase}
                     onChange={(e) => setBackupPassphrase(e.target.value)}
@@ -1951,8 +2094,7 @@ const Settings = () => {
                           </F>
                         </div>
                         <F label="کلید محرمانه (فقط برای تغییر وارد کنید)">
-                          <input
-                            type="password"
+                          <PasswordInput
                             className={inp}
                             value={cloudSecret}
                             onChange={(e) => setCloudSecret(e.target.value)}
@@ -1962,8 +2104,7 @@ const Settings = () => {
                           />
                         </F>
                         <F label="🔐 گذرواژهٔ رمزنگاری کپی ابری">
-                          <input
-                            type="password"
+                          <PasswordInput
                             className={inp}
                             value={cloudPassphrase}
                             onChange={(e) => setCloudPassphrase(e.target.value)}
@@ -2087,8 +2228,7 @@ const Settings = () => {
                                 >
                                   {cloudRestoreKey}
                                 </p>
-                                <input
-                                  type="password"
+                                <PasswordInput
                                   className={inp}
                                   value={cloudRestorePassphrase}
                                   onChange={(e) =>
@@ -2169,8 +2309,7 @@ const Settings = () => {
                       فایل‌های فیزیکی مدارک مشتریان باید در مسیر ذخیره‌سازی
                       موجود باشند.
                     </p>
-                    <input
-                      type="password"
+                    <PasswordInput
                       className={inp}
                       value={restorePassphrase}
                       onChange={(e) => setRestorePassphrase(e.target.value)}

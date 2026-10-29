@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { invoicesAPI } from "../services/api";
+import { hideWaiting, showWaiting } from "../lib/waiting";
 import JalaliDatePicker from "../components/JalaliDatePicker";
 
 const fmt = (n: number | string | null | undefined) =>
@@ -137,6 +138,7 @@ const Reports = () => {
 
   const downloadExcel = async () => {
     setExporting(true);
+    showWaiting("در حال آماده‌سازی گزارش Excel…");
     try {
       const { data } = await invoicesAPI.exportExcel({
         date_from: dateFrom,
@@ -154,6 +156,7 @@ const Reports = () => {
       alert("خطا در دریافت فایل اکسل");
     } finally {
       setExporting(false);
+      hideWaiting();
     }
   };
 
@@ -183,6 +186,7 @@ const Reports = () => {
           </button>
           <button
             onClick={async () => {
+              showWaiting("در حال آماده‌سازی خروجی CSV…");
               try {
                 const { data } = await invoicesAPI.exportCsv({
                   date_from: dateFrom,
@@ -198,6 +202,8 @@ const Reports = () => {
                 window.setTimeout(() => URL.revokeObjectURL(url), 1000);
               } catch {
                 alert("خطا در دانلود");
+              } finally {
+                hideWaiting();
               }
             }}
             className="px-4 py-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/30 hover:bg-emerald-600/30 text-emerald-400 text-sm transition-all flex items-center gap-2"
