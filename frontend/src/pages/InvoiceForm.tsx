@@ -1375,14 +1375,21 @@ const InvoiceForm = () => {
                 required
                 clearable={false}
                 creatable
+                createFirst
                 onCreateOption={handleCreateCustomer}
                 creating={creatingCustomer}
-                createLabel={(name) => (
-                  <>
-                    <span className="text-slate-400">افزودن مشتری جدید: </span>
-                    <span className="font-medium">«{name}»</span>
-                  </>
-                )}
+                createLabel={(name) =>
+                  name ? (
+                    <>
+                      <span className="text-slate-400">
+                        افزودن مشتری جدید:{" "}
+                      </span>
+                      <span className="font-medium">«{name}»</span>
+                    </>
+                  ) : (
+                    <span className="font-medium">افزودن مشتری جدید</span>
+                  )
+                }
               />
             </Field>
             <Field label="وضعیت فاکتور">

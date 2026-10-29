@@ -222,7 +222,15 @@ const StatusBadge = ({ status }: { status: string }) => {
 
 // ─── Print CSS builder ─────────────────────────────────────────
 const buildPrintCSS = (size: string) => {
-  const pageSize = size === "a4" ? "A4" : size === "a6" ? "A6" : "A5";
+  // Chromium does not know the "A6" keyword in @page size (it silently
+  // falls back to Letter), so A6 is given as explicit dimensions.
+  const pageSize = size === "a4" ? "A4" : size === "a6" ? "105mm 148mm" : "A5";
+  // The print area is laid out with rem-based (screen) sizes, so on small
+  // paper it overflows to a second page. Scale it down with zoom so a
+  // normal invoice fits exactly one page: A5 measured to need <= 0.78
+  // for a tall invoice (6 items + vehicle + both signatures + footer);
+  // 0.72 leaves headroom for slightly longer ones.
+  const zoom = size === "a6" ? 0.5 : size === "a5" ? 0.72 : 1;
   return `
     @media print {
       @page { size: ${pageSize}; margin: 8mm; }
@@ -241,6 +249,7 @@ const buildPrintCSS = (size: string) => {
         margin: 0;
         background: white; color: #111;
         padding: 0;
+        ${zoom !== 1 ? `zoom: ${zoom};` : ""}
         font-family: Vazirmatn, sans-serif;
         font-size: ${size === "a6" ? "9px" : size === "a5" ? "10px" : "12px"};
         direction: rtl;
