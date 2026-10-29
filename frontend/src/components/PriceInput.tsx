@@ -90,21 +90,32 @@ const PriceInput = ({
         />
       </div>
 
-      {/* Persian text preview of full amount, digits and words */}
-      {realAmount > 0 && (
-        <p
-          className="text-[10px] text-emerald-400/70 pr-1 flex items-center justify-end gap-1 flex-wrap"
-          dir="rtl"
-        >
-          <span>=</span>
-          <span className="font-semibold text-emerald-400">
-            {fmt(realAmount)} تومان
-          </span>
-          <span className="text-emerald-400/60">
-            ({numberToWords(realAmount)})
-          </span>
-        </p>
-      )}
+      {/* Persian text preview of full amount, digits and words. The slot
+          always exists with a fixed height and never wraps, so typing an
+          amount never changes the component's height or shifts the form
+          layout; long words are clipped with an ellipsis and the full
+          text stays available via the title tooltip. */}
+      <p
+        className="h-4 overflow-hidden whitespace-nowrap text-ellipsis text-[10px] leading-4 text-emerald-400/70 pr-1 text-right"
+        dir="rtl"
+        title={
+          realAmount > 0
+            ? `= ${fmt(realAmount)} تومان (${numberToWords(realAmount)})`
+            : undefined
+        }
+      >
+        {realAmount > 0 && (
+          <>
+            ={" "}
+            <span className="font-semibold text-emerald-400">
+              {fmt(realAmount)} تومان
+            </span>{" "}
+            <span className="text-emerald-400/60">
+              ({numberToWords(realAmount)})
+            </span>
+          </>
+        )}
+      </p>
     </div>
   );
 };
