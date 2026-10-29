@@ -3,6 +3,7 @@ import { expensesAPI, expenseCategoriesAPI } from "../services/api";
 import PriceInput from "../components/PriceInput";
 import JalaliDatePicker from "../components/JalaliDatePicker";
 import { toJalali, toPersianKeyboard } from "../utils/persian";
+import { Button, EmptyState, Spinner, StatCard } from "../components/ui";
 
 const fmt = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0);
@@ -272,37 +273,35 @@ const Expenses = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-white">💰 مدیریت هزینه‌ها</h2>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <p className="text-slate-400 text-sm mt-1">
             ثبت و پیگیری هزینه‌های کسب‌وکار
           </p>
         </div>
-        <button
-          onClick={() => setModal("add")}
-          className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-all"
-        >
+        <Button variant="primary" onClick={() => setModal("add")}>
           + ثبت هزینه
-        </button>
+        </Button>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-red-500/10 to-red-600/5 border border-red-500/20 rounded-2xl p-5">
-          <p className="text-red-400/80 text-xs mb-1">کل هزینه‌ها</p>
-          <p className="text-red-400 text-2xl font-bold">
-            {fmt(summary.total)}{" "}
-            <span className="text-sm font-normal">تومان</span>
-          </p>
-        </div>
-        <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 rounded-2xl p-5">
-          <p className="text-blue-400/80 text-xs mb-1">تعداد هزینه‌ها</p>
-          <p className="text-blue-400 text-2xl font-bold">{expenses.length}</p>
-        </div>
-        <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-2xl p-5">
-          <p className="text-purple-400/80 text-xs mb-1">دسته‌بندی‌ها</p>
-          <p className="text-purple-400 text-2xl font-bold">
-            {categories.length}
-          </p>
-        </div>
+        <StatCard
+          label="کل هزینه‌ها"
+          value={fmt(summary.total) + " تومان"}
+          icon="💸"
+          color="red"
+        />
+        <StatCard
+          label="تعداد هزینه‌ها"
+          value={expenses.length}
+          icon="🧾"
+          color="blue"
+        />
+        <StatCard
+          label="دسته‌بندی‌ها"
+          value={categories.length}
+          icon="🗂️"
+          color="purple"
+        />
       </div>
 
       {/* Category Breakdown */}
@@ -335,30 +334,26 @@ const Expenses = () => {
 
       {/* Expenses List */}
       {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        </div>
+        <Spinner size="lg" />
       ) : expenses.length === 0 ? (
-        <div className="text-center py-16 bg-slate-800/50 border border-slate-700/50 rounded-2xl">
-          <p className="text-4xl mb-3">💸</p>
-          <p className="text-slate-300 font-medium text-lg">
-            هنوز هزینه‌ای ثبت نشده
-          </p>
-          <p className="text-slate-500 text-sm mt-1">
-            با دکمه «ثبت هزینه» اولین هزینه خود را ثبت کنید
-          </p>
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl">
+          <EmptyState
+            icon="💸"
+            title="هنوز هزینه‌ای ثبت نشده"
+            description="با دکمه «ثبت هزینه» اولین هزینه خود را ثبت کنید"
+          />
         </div>
       ) : (
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-700/50 text-slate-400 text-xs">
-                  <th className="text-right py-3 px-4 font-medium">عنوان</th>
-                  <th className="text-right py-3 px-4 font-medium">دسته</th>
-                  <th className="text-right py-3 px-4 font-medium">مبلغ</th>
-                  <th className="text-right py-3 px-4 font-medium">تاریخ</th>
-                  <th className="text-right py-3 px-4 font-medium">عملیات</th>
+                <tr className="bg-slate-700/30 text-slate-400 border-b border-slate-700/50">
+                  <th className="text-right py-3.5 px-4 font-medium">عنوان</th>
+                  <th className="text-right py-3.5 px-4 font-medium">دسته</th>
+                  <th className="text-right py-3.5 px-4 font-medium">مبلغ</th>
+                  <th className="text-right py-3.5 px-4 font-medium">تاریخ</th>
+                  <th className="text-right py-3.5 px-4 font-medium">عملیات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/30">
@@ -367,7 +362,7 @@ const Expenses = () => {
                     key={exp.id}
                     className="hover:bg-slate-700/20 transition-colors group"
                   >
-                    <td className="py-3 px-4">
+                    <td className="py-3.5 px-4">
                       <p className="text-white font-medium">{exp.title}</p>
                       {exp.description && (
                         <p className="text-slate-500 text-xs mt-0.5 truncate max-w-[200px]">
@@ -375,18 +370,18 @@ const Expenses = () => {
                         </p>
                       )}
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3.5 px-4">
                       <span className="text-sm">
                         {exp.category_icon} {exp.category_name || "بدون دسته"}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-red-400 font-semibold">
+                    <td className="py-3.5 px-4 text-red-400 font-semibold">
                       {fmt(exp.amount)} تومان
                     </td>
-                    <td className="py-3 px-4 text-slate-400">
+                    <td className="py-3.5 px-4 text-slate-400">
                       {toJalali(exp.date)}
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3.5 px-4">
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => setModal(exp)}

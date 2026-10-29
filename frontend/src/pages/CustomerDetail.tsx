@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { Spinner } from "../components/ui";
 import {
   useParams,
   useNavigate,
@@ -424,7 +425,7 @@ const CustomerDetail = () => {
   if (loading)
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <Spinner size="lg" />
       </div>
     );
   if (!customer) return null;

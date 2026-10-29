@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServices, serviceKeys } from "../hooks/useServices";
+import { Spinner } from "../components/ui";
 import {
   useCustomers,
   useCreateCustomer,
@@ -1246,7 +1247,7 @@ const InvoiceForm = () => {
   if (loading)
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+        <Spinner size="lg" />
       </div>
     );
 

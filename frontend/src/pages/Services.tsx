@@ -10,7 +10,13 @@ import {
 } from "../hooks/useServices";
 import PriceInput from "../components/PriceInput";
 import { toPersianKeyboard } from "../utils/persian";
-import { Button, ConfirmDialog, ErrorNotice, Modal } from "../components/ui";
+import {
+  Button,
+  ConfirmDialog,
+  ErrorNotice,
+  Modal,
+  Spinner,
+} from "../components/ui";
 import { formatApiError } from "../utils/apiError";
 
 const fmt = (n: number | string | null | undefined) =>
@@ -75,7 +81,7 @@ const F = ({
   );
 };
 const inp =
-  "w-full px-3 py-2 bg-slate-700/60 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all";
+  "w-full px-3 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all";
 
 // ── Service Modal ──
 type ServiceModalProps = {
@@ -312,17 +318,15 @@ const Services = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">خدمات</h2>
-          <p className="text-slate-400 text-sm mt-0.5">
-            مدیریت خدمات و تعرفه‌ها
-          </p>
+          <h2 className="text-2xl font-bold text-white">⚙️ خدمات</h2>
+          <p className="text-slate-400 text-sm mt-1">مدیریت خدمات و تعرفه‌ها</p>
         </div>
         <button
           onClick={() => {
             setFormError("");
             setModal("add");
           }}
-          className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-all"
+          className="inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/25 px-5 py-2.5 text-sm"
         >
           + افزودن خدمت
         </button>
@@ -341,9 +345,7 @@ const Services = () => {
 
       {/* Services Grid */}
       {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        </div>
+        <Spinner size="lg" />
       ) : loadError && data === undefined ? null : list.length === 0 ? (
         <div className="text-center py-16 bg-slate-800/50 border border-slate-700/50 rounded-2xl">
           <p className="text-4xl mb-3">⚙️</p>

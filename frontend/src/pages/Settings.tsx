@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useSelector } from "react-redux";
+import { Spinner } from "../components/ui";
 import {
   profileAPI,
   socialNetworksAPI,
@@ -1090,7 +1091,7 @@ const Settings = () => {
   if (loading)
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <Spinner size="lg" />
       </div>
     );
 
@@ -1098,7 +1099,7 @@ const Settings = () => {
     <div className="space-y-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">⚙️ تنظیمات</h2>
+          <h2 className="text-2xl font-bold text-white">🎨 تنظیمات</h2>
           <p className="text-slate-400 text-sm mt-0.5">
             شخصی‌سازی برند، لوگو و اطلاعات فروشگاه
           </p>

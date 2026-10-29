@@ -16,7 +16,13 @@ import {
 import { useSelector } from "react-redux";
 import { toJalali, numberToWords } from "../utils/persian";
 import PriceInput from "../components/PriceInput";
-import { Button, ErrorNotice, InputField, Modal } from "../components/ui";
+import {
+  Button,
+  ErrorNotice,
+  InputField,
+  Modal,
+  Spinner,
+} from "../components/ui";
 
 // ─── helpers ──────────────────────────────────────────────────
 const fmt = (n: number | string | null | undefined) =>
@@ -887,7 +893,7 @@ const InvoiceDetail = () => {
   if (loading)
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+        <Spinner size="lg" />
       </div>
     );
   if (!invoice) return null;
