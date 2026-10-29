@@ -5,10 +5,19 @@ import {
   servicePackagesAPI,
   customersAPI,
   invoiceSettingsAPI,
+  vehicleTypesAPI,
 } from "../services/api";
 import PriceInput from "./PriceInput";
 import PlateInput from "./PlateInput";
-import { toPersianKeyboard } from "../utils/persian";
+import SearchableSelect from "./SearchableSelect";
+import {
+  toPersianKeyboard,
+  jalaliYearRange,
+  currentJalaliYear,
+} from "../utils/persian";
+import { MOTO_BRANDS } from "../lib/vehicle";
+
+const YEAR_OPTIONS = jalaliYearRange(1360, currentJalaliYear());
 
 const fmt = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0);
@@ -306,6 +315,11 @@ const QuickInvoiceModal = ({
   const [vehicleModel, setVehicleModel] = useState("");
   const [vehicleType, setVehicleType] = useState("");
   const [vehicleYear, setVehicleYear] = useState("");
+  const [vehicleTypes, setVehicleTypes] = useState<
+    { id: number; name: string }[]
+  >([]);
+  const [creatingVehicleType, setCreatingVehicleType] = useState(false);
+  const [commissionEntered, setCommissionEntered] = useState(false);
 
   const resetForm = useCallback(() => {
     setCustomerName("");
@@ -323,6 +337,7 @@ const QuickInvoiceModal = ({
       },
     ]);
     setCommissionTotal(0);
+    setCommissionEntered(false);
     setResult(null);
     setError("");
     setStatus("pending");
@@ -350,6 +365,10 @@ const QuickInvoiceModal = ({
     servicePackagesAPI
       .list({ active: 1 })
       .then(({ data }) => setPackages(data?.results || data || []))
+      .catch(() => {});
+    vehicleTypesAPI
+      .list()
+      .then(({ data }) => setVehicleTypes(data))
       .catch(() => {});
     // Reset form on open
     resetForm();
@@ -411,6 +430,31 @@ const QuickInvoiceModal = ({
   const removeRow = (idx: number) =>
     setItems((prev) => prev.filter((_, i) => i !== idx));
 
+  // Vehicle section mirrors the full invoice form: same fields, same
+  // car/moto switch, same auto-saved vehicle-type list.
+  const isMotoPlate = (p: string) => p === "-" || /^\d+-\d+$/.test(p);
+  const plateTrimmed = (vehiclePlate || "").trim();
+  const isMoto = isMotoPlate(plateTrimmed);
+  const handlePlateChange = (v: string) => {
+    const typeChanged =
+      isMotoPlate(plateTrimmed) !== isMotoPlate((v || "").trim());
+    setVehiclePlate(v);
+    if (typeChanged) setVehicleType("");
+  };
+  const handleCreateVehicleType = useCallback(async (name: string) => {
+    setCreatingVehicleType(true);
+    try {
+      const { data } = await vehicleTypesAPI.create({ name });
+      setVehicleTypes((prev) => [...prev, data]);
+      return { value: data.name, label: data.name };
+    } catch (err: any) {
+      setError(err?.response?.data?.name?.[0] || "خطا در ثبت نوع خودرو");
+      return null;
+    } finally {
+      setCreatingVehicleType(false);
+    }
+  }, []);
+
   const subtotal = items.reduce(
     (s, it) =>
       s +
@@ -439,6 +483,10 @@ const QuickInvoiceModal = ({
       setError("حداقل یک ردیف خدمت لازم است");
       return;
     }
+    if (step === 3 && !commissionEntered) {
+      setError("وارد کردن کارمزد الزامی است");
+      return;
+    }
     setError("");
     setStep((s) => Math.min(4, s + 1));
   };
@@ -457,6 +505,11 @@ const QuickInvoiceModal = ({
     if (items.every((it) => !it.service_title_snapshot && !it.main_price)) {
       setError("حداقل یک ردیف خدمت لازم است");
       setStep(2);
+      return;
+    }
+    if (!commissionEntered) {
+      setError("وارد کردن کارمزد الزامی است");
+      setStep(3);
       return;
     }
     setError("");
@@ -520,10 +573,7 @@ const QuickInvoiceModal = ({
   // Success view
   if (result) {
     return (
-      <div
-        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
-        onClick={onClose}
-      >
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
         <div
           className="bg-slate-800 border border-slate-700/60 rounded-2xl shadow-2xl w-full max-w-md"
           onClick={(e) => e.stopPropagation()}
@@ -593,10 +643,7 @@ const QuickInvoiceModal = ({
   }
 
   return (
-    <div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
       <div
         className="bg-slate-800 border border-slate-700/60 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
@@ -690,55 +737,23 @@ const QuickInvoiceModal = ({
                 </div>
               </div>
 
-              {/* Vehicle */}
+              {/* Vehicle — same fields & behavior as the full invoice form */}
               <div className="bg-slate-700/20 border border-slate-700/50 rounded-xl p-3 space-y-3">
                 <label className="text-xs text-slate-400 font-medium block">
-                  🚗 اطلاعات خودرو (اختیاری)
+                  {isMoto
+                    ? "🏍️ اطلاعات موتورسیکلت (اختیاری)"
+                    : "🚗 اطلاعات خودرو (اختیاری)"}
                 </label>
                 <div>
                   <label className="text-[10px] text-slate-500 mb-1 block">
                     شماره پلاک
                   </label>
-                  <PlateInput value={vehiclePlate} onChange={setVehiclePlate} />
+                  <PlateInput
+                    value={vehiclePlate}
+                    onChange={handlePlateChange}
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] text-slate-500 mb-1 block">
-                      نام / مدل خودرو
-                    </label>
-                    <input
-                      className={inp}
-                      value={vehicleModel}
-                      onChange={(e) =>
-                        setVehicleModel(toPersianKeyboard(e.target.value))
-                      }
-                      placeholder="مثال: پژو ۲۰۶"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 mb-1 block">
-                      نوع خودرو
-                    </label>
-                    <input
-                      className={inp}
-                      value={vehicleType}
-                      onChange={(e) =>
-                        setVehicleType(toPersianKeyboard(e.target.value))
-                      }
-                      placeholder="مثال: سواری"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 mb-1 block">
-                      سال ساخت
-                    </label>
-                    <input
-                      className={inp}
-                      value={vehicleYear}
-                      onChange={(e) => setVehicleYear(e.target.value)}
-                      placeholder="۱۳۹۸"
-                    />
-                  </div>
                   <div>
                     <label className="text-[10px] text-slate-500 mb-1 block">
                       شماره شاسی (VIN)
@@ -750,6 +765,92 @@ const QuickInvoiceModal = ({
                       value={vehicleVin}
                       onChange={(e) => setVehicleVin(e.target.value)}
                       placeholder="17 کاراکتر"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 mb-1 block">
+                      {isMoto ? "برند و مدل موتور" : "نوع خودرو"}
+                    </label>
+                    {isMoto ? (
+                      <SearchableSelect
+                        key="moto-type"
+                        value={vehicleType}
+                        onChange={(v) => setVehicleType(String(v))}
+                        options={MOTO_BRANDS}
+                        placeholder="— انتخاب یا افزودن برند/مدل —"
+                        searchPlaceholder="جستجو در موتورسیکلت‌ها..."
+                        emptyText="موتوری یافت نشد"
+                        creatable
+                        onCreateOption={handleCreateVehicleType}
+                        creating={creatingVehicleType}
+                        createLabel={(name) => (
+                          <>
+                            <span className="text-slate-400">افزودن: </span>
+                            <span className="font-medium">«{name}»</span>
+                            <span className="text-xs text-emerald-600 mr-2">
+                              (ذخیره خودکار)
+                            </span>
+                          </>
+                        )}
+                      />
+                    ) : (
+                      <SearchableSelect
+                        key="car-type"
+                        value={vehicleType}
+                        onChange={(v) => setVehicleType(String(v))}
+                        options={vehicleTypes.map((vt) => ({
+                          value: vt.name,
+                          label: vt.name,
+                        }))}
+                        placeholder="— انتخاب یا افزودن نوع —"
+                        searchPlaceholder="جستجو یا افزودن نوع خودرو..."
+                        creatable
+                        onCreateOption={handleCreateVehicleType}
+                        creating={creatingVehicleType}
+                        createLabel={(name) => (
+                          <>
+                            <span className="text-slate-400">
+                              افزودن نوع جدید:{" "}
+                            </span>
+                            <span className="font-medium">«{name}»</span>
+                            <span className="text-xs text-emerald-600 mr-2">
+                              (ذخیره خودکار)
+                            </span>
+                          </>
+                        )}
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 mb-1 block">
+                      {isMoto ? "اطلاعات تکمیلی موتور" : "نام / مدل خودرو"}
+                    </label>
+                    <input
+                      className={inp}
+                      value={vehicleModel}
+                      onChange={(e) =>
+                        setVehicleModel(toPersianKeyboard(e.target.value))
+                      }
+                      placeholder={
+                        isMoto
+                          ? "مثال: رنگ، سال، موتور ویژه"
+                          : "مثال: پراید، سمند، پژو ۲۰۶"
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 mb-1 block">
+                      سال ساخت (شمسی)
+                    </label>
+                    <SearchableSelect
+                      value={vehicleYear || ""}
+                      onChange={(v) => setVehicleYear(String(v))}
+                      options={YEAR_OPTIONS.map((y) => ({
+                        value: String(y),
+                        label: String(y),
+                      }))}
+                      placeholder="— انتخاب سال —"
+                      searchPlaceholder="جستجوی سال..."
                     />
                   </div>
                 </div>
@@ -811,14 +912,17 @@ const QuickInvoiceModal = ({
               {/* Commission */}
               <div className="bg-yellow-500/5 border border-yellow-500/25 rounded-xl p-3">
                 <label className="text-xs text-yellow-400/80 mb-1 block">
-                  💼 کارمزد کلی (اصلی)
+                  💼 کارمزد کلی (اصلی) *
                 </label>
                 <PriceInput
                   value={commissionTotal}
-                  onChange={(v) => setCommissionTotal(v)}
+                  onChange={(v) => {
+                    setCommissionTotal(v);
+                    setCommissionEntered(true);
+                  }}
                 />
                 <p className="text-yellow-500/50 text-[10px] mt-1">
-                  کارمزد به مبلغ کل اضافه می‌شود
+                  کارمزد به مبلغ کل اضافه می‌شود — وارد کردن آن الزامی است
                 </p>
               </div>
 
@@ -954,14 +1058,7 @@ const QuickInvoiceModal = ({
               >
                 مرحله قبل
               </button>
-            ) : (
-              <button
-                onClick={onClose}
-                className="px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm hover:bg-slate-700 transition-all"
-              >
-                انصراف
-              </button>
-            )}
+            ) : null}
             {step < 4 ? (
               <button
                 onClick={goNext}
