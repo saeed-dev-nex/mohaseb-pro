@@ -19,6 +19,18 @@ import { MOTO_BRANDS } from "../lib/vehicle";
 
 const YEAR_OPTIONS = jalaliYearRange(1360, currentJalaliYear());
 
+// Same operator-defaults store the full invoice form uses, so the
+// status/card choices carry over between both flows.
+const DEFAULTS_KEY = "mohaseb:invoice-defaults:v1";
+const LAST_COMMISSION_KEY = "mohaseb:quick-commission:v1";
+function loadDefaults(): { status?: string; card_payment_source?: string } {
+  try {
+    return JSON.parse(localStorage.getItem(DEFAULTS_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
+}
+
 const fmt = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0);
 const inp =
@@ -144,6 +156,7 @@ type ServiceRowProps = {
   services: ServiceOption[];
   onChange: (index: number, item: QuickItem) => void;
   onRemove: (index: number) => void;
+  onDuplicate: (index: number) => void;
 };
 
 const ServiceRow = ({
@@ -152,6 +165,7 @@ const ServiceRow = ({
   services,
   onChange,
   onRemove,
+  onDuplicate,
 }: ServiceRowProps) => {
   const [showSvcList, setShowSvcList] = useState(false);
   const filteredSvc = services.filter(
@@ -164,13 +178,22 @@ const ServiceRow = ({
 
   return (
     <div className="bg-slate-700/30 rounded-xl p-3 space-y-2 group relative">
-      {/* Remove button */}
+      {/* Remove + duplicate buttons */}
       <button
         type="button"
         onClick={() => onRemove(index)}
-        className="absolute top-2 left-2 w-6 h-6 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center hover:bg-red-500/20 transition-all text-xs opacity-0 group-hover:opacity-100"
+        title="حذف ردیف"
+        className="absolute top-2 left-2 z-10 w-6 h-6 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center hover:bg-red-500/20 transition-all text-xs opacity-0 group-hover:opacity-100"
       >
         ×
+      </button>
+      <button
+        type="button"
+        onClick={() => onDuplicate(index)}
+        title="تکثیر ردیف"
+        className="absolute top-2 left-9 z-10 w-6 h-6 rounded-lg bg-slate-500/10 text-slate-300 flex items-center justify-center hover:bg-slate-500/20 transition-all text-xs opacity-0 group-hover:opacity-100"
+      >
+        ⧉
       </button>
 
       {/* Service title + auto-suggest */}
@@ -320,6 +343,12 @@ const QuickInvoiceModal = ({
   >([]);
   const [creatingVehicleType, setCreatingVehicleType] = useState(false);
   const [commissionEntered, setCommissionEntered] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [plateSuggestion, setPlateSuggestion] = useState<any>(null);
+  const [plateDismissedFor, setPlateDismissedFor] = useState("");
+  const [lastCommission, setLastCommission] = useState(0);
+  const appliedPlateRef = useRef("");
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const resetForm = useCallback(() => {
     setCustomerName("");
@@ -340,8 +369,18 @@ const QuickInvoiceModal = ({
     setCommissionEntered(false);
     setResult(null);
     setError("");
-    setStatus("pending");
-    setCardPaymentSource("customer");
+    const defaults = loadDefaults();
+    setStatus(defaults.status || "pending");
+    setCardPaymentSource(defaults.card_payment_source || "customer");
+    try {
+      setLastCommission(Number(localStorage.getItem(LAST_COMMISSION_KEY)) || 0);
+    } catch {
+      setLastCommission(0);
+    }
+    setNotice("");
+    setPlateSuggestion(null);
+    setPlateDismissedFor("");
+    appliedPlateRef.current = "";
     setStep(1);
     setVehiclePlate("");
     setVehicleVin("");
@@ -422,13 +461,93 @@ const QuickInvoiceModal = ({
         notes: "",
       }));
     if (rows.length === 0) return;
-    setItems((prev) => [...prev.filter((it) => it.service), ...rows]);
+    setItems((prev) => [
+      ...prev.filter(
+        (it) => it.service || it.service_title_snapshot || it.main_price,
+      ),
+      ...rows,
+    ]);
+    setNotice(`📦 پکیج «${pkg.name}» اضافه شد (${fmt(rows.length)} خدمت)`);
   };
 
   const updateRow = (idx: number, updated: QuickItem) =>
     setItems((prev) => prev.map((it, i) => (i === idx ? updated : it)));
   const removeRow = (idx: number) =>
     setItems((prev) => prev.filter((_, i) => i !== idx));
+  const duplicateRow = (idx: number) =>
+    setItems((prev) => {
+      const copy = { ...prev[idx], _key: Math.random() };
+      return [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)];
+    });
+
+  // Plate-first reuse, mirroring the full form: once a complete plate is
+  // typed, offer the latest invoice issued for it.
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const plate = (vehiclePlate || "").trim();
+    const isComplete =
+      /^\d{2}\s+\S+\s+\d{3}\s*-\s*ایران\s*\d{2}$/.test(plate) ||
+      /^\d{3}-\d{5}$/.test(plate);
+    if (
+      !isComplete ||
+      plate === plateDismissedFor ||
+      plate === appliedPlateRef.current
+    ) {
+      setPlateSuggestion(null);
+      return undefined;
+    }
+    const timer = setTimeout(() => {
+      invoicesAPI
+        .list({ vehicle_plate: plate })
+        .then(({ data }) => {
+          const rows = (data?.results || data || []) as any[];
+          const found =
+            rows.find((r) => (r.vehicle_plate || "").trim() === plate) ||
+            rows[0];
+          setPlateSuggestion(found || null);
+        })
+        .catch(() => {});
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [vehiclePlate, isOpen, plateDismissedFor]);
+
+  const handleUsePlateSuggestion = useCallback(() => {
+    if (!plateSuggestion) return;
+    invoicesAPI
+      .detail(plateSuggestion.id)
+      .then(({ data }) => {
+        if (data.customer_name) setCustomerName(data.customer_name);
+        setVehicleVin(data.vehicle_vin || "");
+        setVehicleModel(data.vehicle_model || "");
+        setVehicleType(data.vehicle_type || "");
+        setVehicleYear(data.vehicle_year || "");
+        setDescription(data.description || "");
+        if (Number(data.commission_total) > 0) {
+          setCommissionTotal(Number(data.commission_total));
+          setCommissionEntered(true);
+        }
+        const rows: QuickItem[] = (data.items || [])
+          .filter((it: any) => !it.is_office_card_fee)
+          .map((it: any) => ({
+            _key: Math.random(),
+            service: it.service || null,
+            service_title_snapshot:
+              it.service_title_snapshot || it.service_title || "",
+            quantity: it.quantity || 1,
+            main_price: Number(it.main_price) || 0,
+            extra_price: Number(it.extra_price) || 0,
+            notes: it.notes || "",
+          }));
+        if (rows.length > 0) setItems(rows);
+        appliedPlateRef.current = (vehiclePlate || "").trim();
+        setPlateSuggestion(null);
+        setNotice(
+          `🔁 مشخصات و ردیف‌های فاکتور ${data.invoice_number} بارگذاری شد`,
+        );
+        setStep(2);
+      })
+      .catch(() => setError("بارگذاری فاکتور قبلی ممکن نشد"));
+  }, [plateSuggestion, vehiclePlate]);
 
   // Vehicle section mirrors the full invoice form: same fields, same
   // car/moto switch, same auto-saved vehicle-type list.
@@ -540,6 +659,21 @@ const QuickInvoiceModal = ({
       };
       const { data } = await invoicesAPI.quickCreate(payload);
       setResult(data);
+      // Remember the operator's status/card choices (shared with the full
+      // form) and this commission for one-click reuse next time.
+      try {
+        localStorage.setItem(
+          DEFAULTS_KEY,
+          JSON.stringify({
+            status,
+            card_payment_source: cardPaymentSource,
+          }),
+        );
+        if (commissionAmt > 0)
+          localStorage.setItem(LAST_COMMISSION_KEY, String(commissionAmt));
+      } catch {
+        /* storage blocked: non-fatal */
+      }
       if (onSuccess) onSuccess(data);
     } catch (e) {
       const msg = e.response?.data;
@@ -567,6 +701,28 @@ const QuickInvoiceModal = ({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [isOpen, result]);
+
+  // Keep the operator's hands on the keyboard: focus the field that
+  // matters most on each step.
+  useEffect(() => {
+    if (!isOpen || result) return undefined;
+    const t = setTimeout(() => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      const target =
+        step === 2
+          ? panel.querySelector<HTMLInputElement>(
+              "input[placeholder*='عنوان خدمت']",
+            )
+          : step === 3
+            ? panel.querySelector<HTMLInputElement>("[data-commission] input")
+            : step === 4
+              ? panel.querySelector<HTMLButtonElement>("[data-submit]")
+              : null;
+      target?.focus();
+    }, 60);
+    return () => clearTimeout(t);
+  }, [step, isOpen, result]);
 
   if (!isOpen) return null;
 
@@ -609,6 +765,7 @@ const QuickInvoiceModal = ({
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={resetForm}
+                autoFocus
                 className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm transition-all"
               >
                 ⚡ ایجاد فاکتور جدید
@@ -645,6 +802,7 @@ const QuickInvoiceModal = ({
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
       <div
+        ref={panelRef}
         className="bg-slate-800 border border-slate-700/60 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
@@ -706,6 +864,18 @@ const QuickInvoiceModal = ({
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-3 py-2 rounded-xl">
               ⚠️ {error}
+            </div>
+          )}
+          {notice && (
+            <div className="bg-teal-500/10 border border-teal-500/30 text-teal-200 text-sm px-3 py-2 rounded-xl flex items-center justify-between gap-2">
+              <span>{notice}</span>
+              <button
+                type="button"
+                onClick={() => setNotice("")}
+                className="text-teal-300/70 hover:text-teal-100 shrink-0"
+              >
+                ✕
+              </button>
             </div>
           )}
 
@@ -855,6 +1025,32 @@ const QuickInvoiceModal = ({
                   </div>
                 </div>
               </div>
+
+              {plateSuggestion && (
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-teal-500/30 bg-teal-500/10 px-4 py-3 text-sm text-teal-200">
+                  <span>
+                    🔁 برای این پلاک، فاکتور {plateSuggestion.invoice_number}{" "}
+                    برای «{plateSuggestion.customer_name}» ثبت شده (
+                    {fmt(plateSuggestion.final_amount)})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleUsePlateSuggestion}
+                    className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-medium transition-all"
+                  >
+                    استفاده از همان مشخصات و ردیف‌ها
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPlateDismissedFor((vehiclePlate || "").trim())
+                    }
+                    className="text-teal-300/70 hover:text-teal-200 text-xs"
+                  >
+                    ✕ صرف‌نظر
+                  </button>
+                </div>
+              )}
             </>
           )}
 
@@ -900,6 +1096,7 @@ const QuickInvoiceModal = ({
                       services={services}
                       onChange={updateRow}
                       onRemove={removeRow}
+                      onDuplicate={duplicateRow}
                     />
                   ))}
                 </div>
@@ -910,10 +1107,25 @@ const QuickInvoiceModal = ({
           {step === 3 && (
             <>
               {/* Commission */}
-              <div className="bg-yellow-500/5 border border-yellow-500/25 rounded-xl p-3">
+              <div
+                data-commission
+                className="bg-yellow-500/5 border border-yellow-500/25 rounded-xl p-3"
+              >
                 <label className="text-xs text-yellow-400/80 mb-1 block">
                   💼 کارمزد کلی (اصلی) *
                 </label>
+                {lastCommission > 0 && !commissionEntered && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCommissionTotal(lastCommission);
+                      setCommissionEntered(true);
+                    }}
+                    className="mb-2 text-[11px] px-2.5 py-1 rounded-lg bg-yellow-500/10 text-yellow-300 border border-yellow-500/25 hover:bg-yellow-500/20 transition-all"
+                  >
+                    💼 استفاده از کارمزد قبلی: {fmt(lastCommission)} تومان
+                  </button>
+                )}
                 <PriceInput
                   value={commissionTotal}
                   onChange={(v) => {
@@ -1077,6 +1289,7 @@ const QuickInvoiceModal = ({
               <button
                 onClick={handleSubmit}
                 disabled={saving}
+                data-submit
                 className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-l from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-medium transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25"
               >
                 {saving ? (
