@@ -109,6 +109,10 @@ DATABASES = {
         # Overridable so containers can put the database on a mounted volume
         # (see docker-compose.yml) without touching the code.
         'NAME': os.environ.get('DJANGO_DB_PATH', BASE_DIR / 'db.sqlite3'),
+        # Wait up to 30s for a locked database before erroring (the
+        # per-connection PRAGMA busy_timeout in api/apps.py does the same
+        # for connections opened outside this configuration).
+        'OPTIONS': {'timeout': 30},
     }
 }
 

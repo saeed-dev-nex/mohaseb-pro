@@ -28,11 +28,32 @@ def should_start_backup_scheduler():
     )
 
 
+def _set_sqlite_pragmas(sender, connection, **kwargs):
+    """Tune every new SQLite connection for multi-operator LAN use.
+
+    WAL lets readers and a writer work at the same time instead of blocking
+    each other; busy_timeout makes a connection wait for a lock instead of
+    failing at once with "database is locked"; synchronous=NORMAL is the
+    recommended durability/performance balance under WAL.
+    """
+    if connection.vendor != 'sqlite':
+        return
+    with connection.cursor() as cursor:
+        cursor.execute('PRAGMA journal_mode=WAL;')
+        cursor.execute('PRAGMA synchronous=NORMAL;')
+        cursor.execute('PRAGMA busy_timeout=30000;')
+
+
 class ApiConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'api'
 
     def ready(self):
+        from django.db.backends.signals import connection_created
+
+        connection_created.connect(
+            _set_sqlite_pragmas, dispatch_uid='api_sqlite_pragmas'
+        )
         if not should_start_backup_scheduler():
             return
         from .scheduler import start_backup_scheduler
