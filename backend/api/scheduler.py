@@ -38,13 +38,19 @@ def start_backup_scheduler():
 
 @contextmanager
 def _interprocess_backup_lock():
-    """Serialize checks for a shared SQLite database, including browser fallbacks.
+    """Serialize checks for a shared database, including browser fallbacks.
 
     Keep the lock file: unlinking it allows two processes to lock different
     inodes. OS-owned locks are released automatically when a process exits.
     """
-    database = Path(settings.DATABASES['default']['NAME']).resolve()
-    lock_path = database.with_name(database.name + '.backup.lock')
+    db_config = settings.DATABASES['default']
+    if (db_config.get('ENGINE') or 'sqlite3').endswith('sqlite3'):
+        database = Path(db_config['NAME']).resolve()
+        lock_path = database.with_name(database.name + '.backup.lock')
+    else:
+        # External databases (e.g. PostgreSQL via DATABASE_URL) have no
+        # local file to anchor the lock to; keep it beside the project.
+        lock_path = Path(settings.BASE_DIR) / '.backup-scheduler.lock'
     descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
     with os.fdopen(descriptor, 'r+b', buffering=0) as lock_file:
         # Windows locks one byte, even when the file was just created.
