@@ -714,3 +714,39 @@ class UserModuleAccess(models.Model):
 
     def __str__(self):
         return f'دسترسی ماژولی {self.user}'
+
+
+class IdempotentSubmission(models.Model):
+    """Dedupes retried quick-invoice submissions (offline-queue replays).
+
+    The client generates one UUID per quick-invoice draft and resends the
+    same key when a submission is retried after a network failure. The
+    unique (user, key) pair lets the retry return the original invoice
+    instead of issuing a duplicate. ``invoice`` stays null only when a
+    first attempt died before the invoice was created; a later retry with
+    the same key then completes the submission.
+    """
+
+    key = models.UUIDField(verbose_name='کلید یکتایی ارسال')
+    invoice = models.ForeignKey(
+        Invoice, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='idempotent_submissions', verbose_name='فاکتور',
+    )
+    created_by = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='idempotent_submissions', verbose_name='کاربر',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'ارسال یکتا'
+        verbose_name_plural = 'ارسال‌های یکتا'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['created_by', 'key'],
+                name='unique_idempotency_key_per_user',
+            ),
+        ]
+
+    def __str__(self):
+        return f'IdempotentSubmission({self.key} → invoice {self.invoice_id})'
