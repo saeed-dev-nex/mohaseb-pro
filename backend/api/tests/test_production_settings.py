@@ -40,6 +40,11 @@ class ProductionSecretKeyTests(SimpleTestCase):
             'DJANGO_SECRET_KEY': 'test-secret-for-ci',
             'DJANGO_DB_PATH': '/data/db.sqlite3',
             'DJANGO_MEDIA_ROOT': '/data/media',
+            # This test verifies the SQLite path variables; a DATABASE_URL
+            # inherited from the developer's shell would take precedence
+            # over DJANGO_DB_PATH and is not what is being asserted here.
+            'DATABASE_URL': '',
+            'REDIS_URL': '',
         })
         code = (
             'import django; from django.conf import settings; django.setup();'

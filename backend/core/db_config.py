@@ -23,9 +23,7 @@ def databases_from_env(environ=None, base_dir=None):
         import dj_database_url
 
         return {
-            'default': dj_database_url.parse(
-                url, conn_max_age=60, conn_health_checks=True
-            )
+            'default': dj_database_url.parse(url, conn_max_age=60)
         }
     base_dir = Path(base_dir) if base_dir is not None else Path(__file__).resolve().parent.parent
     return {

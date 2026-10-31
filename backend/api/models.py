@@ -139,14 +139,20 @@ class InvoiceNumberCounter(models.Model):
 
         Used once, when the counter is first created on a database that
         already has invoices, so numbering continues where it left off.
-        The invoice primary key is considered too because legacy numbers
-        were derived from it.
+        Rows whose number is not in INV form fall back to their primary
+        key, because legacy numbers were derived from it. The pk of an
+        INV-numbered row must NOT be used: on PostgreSQL the pk comes
+        from a sequence that runs ahead of the actual data (rolled-back
+        transactions, restores with preserved pks), so seeding from it
+        would skip invoice numbers after every restore.
         """
-        highest = Invoice.objects.order_by('-id').values_list('id', flat=True).first() or 0
-        for number in Invoice.objects.exclude(invoice_number='').values_list('invoice_number', flat=True):
+        highest = 0
+        for pk, number in Invoice.objects.values_list('id', 'invoice_number'):
             match = re.fullmatch(r'INV-(\d+)', number or '')
             if match:
                 highest = max(highest, int(match.group(1)))
+            elif pk:
+                highest = max(highest, pk)
         return highest
 
 
