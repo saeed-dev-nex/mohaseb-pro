@@ -43,3 +43,8 @@ Thumbs.db
 Desktop.ini
 backend/.secret_key
 *.backup.lock
+
+# Playwright E2E scratch data
+frontend/e2e/.tmp/
+frontend/test-results/
+frontend/playwright-report/
