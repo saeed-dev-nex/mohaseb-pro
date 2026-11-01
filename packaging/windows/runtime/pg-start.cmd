@@ -1,6 +1,6 @@
 @echo off
-rem Mohaseb Pro — PostgreSQL service command (run by WinSW as the
-rem low-privilege MohasebPG account). On the very first start it
+rem Mohaseb Pro — PostgreSQL service command (run by WinSW as
+rem LocalSystem). On the very first start it
 rem initialises the database cluster inside the data directory, then
 rem starts the server in the foreground so the service manager owns
 rem its lifecycle.

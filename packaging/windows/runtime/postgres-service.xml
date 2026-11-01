@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   WinSW template for the MohasebProPG service.
-  install-services.ps1 replaces the __TOKENS__ and installs this file
+  setup-database.ps1 replaces the __TOKENS__ and installs this file
   next to a copy of WinSW named MohasebProPG.exe.
-  The server itself runs as a dedicated low-privilege local account;
-  PostgreSQL refuses to run as an administrator.
+  The service runs as LocalSystem (no <serviceaccount>): WinSW could
+  not install ANY named account on a real machine (error 1332,
+  ERROR_NONE_MAPPED) even though the same name resolved fine in
+  Windows itself. LocalSystem is also the identity PostgreSQL's own
+  pg_ctl register uses by default, it needs no account lookup, and
+  PostgreSQL accepts it (its admin check tests Administrators-group
+  membership, which the SYSTEM token does not have). The server only
+  ever listens on 127.0.0.1.
 -->
 <service>
   <id>MohasebProPG</id>
@@ -15,13 +21,6 @@
   <workingdirectory>__DATADIR__</workingdirectory>
   <env name="MOHASEB_HOME" value="__DATADIR__" />
   <env name="MOHASEB_PG_PORT" value="__PGPORT__" />
-  <serviceaccount>
-    <!-- Machine-name-qualified: the ".\" form failed to resolve to a
-         SID inside WinSW on a real machine (error 1332 ERROR_NONE_MAPPED). -->
-    <user>__MACHINENAME__\__PGACCOUNT__</user>
-    <password>__PGACCOUNTPW__</password>
-    <allowservicelogon>true</allowservicelogon>
-  </serviceaccount>
   <startmode>Automatic</startmode>
   <logpath>__DATADIR__\logs</logpath>
   <log mode="roll-by-size">

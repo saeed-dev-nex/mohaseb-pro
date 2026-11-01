@@ -1,23 +1,25 @@
 ﻿# Mohaseb Pro - database provisioning (runs elevated during install).
 #
-# Fresh installs: creates the low-privilege MohasebPG account, installs
-# and starts the bundled PostgreSQL service, creates the application
-# role + database, and writes %ProgramData%\MohasebPro\config.ini.
+# Fresh installs: installs and starts the bundled PostgreSQL service
+# (as LocalSystem — WinSW could not register a named service account
+# on a real machine, error 1332, while LocalSystem needs no account
+# lookup and is pg_ctl register's default identity too), creates the
+# application role + database, and writes
+# %ProgramData%\MohasebPro\config.ini.
 # If any PostgreSQL step fails, it falls back to SQLite mode so the end
 # user still gets a working application, and records the failure in
 # logs\setup-database.log.
 #
 # Upgrades (config.ini already exists): keeps the existing config and
-# credentials untouched; only refreshes the service account password
-# and the PostgreSQL service registration.
+# credentials untouched; only refreshes the PostgreSQL service
+# registration and verifies the application role + database exist.
 #
 # Exit code is always 0: a database problem must not abort the install.
 
 param(
     [Parameter(Mandatory = $true)][string]$InstallDir,
     [Parameter(Mandatory = $true)][string]$DataDir,
-    [int]$PgPort = 54329,
-    [string]$PgAccount = 'MohasebPG'
+    [int]$PgPort = 54329
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,27 +46,22 @@ function New-Secret([int]$Length) {
     -join ($bytes | ForEach-Object { $chars[$_ % $chars.Length] })
 }
 
-function Set-DataDirAcl([string]$Account) {
+function Set-DataDirAcl {
     # The data dir holds secrets (config.ini, pg-super.pw): restrict it
-    # to SYSTEM + Administrators; the DB account only gets the pgdata
-    # subtree (granted separately once the cluster exists).
+    # to SYSTEM + Administrators. Both services run as LocalSystem, so
+    # no other account needs any grant here — including on pgdata,
+    # whose cluster the PostgreSQL service (SYSTEM) creates itself.
     icacls $DataDir /inheritance:r /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
-    # The service account must traverse the data-dir root and write the
-    # database service's wrapper logs: WinSW itself runs as the account,
-    # and without these grants the service dies before PostgreSQL even
-    # starts. (RX) has no inheritance flags, so it does NOT expose
-    # config.ini or other files inside to the account.
-    icacls $DataDir /grant:r "${Account}:(RX)" | Out-Null
     $logs = Join-Path $DataDir 'logs'
-    icacls $logs /grant:r "${Account}:(OI)(CI)M" 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
+    icacls $logs /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
     $pgdata = Join-Path $DataDir 'pgdata'
     if (-not (Test-Path $pgdata)) { New-Item -ItemType Directory -Path $pgdata -Force | Out-Null }
-    icacls $pgdata /grant:r "${Account}:(OI)(CI)F" 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
+    icacls $pgdata /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
     $media = Join-Path $DataDir 'media'
     icacls $media /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
 }
 
-function Install-PgService([string]$Account, [string]$AccountPassword) {
+function Install-PgService {
     $toolsDir = Join-Path $InstallDir 'tools'
     if (-not (Test-Path $toolsDir)) { New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null }
     $svcExe = Join-Path $toolsDir 'MohasebProPG.exe'
@@ -77,19 +74,6 @@ function Install-PgService([string]$Account, [string]$AccountPassword) {
     $xml = $template.Replace('__APPDIR__', $InstallDir)
     $xml = $xml.Replace('__DATADIR__', $DataDir)
     $xml = $xml.Replace('__PGPORT__', "$PgPort")
-    $xml = $xml.Replace('__PGACCOUNT__', $Account)
-    $xml = $xml.Replace('__PGACCOUNTPW__', $AccountPassword)
-    $xml = $xml.Replace('__MACHINENAME__', $env:COMPUTERNAME)
-    # Pre-flight: prove the service account resolves to a SID before
-    # handing it to WinSW (its failure mode here was error 1332,
-    # "no mapping between account names and security IDs").
-    try {
-        $sid = (New-Object System.Security.Principal.NTAccount("$env:COMPUTERNAME\$Account")).Translate([System.Security.Principal.SecurityIdentifier])
-        Write-Log "Service account $env:COMPUTERNAME\$Account resolves to SID $sid."
-    }
-    catch {
-        throw "Service account $Account does not resolve on this machine: $($_.Exception.Message)"
-    }
     Set-Content -LiteralPath (Join-Path $toolsDir 'MohasebProPG.xml') -Value $xml -Encoding UTF8
     & $svcExe stop 2>$null | Out-Null
     & $svcExe uninstall 2>$null | Out-Null
@@ -133,22 +117,11 @@ try {
     }
     $isUpgrade = Test-Path $ConfigPath
 
-    # The service account password is (re)generated on every install so
-    # the WinSW XML always matches the account.
-    $accountPassword = New-Secret 24
-    $account = Get-LocalUser -Name $PgAccount -ErrorAction SilentlyContinue
-    $secure = ConvertTo-SecureString $accountPassword -AsPlainText -Force
-    if ($account) {
-        Set-LocalUser -Name $PgAccount -Password $secure -PasswordNeverExpires $true
-    }
-    else {
-        New-LocalUser -Name $PgAccount -Password $secure -PasswordNeverExpires -Description 'Mohaseb Pro bundled PostgreSQL service account' | Out-Null
-    }
-    Set-DataDirAcl $PgAccount
+    Set-DataDirAcl
 
     if ($isUpgrade) {
         Write-Log 'Existing config.ini found (upgrade): keeping config and DB credentials.'
-        Install-PgService $PgAccount $accountPassword
+        Install-PgService
         if (-not (Wait-PgReady 120)) { throw 'PostgreSQL did not become ready after upgrade.' }
         # A previous install may have died between writing config.ini
         # and creating the application role/database; make sure both
@@ -184,11 +157,11 @@ SELECT 'CREATE DATABASE $PgDb OWNER $PgUser'
     # service's first start. Kept (ACL-restricted) for later support.
     $pwFile = Join-Path $DataDir 'pg-super.pw'
     Set-Content -LiteralPath $pwFile -Value $superPassword -Encoding ASCII -NoNewline
-    icacls $pwFile /inheritance:r /grant:r 'SYSTEM:F' 'Administrators:F' "${PgAccount}:R" | Out-Null
+    icacls $pwFile /inheritance:r /grant:r 'SYSTEM:F' 'Administrators:F' | Out-Null
 
     $mode = 'postgres'
     try {
-        Install-PgService $PgAccount $accountPassword
+        Install-PgService
         if (-not (Wait-PgReady 180)) { throw 'PostgreSQL did not become ready in time.' }
         Invoke-Psql $superPassword @"
 DO `$`$ BEGIN
