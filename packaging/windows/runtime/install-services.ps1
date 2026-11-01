@@ -30,6 +30,15 @@ try {
             if ($line -match '^\s*mode\s*=\s*(\w+)') { $mode = $Matches[1].ToLower() }
         }
     }
+    else {
+        # setup-database.ps1 always writes config.ini, even on its
+        # SQLite fallback. A missing file means provisioning never ran;
+        # do NOT guess postgres (the dependency on the nonexistent
+        # MohasebProPG service would stop this service from starting).
+        # The launcher self-heals a minimal SQLite config instead.
+        $mode = 'sqlite'
+        Write-Log 'WARNING: config.ini not found - assuming SQLite mode (no PostgreSQL dependency).'
+    }
     Write-Log "Installing MohasebPro service (database mode: $mode)."
 
     $svcExe = Join-Path $toolsDir 'MohasebPro.exe'

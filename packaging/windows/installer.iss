@@ -61,13 +61,16 @@ Name: "{autodesktop}\محاسب پرو"; Filename: "http://localhost:4173"; Task
 
 [Run]
 ; 1) Provision the database (account, PostgreSQL service, role + db,
-;    config.ini). Always exits 0; falls back to SQLite on failure.
-Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\runtime\setup-database.ps1"" -InstallDir ""{app}"" -DataDir ""{#DataDir}"""; \
+;    config.ini). Runs through a .cmd shim that captures ALL output —
+;    including PowerShell parser errors — into
+;    {commonappdata}\MohasebPro\logs\provisioning-console.log, so a
+;    failed step can never again pass without a trace.
+Filename: "{cmd}"; \
+  Parameters: "/c ""{app}\runtime\run-setup-database.cmd"" ""{app}"" ""{#DataDir}"""; \
   StatusMsg: "در حال راه‌اندازی پایگاه داده…"; Flags: runhidden waituntilterminated
-; 2) Install + start the application service.
-Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\runtime\install-services.ps1"" -InstallDir ""{app}"" -DataDir ""{#DataDir}"""; \
+; 2) Install + start the application service (same shim pattern).
+Filename: "{cmd}"; \
+  Parameters: "/c ""{app}\runtime\run-install-services.cmd"" ""{app}"" ""{#DataDir}"""; \
   StatusMsg: "در حال نصب سرویس برنامه…"; Flags: runhidden waituntilterminated
 ; 2b) Verify the app actually answers, and tell the user the outcome.
 ;     First start includes cluster initdb + migrations, so this polls

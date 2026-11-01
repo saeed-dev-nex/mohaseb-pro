@@ -57,6 +57,27 @@ def load_config(path: Path) -> configparser.ConfigParser:
     return cfg
 
 
+def heal_config(cfg: configparser.ConfigParser, config_path: Path) -> None:
+    """Last line of defence: if provisioning never wrote a usable
+    config (missing file or empty secret_key), generate a secret and
+    persist a minimal config so the app still boots — in SQLite mode
+    unless a database mode/URL is already configured — instead of the
+    service dying on Django's missing-secret error."""
+    secret = cfg.get("app", "secret_key", fallback="").strip()
+    if secret:
+        return
+    import secrets
+
+    cfg["app"]["secret_key"] = secrets.token_urlsafe(48)
+    try:
+        with open(config_path, "w", encoding="utf-8") as fh:
+            cfg.write(fh)
+        log("config.ini had no secret_key (provisioning incomplete?) — "
+            "generated and saved one; continuing.")
+    except OSError as exc:
+        log(f"Could not persist healed config ({exc}); continuing in-memory.")
+
+
 def apply_environment(cfg: configparser.ConfigParser, home: Path) -> None:
     port = cfg.get("app", "port", fallback="4173")
     os.environ["DJANGO_DEBUG"] = "false"
@@ -151,6 +172,7 @@ def main() -> int:
     (home / "logs").mkdir(parents=True, exist_ok=True)
     config_path = home / "config.ini"
     cfg = load_config(config_path)
+    heal_config(cfg, config_path)
     apply_environment(cfg, home)
 
     mode = cfg.get("database", "mode", fallback="sqlite").strip().lower()

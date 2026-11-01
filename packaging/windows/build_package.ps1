@@ -19,6 +19,21 @@ $Version = (Get-Content (Join-Path $Repo 'VERSION') -Raw).Trim()
 
 Write-Host "== Mohaseb Pro installer build (version $Version) =="
 
+# --- validate the provisioning scripts --------------------------------
+# A runtime .ps1 that fails to parse dies silently inside the
+# installer's hidden PowerShell run (this actually happened: the
+# database step never executed and the app service dead-ended on a
+# missing dependency). Parse-check every runtime script here and fail
+# the BUILD instead of shipping a broken installer.
+foreach ($ps1 in (Get-ChildItem (Join-Path $Here 'runtime') -Filter *.ps1)) {
+    $tokens = $null; $parseErrors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseFile($ps1.FullName, [ref]$tokens, [ref]$parseErrors)
+    if ($parseErrors -and $parseErrors.Count -gt 0) {
+        throw "PowerShell parse error in $($ps1.Name): $($parseErrors[0].Message) (line $($parseErrors[0].Extent.StartLineNumber))"
+    }
+}
+Write-Host 'Runtime PowerShell scripts parse cleanly.'
+
 # --- payload staging -------------------------------------------------
 $python = $null
 if (Get-Command py -ErrorAction SilentlyContinue) { $python = 'py' }
