@@ -53,7 +53,7 @@ def load_config(path: Path) -> configparser.ConfigParser:
     cfg["app"] = {"port": "4173", "allowed_hosts": "*"}
     cfg["database"] = {"mode": "sqlite"}
     if path.exists():
-        cfg.read(path, encoding="utf-8")
+        cfg.read(path, encoding="utf-8-sig")  # tolerate a PowerShell 5.1 BOM
     return cfg
 
 

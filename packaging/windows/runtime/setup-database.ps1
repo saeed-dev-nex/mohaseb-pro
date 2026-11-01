@@ -113,7 +113,8 @@ function Invoke-Psql([string]$SuperPassword, [string]$Sql) {
     $env:PGPASSWORD = $SuperPassword
     try {
         $sqlFile = Join-Path $env:TEMP ('mohaseb-sql-' + [guid]::NewGuid().ToString('N') + '.sql')
-        Set-Content -LiteralPath $sqlFile -Value $Sql -Encoding UTF8
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($sqlFile, $Sql, $utf8NoBom)
         $psqlArgs = @('-h', '127.0.0.1', '-p', "$PgPort", '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-f', $sqlFile)
         & (Join-Path $PgBin 'psql.exe') @psqlArgs | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "psql failed ($LASTEXITCODE)" }
@@ -241,7 +242,11 @@ SELECT 'CREATE DATABASE $PgDb OWNER $PgUser'
         $lines += "admin_user = $adminUser"
         $lines += "admin_password = $adminPassword"
     }
-    Set-Content -LiteralPath $ConfigPath -Value $lines -Encoding UTF8
+    # No-BOM write: PowerShell 5.1's Set-Content -Encoding UTF8 emits a
+    # BOM, which Python's configparser in the launcher rejects with
+    # MissingSectionHeaderError (the service then crash-loops).
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($ConfigPath, ($lines -join "`r`n") + "`r`n", $utf8NoBom)
     Write-Log "config.ini written (database mode: $mode)."
 }
 catch {
