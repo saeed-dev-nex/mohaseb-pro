@@ -70,9 +70,15 @@ function Install-PgService([string]$Account, [string]$AccountPassword) {
     $svcExe = Join-Path $toolsDir 'MohasebProPG.exe'
     Copy-Item (Join-Path $InstallDir 'tools\WinSW-x64.exe') $svcExe -Force
     $template = Get-Content (Join-Path $InstallDir 'runtime\postgres-service.xml') -Raw
-    $xml = $template.Replace('__APPDIR__', $InstallDir).Replace('__DATADIR__', $DataDir) `
-        .Replace('__PGPORT__', "$PgPort").Replace('__PGACCOUNT__', $Account) `
-        .Replace('__PGACCOUNTPW__', $AccountPassword)
+    # NOTE: no backtick line continuations anywhere in this file.
+    # They silently break when the file is checked out with CRLF line
+    # endings (git autocrlf on Windows): the backtick escapes the CR
+    # instead of the LF and the parser dies on the next line.
+    $xml = $template.Replace('__APPDIR__', $InstallDir)
+    $xml = $xml.Replace('__DATADIR__', $DataDir)
+    $xml = $xml.Replace('__PGPORT__', "$PgPort")
+    $xml = $xml.Replace('__PGACCOUNT__', $Account)
+    $xml = $xml.Replace('__PGACCOUNTPW__', $AccountPassword)
     Set-Content -LiteralPath (Join-Path $toolsDir 'MohasebProPG.xml') -Value $xml -Encoding UTF8
     & $svcExe stop 2>$null | Out-Null
     & $svcExe uninstall 2>$null | Out-Null
@@ -97,8 +103,8 @@ function Invoke-Psql([string]$SuperPassword, [string]$Sql) {
     try {
         $sqlFile = Join-Path $env:TEMP ('mohaseb-sql-' + [guid]::NewGuid().ToString('N') + '.sql')
         Set-Content -LiteralPath $sqlFile -Value $Sql -Encoding UTF8
-        & (Join-Path $PgBin 'psql.exe') -h 127.0.0.1 -p $PgPort -U postgres -d postgres `
-            -v ON_ERROR_STOP=1 -f $sqlFile | Out-Null
+        $psqlArgs = @('-h', '127.0.0.1', '-p', "$PgPort", '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-f', $sqlFile)
+        & (Join-Path $PgBin 'psql.exe') @psqlArgs | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "psql failed ($LASTEXITCODE)" }
     }
     finally {
@@ -124,8 +130,7 @@ try {
         Set-LocalUser -Name $PgAccount -Password $secure -PasswordNeverExpires $true
     }
     else {
-        New-LocalUser -Name $PgAccount -Password $secure -PasswordNeverExpires `
-            -Description 'Mohaseb Pro bundled PostgreSQL service account' | Out-Null
+        New-LocalUser -Name $PgAccount -Password $secure -PasswordNeverExpires -Description 'Mohaseb Pro bundled PostgreSQL service account' | Out-Null
     }
     Set-DataDirAcl $PgAccount
 

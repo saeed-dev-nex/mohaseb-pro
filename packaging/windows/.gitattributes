@@ -1,0 +1,11 @@
+# Line-ending rules for the packaging tree.
+# PowerShell scripts must keep LF endings in every checkout: a
+# backtick continuation followed by CRLF breaks the PowerShell parser
+# (the backtick escapes the CR, not the LF). The runtime scripts also
+# avoid backtick continuations entirely; this is the second lock.
+*.ps1 text eol=lf
+*.py text eol=lf
+*.xml text eol=lf
+*.iss text eol=lf
+# Batch files are safest with native Windows endings.
+*.cmd text eol=crlf
