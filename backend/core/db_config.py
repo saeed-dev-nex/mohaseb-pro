@@ -35,7 +35,15 @@ def databases_from_env(environ=None, base_dir=None):
             # Wait up to 30s for a locked database before erroring (the
             # per-connection PRAGMA busy_timeout in api/apps.py does the
             # same for connections opened outside this configuration).
-            'OPTIONS': {'timeout': 30},
+            # transaction_mode IMMEDIATE is load-bearing: with the default
+            # DEFERRED, two operators saving at the same moment both take
+            # read locks first and then deadlock on the write upgrade,
+            # which SQLite reports as "database is locked" WITHOUT waiting
+            # out the busy timeout — the losing invoice was silently lost
+            # (verified: 23 of 24 simultaneous creates failed). BEGIN
+            # IMMEDIATE takes the write lock up front, so writers queue on
+            # the busy timeout instead of deadlocking.
+            'OPTIONS': {'timeout': 30, 'transaction_mode': 'IMMEDIATE'},
         }
     }
 

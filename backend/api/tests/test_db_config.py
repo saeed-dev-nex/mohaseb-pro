@@ -16,7 +16,7 @@ class DatabasesFromEnvTests(SimpleTestCase):
         cfg = databases_from_env({}, base_dir=Path('/srv/mohaseb'))['default']
         self.assertEqual(cfg['ENGINE'], 'django.db.backends.sqlite3')
         self.assertEqual(cfg['NAME'], Path('/srv/mohaseb') / 'db.sqlite3')
-        self.assertEqual(cfg['OPTIONS'], {'timeout': 30})
+        self.assertEqual(cfg['OPTIONS'], {'timeout': 30, 'transaction_mode': 'IMMEDIATE'})
 
     def test_default_honours_django_db_path(self):
         env = {'DJANGO_DB_PATH': '/data/custom.sqlite3'}
