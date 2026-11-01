@@ -129,9 +129,9 @@ def build_python(cache: Path, stage: Path) -> None:
     # the embedded interpreter's ._pth path setup does not add the
     # script's directory). A .pth line is resolved relative to the
     # site-packages folder: ...\runtime\python\Lib\site-packages
-    # -> up 3 -> {app} -> backend.
+    # -> up 4 (Lib, python, runtime, {app}) -> backend.
     (site_packages / "mohaseb-backend.pth").write_text(
-        "..\\..\\..\\backend\n", encoding="ascii")
+        "..\\..\\..\\..\\backend\n", encoding="ascii")
     wheels = sorted(p.name for p in wheelhouse.glob("*.whl"))
     print(f"site-packages populated from {len(wheels)} wheels")
     (stage / "BUILD-WHEELS.txt").write_text("\n".join(wheels) + "\n", encoding="utf-8")
