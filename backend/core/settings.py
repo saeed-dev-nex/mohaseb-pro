@@ -93,24 +93,18 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 ASGI_APPLICATION = 'core.asgi.application'
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
-    },
-}
+from .db_config import channel_layers_from_env, databases_from_env
+
+# In-memory by default; set REDIS_URL to share channels across processes.
+CHANNEL_LAYERS = channel_layers_from_env()
 
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        # Overridable so containers can put the database on a mounted volume
-        # (see docker-compose.yml) without touching the code.
-        'NAME': os.environ.get('DJANGO_DB_PATH', BASE_DIR / 'db.sqlite3'),
-    }
-}
+# SQLite file by default; set DATABASE_URL (e.g. a postgres:// URL) to
+# run on an external database — see core/db_config.py.
+DATABASES = databases_from_env(base_dir=BASE_DIR)
 
 
 # Password validation

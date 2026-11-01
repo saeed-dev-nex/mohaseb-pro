@@ -23,19 +23,15 @@ import {
   servicePackagesAPI,
 } from "../services/api";
 import PriceInput from "../components/PriceInput";
-import PlateInput from "../components/PlateInput";
 import JalaliDatePicker from "../components/JalaliDatePicker";
 import SearchableSelect from "../components/SearchableSelect";
-import {
-  jalaliYearRange,
-  currentJalaliYear,
-  toPersianKeyboard,
-} from "../utils/persian";
-import { MOTO_BRANDS } from "../lib/vehicle";
+import { toPersianKeyboard } from "../utils/persian";
+import { isMotoPlate } from "../lib/vehicle";
+import { VehicleInfoFields } from "../components/VehicleInfoFields";
+import { Field, Section, inputCls, selectCls } from "../components/FormSection";
 
 const fmt = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0) + " تومان";
-const YEAR_OPTIONS = jalaliYearRange(1360, currentJalaliYear());
 
 // ── Speed helpers: draft autosave + remembered operator defaults ──
 const DRAFT_KEY = "mohaseb:invoice-draft:v1";
@@ -138,44 +134,6 @@ type NewCustomerModalState = {
   pendingName: string;
   resolve: (value: CreatedOption | null) => void;
 };
-
-type SectionProps = {
-  title: string;
-  icon: ReactNode;
-  children: ReactNode;
-};
-
-const Section = ({ title, icon, children }: SectionProps) => (
-  <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
-    <div className="flex items-center gap-2 px-6 py-4 border-b border-slate-700/50 bg-slate-700/20">
-      <span className="text-lg">{icon}</span>
-      <h3 className="text-white font-semibold text-sm">{title}</h3>
-    </div>
-    <div className="p-6">{children}</div>
-  </div>
-);
-
-type FieldProps = {
-  label: string;
-  required?: boolean;
-  children: ReactNode;
-  className?: string;
-};
-
-const Field = ({ label, required, children, className = "" }: FieldProps) => (
-  <div className={`space-y-1.5 ${className}`}>
-    <label className="block text-xs font-medium text-slate-400">
-      {label}
-      {required && <span className="text-red-400 mr-0.5">*</span>}
-    </label>
-    {children}
-  </div>
-);
-
-const inputCls =
-  "w-full px-3 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all";
-const selectCls =
-  "w-full px-3 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all";
 
 // ─── New Customer Modal ───────────────────────────────────────
 type NewCustomerModalProps = {
@@ -692,11 +650,14 @@ const InvoiceForm = () => {
   }, []);
 
   const [form, setForm] = useState<InvoiceFormState>(() => {
-    // New invoices start from the operator's last-used status/card source.
+    // New invoices always start UNPAID (pending): the operator marks an
+    // invoice paid explicitly. Only the card source is remembered from
+    // the operator defaults — a remembered "paid" status here silently
+    // hid invoices from the default (pending) list filter.
     const defaults = loadInvoiceDefaults();
     return {
       customer: "",
-      status: defaults.status || "pending",
+      status: "pending",
       card_payment_source: defaults.card_payment_source || "customer",
       date: new Date().toISOString().slice(0, 10),
       due_date: "",
@@ -752,15 +713,12 @@ const InvoiceForm = () => {
   }, [queryClient]);
 
   // Maps an API invoice into form state. In clone mode the copy becomes a
-  // fresh invoice: today's date, no due date, and the operator's default
-  // status — payments are never carried over.
+  // fresh invoice: today's date, no due date, and status reset to unpaid
+  // (pending) — payments are never carried over.
   const applyInvoiceData = useCallback((data: any, forClone: boolean) => {
-    const defaults = loadInvoiceDefaults();
     setForm({
       customer: data.customer || "",
-      status: forClone
-        ? defaults.status || "pending"
-        : data.status || "pending",
+      status: forClone ? "pending" : data.status || "pending",
       card_payment_source: data.card_payment_source || "customer",
       date: forClone
         ? new Date().toISOString().slice(0, 10)
@@ -966,7 +924,7 @@ const InvoiceForm = () => {
     const defaults = loadInvoiceDefaults();
     setForm({
       customer: "",
-      status: defaults.status || "pending",
+      status: "pending",
       card_payment_source: defaults.card_payment_source || "customer",
       date: new Date().toISOString().slice(0, 10),
       due_date: "",
@@ -1321,169 +1279,35 @@ const InvoiceForm = () => {
         </Section>
 
         {/* Vehicle */}
-        {(() => {
-          // Detect moto from plate string: moto format = "NNN-NNNNN" or just "-" when fields are empty
-          const plateTrimmed = (form.vehicle_plate || "").trim();
-          const isMoto = plateTrimmed === "-" || /^\d+-\d+$/.test(plateTrimmed);
-          return (
-            <Section
-              title={isMoto ? "اطلاعات موتورسیکلت" : "اطلاعات خودرو"}
-              icon={isMoto ? "🏍️" : "🚗"}
-            >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* Plate */}
-                <Field label="شماره پلاک" className="md:col-span-2">
-                  <PlateInput
-                    value={form.vehicle_plate}
-                    onChange={(v) => {
-                      const wasMotoBefore = (function (p: string) {
-                        return p === "-" || /^\d+-\d+$/.test(p);
-                      })((form.vehicle_plate || "").trim());
-                      const isMotoNow = (function (p: string) {
-                        return p === "-" || /^\d+-\d+$/.test(p);
-                      })((v || "").trim());
-                      const typeChanged = wasMotoBefore !== isMotoNow;
-                      // Atomically update both fields to avoid stale-closure double-setState bug
-                      setForm((f) => ({
-                        ...f,
-                        vehicle_plate: v,
-                        ...(typeChanged ? { vehicle_type: "" } : {}),
-                      }));
-                    }}
-                  />
-                </Field>
-
-                {plateSuggestion && (
-                  <div className="md:col-span-2 flex flex-wrap items-center gap-3 rounded-xl border border-teal-500/30 bg-teal-500/10 px-4 py-3 text-sm text-teal-200">
-                    <span>
-                      🔁 برای این پلاک، فاکتور {plateSuggestion.invoice_number}{" "}
-                      برای «{plateSuggestion.customer_name}» ثبت شده (
-                      {fmt(plateSuggestion.final_amount)})
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleUsePlateSuggestion}
-                      className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-medium transition-all"
-                    >
-                      استفاده از همان مشخصات و ردیف‌ها
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPlateDismissedFor((form.vehicle_plate || "").trim())
-                      }
-                      className="text-teal-300/70 hover:text-teal-200 text-xs"
-                    >
-                      ✕ صرف‌نظر
-                    </button>
-                  </div>
-                )}
-
-                {/* VIN */}
-                <Field label="شماره شاسی (VIN)">
-                  <input
-                    type="text"
-                    placeholder="17 کاراکتر"
-                    value={form.vehicle_vin}
-                    onChange={(e) => setField("vehicle_vin", e.target.value)}
-                    className={inputCls}
-                    dir="ltr"
-                    maxLength={17}
-                  />
-                </Field>
-
-                {/* Vehicle / Moto Type */}
-                <Field label={isMoto ? "برند و مدل موتور" : "نوع خودرو"}>
-                  {isMoto ? (
-                    <SearchableSelect
-                      key="moto-type"
-                      value={form.vehicle_type}
-                      onChange={(v) => setField("vehicle_type", v)}
-                      options={MOTO_BRANDS}
-                      placeholder="— انتخاب یا افزودن برند/مدل —"
-                      searchPlaceholder="جستجو در موتورسیکلت‌ها..."
-                      emptyText="موتوری یافت نشد"
-                      creatable
-                      onCreateOption={handleCreateVehicleType}
-                      creating={creatingVehicleType}
-                      createLabel={(name) => (
-                        <>
-                          <span className="text-slate-400">افزودن: </span>
-                          <span className="font-medium">«{name}»</span>
-                          <span className="text-xs text-emerald-600 mr-2">
-                            (ذخیره خودکار)
-                          </span>
-                        </>
-                      )}
-                    />
-                  ) : (
-                    <SearchableSelect
-                      key="car-type"
-                      value={form.vehicle_type}
-                      onChange={(v) => setField("vehicle_type", v)}
-                      options={vehicleTypes.map((vt) => ({
-                        value: vt.name,
-                        label: vt.name,
-                      }))}
-                      placeholder="— انتخاب یا افزودن نوع —"
-                      searchPlaceholder="جستجو یا افزودن نوع خودرو..."
-                      creatable
-                      onCreateOption={handleCreateVehicleType}
-                      creating={creatingVehicleType}
-                      createLabel={(name) => (
-                        <>
-                          <span className="text-slate-400">
-                            افزودن نوع جدید:{" "}
-                          </span>
-                          <span className="font-medium">«{name}»</span>
-                          <span className="text-xs text-emerald-600 mr-2">
-                            (ذخیره خودکار)
-                          </span>
-                        </>
-                      )}
-                    />
-                  )}
-                </Field>
-
-                {/* Vehicle Model (text) */}
-                <Field
-                  label={isMoto ? "اطلاعات تکمیلی موتور" : "نام / مدل خودرو"}
-                >
-                  <input
-                    type="text"
-                    placeholder={
-                      isMoto
-                        ? "مثال: رنگ، سال، موتور ویژه"
-                        : "مثال: پراید، سمند، پژو ۲۰۶"
-                    }
-                    value={form.vehicle_model}
-                    onChange={(e) =>
-                      setField(
-                        "vehicle_model",
-                        toPersianKeyboard(e.target.value),
-                      )
-                    }
-                    className={inputCls}
-                  />
-                </Field>
-
-                {/* Model Year — Jalali */}
-                <Field label="سال ساخت (شمسی)">
-                  <SearchableSelect
-                    value={form.vehicle_year || ""}
-                    onChange={(v) => setField("vehicle_year", v)}
-                    options={YEAR_OPTIONS.map((y) => ({
-                      value: String(y),
-                      label: String(y),
-                    }))}
-                    placeholder="— انتخاب سال —"
-                    searchPlaceholder="جستجوی سال..."
-                  />
-                </Field>
-              </div>
-            </Section>
-          );
-        })()}
+        <VehicleInfoFields
+          values={{
+            vehicle_plate: form.vehicle_plate,
+            vehicle_vin: form.vehicle_vin,
+            vehicle_model: form.vehicle_model,
+            vehicle_type: form.vehicle_type,
+            vehicle_year: form.vehicle_year,
+          }}
+          onPlateChange={(v) => {
+            const wasMoto = isMotoPlate(form.vehicle_plate || "");
+            const isMotoNow = isMotoPlate(v || "");
+            // Atomically update both fields to avoid stale-closure double-setState bug
+            setForm((f) => ({
+              ...f,
+              vehicle_plate: v,
+              ...(wasMoto !== isMotoNow ? { vehicle_type: "" } : {}),
+            }));
+          }}
+          onFieldChange={(name, value) => setField(name, value)}
+          vehicleTypes={vehicleTypes}
+          onCreateVehicleType={handleCreateVehicleType}
+          creatingVehicleType={creatingVehicleType}
+          plateSuggestion={plateSuggestion}
+          onUsePlateSuggestion={handleUsePlateSuggestion}
+          onDismissPlateSuggestion={() =>
+            setPlateDismissedFor((form.vehicle_plate || "").trim())
+          }
+          formatAmount={fmt}
+        />
 
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
           <button

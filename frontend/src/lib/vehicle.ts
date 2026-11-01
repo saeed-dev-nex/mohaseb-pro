@@ -125,3 +125,10 @@ export const MOTO_BRANDS = [
   "موتور باربری 250cc",
   "سه‌چرخه موتوری",
 ].map((m) => ({ value: m, label: m }));
+
+// Motorcycle plates look like "NNN-NNNNN"; an untouched plate field in
+// motorcycle mode holds just "-". Anything else is treated as a car plate.
+export const isMotoPlate = (plate: string): boolean => {
+  const t = (plate || "").trim();
+  return t === "-" || /^\d+-\d+$/.test(t);
+};

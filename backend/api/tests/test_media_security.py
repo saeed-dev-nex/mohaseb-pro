@@ -121,7 +121,6 @@ class DocumentSecurityTests(APITestCase):
         self.assertIn('attachment;', response['Content-Disposition'])
         self.assertEqual(response['Cache-Control'], 'private, no-store')
         self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
-        response.close()
 
     def test_invoice_document_uses_title_and_invoice_number_and_supports_inline_preview(self):
         self.authenticate()
@@ -143,7 +142,6 @@ class DocumentSecurityTests(APITestCase):
         self.assertEqual(preview['Content-Type'], 'image/png')
         self.assertTrue(preview['Content-Disposition'].startswith('inline'))
         self.assertEqual(b''.join(preview.streaming_content), b'\x89PNG\r\n\x1a\nsynthetic image')
-        preview.close()
 
     def test_document_title_is_required(self):
         self.authenticate()
@@ -244,6 +242,5 @@ class DocumentSecurityTests(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(b''.join(response.streaming_content), b'synthetic chat')
-        response.close()
         UserModuleAccess.objects.create(user=self.other_user, chat=False)
         self.assertEqual(self.client.get(url).status_code, 403)

@@ -13,6 +13,13 @@ env/
 # Django local data and secrets
 backend/db.sqlite3
 backend/#db.sqlite3
+# SQLite WAL sidecars (live database files, never commit; they appear
+# whenever the server runs and would trip the updater's clean-tree check)
+backend/db.sqlite3-wal
+backend/db.sqlite3-shm
+backend/db.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
 backend/media/
 backend/staticfiles/
 .env
@@ -43,3 +50,8 @@ Thumbs.db
 Desktop.ini
 backend/.secret_key
 *.backup.lock
+
+# Playwright E2E scratch data
+frontend/e2e/.tmp/
+frontend/test-results/
+frontend/playwright-report/

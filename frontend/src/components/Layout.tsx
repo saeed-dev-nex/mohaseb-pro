@@ -17,6 +17,10 @@ import api from "../services/api";
 import { hasModule } from "../utils/modules";
 import { startVisibilityPoll } from "../utils/visibilityPoll";
 import {
+  countQueuedQuickInvoices,
+  flushQuickInvoiceQueue,
+} from "../lib/offlineQueue";
+import {
   SHORTCUTS_CHANGED_EVENT,
   eventMatchesCombo,
   loadShortcuts,
@@ -287,6 +291,43 @@ const Layout = () => {
     () => localStorage.getItem("sidebar-collapsed") === "true",
   );
   const [quickInvoice, setQuickInvoice] = useState(false);
+  const [offlinePending, setOfflinePending] = useState(0);
+  const [offlineFlushed, setOfflineFlushed] = useState<string[]>([]);
+
+  // Offline quick-invoice queue: flush on mount and on reconnect, and
+  // keep the pending count fresh (the quick-invoice modal announces new
+  // queued drafts with a window event).
+  React.useEffect(() => {
+    let alive = true;
+    const refresh = async () => {
+      const flushed = await flushQuickInvoiceQueue();
+      if (!alive) return;
+      if (flushed.length) setOfflineFlushed(flushed);
+      setOfflinePending(await countQueuedQuickInvoices());
+    };
+    void refresh();
+    const onOnline = () => void refresh();
+    const onQueued = () => {
+      void countQueuedQuickInvoices().then((n) => {
+        if (alive) setOfflinePending(n);
+      });
+    };
+    window.addEventListener("online", onOnline);
+    window.addEventListener("mohaseb:queue-updated", onQueued);
+    const timer = window.setInterval(onQueued, 30_000);
+    return () => {
+      alive = false;
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("mohaseb:queue-updated", onQueued);
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!offlineFlushed.length) return undefined;
+    const timer = window.setTimeout(() => setOfflineFlushed([]), 9000);
+    return () => window.clearTimeout(timer);
+  }, [offlineFlushed]);
   const [installPrompt, setInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [welcomeMessage, setWelcomeMessage] = useState("");
@@ -484,6 +525,21 @@ const Layout = () => {
           onClose={() => setQuickInvoice(false)}
           onSuccess={() => {}}
         />
+      )}
+      {(offlineFlushed.length > 0 || offlinePending > 0) && (
+        <div className="fixed bottom-6 left-6 z-50 flex flex-col gap-2">
+          {offlineFlushed.length > 0 && (
+            <div className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-xl">
+              ✅ فاکتور آفلاین ارسال شد: {offlineFlushed.join("، ")}
+            </div>
+          )}
+          {offlinePending > 0 && (
+            <div className="rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white shadow-xl">
+              📥 {offlinePending} فاکتور در انتظار ارسال — با برگشت اینترنت
+              خودکار ارسال می‌شود
+            </div>
+          )}
+        </div>
       )}
       {installPrompt && (
         <button

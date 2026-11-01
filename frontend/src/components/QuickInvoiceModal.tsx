@@ -16,6 +16,7 @@ import {
   currentJalaliYear,
 } from "../utils/persian";
 import { MOTO_BRANDS } from "../lib/vehicle";
+import { enqueueQuickInvoice } from "../lib/offlineQueue";
 
 const YEAR_OPTIONS = jalaliYearRange(1360, currentJalaliYear());
 
@@ -330,6 +331,19 @@ const QuickInvoiceModal = ({
   const [commissionTotal, setCommissionTotal] = useState(0);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [queuedOffline, setQueuedOffline] = useState(false);
+  // One idempotency key per draft: retries (manual or from the offline
+  // queue) resend the same key and the server dedupes them.
+  const draftKeyRef = useRef<string | null>(null);
+  const ensureDraftKey = () => {
+    if (!draftKeyRef.current) {
+      draftKeyRef.current =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+    return draftKeyRef.current;
+  };
   const [error, setError] = useState("");
   const [packages, setPackages] = useState<any[]>([]);
   const [step, setStep] = useState(1);
@@ -368,6 +382,8 @@ const QuickInvoiceModal = ({
     setCommissionTotal(0);
     setCommissionEntered(false);
     setResult(null);
+    setQueuedOffline(false);
+    draftKeyRef.current = null;
     setError("");
     const defaults = loadDefaults();
     setStatus(defaults.status || "pending");
@@ -633,8 +649,10 @@ const QuickInvoiceModal = ({
     }
     setError("");
     setSaving(true);
+    let payload: any = null;
     try {
-      const payload = {
+      payload = {
+        idempotency_key: ensureDraftKey(),
         customer_name: customerName,
         customer_phone: customerPhone,
         status,
@@ -658,6 +676,7 @@ const QuickInvoiceModal = ({
           })),
       };
       const { data } = await invoicesAPI.quickCreate(payload);
+      draftKeyRef.current = null;
       setResult(data);
       // Remember the operator's status/card choices (shared with the full
       // form) and this commission for one-click reuse next time.
@@ -676,6 +695,24 @@ const QuickInvoiceModal = ({
       }
       if (onSuccess) onSuccess(data);
     } catch (e) {
+      if (!e?.response) {
+        // Network failure (offline or server unreachable): park the draft
+        // in the local queue instead of losing it. It is sent
+        // automatically on reconnect; the idempotency key prevents a
+        // duplicate if this attempt actually reached the server.
+        try {
+          await enqueueQuickInvoice({
+            key: payload.idempotency_key,
+            payload,
+            queuedAt: Date.now(),
+          });
+          setQueuedOffline(true);
+          window.dispatchEvent(new Event("mohaseb:queue-updated"));
+          return;
+        } catch {
+          /* IndexedDB unavailable: fall through to the plain error */
+        }
+      }
       const msg = e.response?.data;
       setError(
         typeof msg === "object"
@@ -691,7 +728,7 @@ const QuickInvoiceModal = ({
   const primaryRef = useRef<() => void>(() => {});
   primaryRef.current = step < 4 ? goNext : handleSubmit;
   useEffect(() => {
-    if (!isOpen || result) return undefined;
+    if (!isOpen || result || queuedOffline) return undefined;
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === "Enter") {
         e.preventDefault();
@@ -789,6 +826,48 @@ const QuickInvoiceModal = ({
               <button
                 onClick={onClose}
                 className="px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition-all"
+              >
+                بستن
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Queued-offline view: the draft is parked in the local queue and will
+  // be submitted automatically when the connection returns.
+  if (queuedOffline) {
+    return (
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <div
+          className="bg-slate-800 border border-slate-700/60 rounded-2xl shadow-2xl w-full max-w-md"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-8 text-center space-y-4">
+            <div className="w-16 h-16 mx-auto bg-amber-500/20 border border-amber-500/30 rounded-2xl flex items-center justify-center text-3xl">
+              📥
+            </div>
+            <h3 className="text-white font-bold text-lg">
+              فاکتور در صف ارسال ذخیره شد
+            </h3>
+            <p className="text-slate-400 text-sm leading-6">
+              ارتباط با سرور برقرار نیست؛ این فاکتور روی همین دستگاه ذخیره شد و
+              به‌محض برگشت اینترنت به‌صورت خودکار ارسال می‌شود. نگران ثبت تکراری
+              نباشید؛ سیستم جلوی صدور دوبارهٔ آن را می‌گیرد.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={resetForm}
+                autoFocus
+                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm transition-all"
+              >
+                ⚡ ایجاد فاکتور جدید
+              </button>
+              <button
+                onClick={onClose}
+                className="px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm transition-all"
               >
                 بستن
               </button>

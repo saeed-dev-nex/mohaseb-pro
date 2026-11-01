@@ -322,6 +322,24 @@ def restore_backup(backup, fallback_user_id=None):
         if counter.last_number < highest:
             counter.last_number = highest
             counter.save(update_fields=['last_number'])
+        # Restored rows keep their source primary keys, which does not
+        # advance PostgreSQL sequences. Without a reset, the next insert
+        # into a restored table can reuse an existing pk and fail with a
+        # duplicate-key error (SQLite allocates rowids as max+1 and does
+        # not need this). Reset every restored model's sequence.
+        from django.db import connection
+
+        if connection.vendor == 'postgresql':
+            from django.core.management.color import no_style
+
+            restored_models = [MODEL_MAP[label] for label in MODEL_ORDER]
+            restored_models.append(user_model)
+            statements = connection.ops.sequence_reset_sql(
+                no_style(), restored_models
+            )
+            with connection.cursor() as cursor:
+                for statement in statements:
+                    cursor.execute(statement)
         restore_media_files(backup.get('media_files', {}))
     return counts
 

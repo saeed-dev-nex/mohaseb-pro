@@ -18,10 +18,11 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth.models import User
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-import json, calendar, os, shutil
+import json, calendar, os, shutil, uuid
 from zoneinfo import ZoneInfo
 
 from ..models import (
+    IdempotentSubmission,
     Customer, Service, Invoice, InvoiceEditRequest, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
     Cheque, InvoiceSettings, ChatMessage, ChatNotification, ChatPresence,
@@ -575,6 +576,41 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         }
         """
         data = request.data
+        # Offline-queue replay guard: the client may attach one UUID per
+        # draft (idempotency_key). A retry with a known key returns the
+        # original invoice instead of issuing a duplicate. An absent or
+        # malformed key keeps the historical behaviour exactly.
+        idempotency_key = None
+        raw_key = data.get('idempotency_key')
+        if raw_key:
+            try:
+                idempotency_key = uuid.UUID(str(raw_key))
+            except (ValueError, AttributeError, TypeError):
+                idempotency_key = None
+        submission = None
+        if idempotency_key is not None:
+            submission, _created = IdempotentSubmission.objects.get_or_create(
+                created_by=request.user, key=idempotency_key,
+            )
+            # Serialize concurrent same-key submissions on this row: the
+            # loser waits, then sees the winner's linked invoice below.
+            submission = IdempotentSubmission.objects.select_for_update().get(
+                pk=submission.pk,
+            )
+            if submission.invoice_id is not None:
+                invoice = submission.invoice
+                customer = invoice.customer
+                serializer = self.get_serializer(invoice)
+                return Response({
+                    'invoice': serializer.data,
+                    'customer': {
+                        'id': customer.id if customer else None,
+                        'name': customer.name if customer else '',
+                        'phone': customer.phone if customer else '',
+                        'is_new': bool(customer) and timezone.localdate(customer.created_at) == timezone.localdate(),
+                    },
+                    'message': f'فاکتور {invoice.invoice_number} با موفقیت صادر شد',
+                }, status=200)
         customer_serializer = CustomerListSerializer(data={
             'name': data.get('customer_name', ''),
             'phone': data.get('customer_phone', ''),
@@ -585,7 +621,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         # Validate every invoice field before creating a customer. Known optional
         # fields (including tags, vehicle/custom fields and card source) share
         # the normal invoice serializer and calculations.
-        payload = {key: value for key, value in data.items() if key not in {'customer', 'customer_name', 'customer_phone'}}
+        payload = {key: value for key, value in data.items() if key not in {'customer', 'customer_name', 'customer_phone', 'idempotency_key'}}
         invoice_serializer = self.get_serializer(data=payload)
         invoice_serializer.is_valid(raise_exception=True)
 
@@ -602,6 +638,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             created_by=request.user,
             paid_by=request.user if invoice_serializer.validated_data.get('status', 'pending') == 'paid' else None,
         )
+
+        if submission is not None:
+            submission.invoice = invoice
+            submission.save(update_fields=['invoice'])
 
         record_audit(user=request.user, instance=invoice, action='create', after=snapshot(invoice))
         serializer = self.get_serializer(invoice)
