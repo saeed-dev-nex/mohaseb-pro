@@ -79,6 +79,17 @@ function Install-PgService([string]$Account, [string]$AccountPassword) {
     $xml = $xml.Replace('__PGPORT__', "$PgPort")
     $xml = $xml.Replace('__PGACCOUNT__', $Account)
     $xml = $xml.Replace('__PGACCOUNTPW__', $AccountPassword)
+    $xml = $xml.Replace('__MACHINENAME__', $env:COMPUTERNAME)
+    # Pre-flight: prove the service account resolves to a SID before
+    # handing it to WinSW (its failure mode here was error 1332,
+    # "no mapping between account names and security IDs").
+    try {
+        $sid = (New-Object System.Security.Principal.NTAccount("$env:COMPUTERNAME\$Account")).Translate([System.Security.Principal.SecurityIdentifier])
+        Write-Log "Service account $env:COMPUTERNAME\$Account resolves to SID $sid."
+    }
+    catch {
+        throw "Service account $Account does not resolve on this machine: $($_.Exception.Message)"
+    }
     Set-Content -LiteralPath (Join-Path $toolsDir 'MohasebProPG.xml') -Value $xml -Encoding UTF8
     & $svcExe stop 2>$null | Out-Null
     & $svcExe uninstall 2>$null | Out-Null
