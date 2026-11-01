@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WinSW template for the MohasebProPG service.
+  install-services.ps1 replaces the __TOKENS__ and installs this file
+  next to a copy of WinSW named MohasebProPG.exe.
+  The server itself runs as a dedicated low-privilege local account;
+  PostgreSQL refuses to run as an administrator.
+-->
+<service>
+  <id>MohasebProPG</id>
+  <name>Mohaseb Pro Database (PostgreSQL)</name>
+  <description>Bundled PostgreSQL server for Mohaseb Pro. Managed by the Mohaseb Pro installer; do not edit manually.</description>
+  <executable>%SystemRoot%\System32\cmd.exe</executable>
+  <arguments>/c "__APPDIR__\runtime\pg-start.cmd"</arguments>
+  <workingdirectory>__DATADIR__</workingdirectory>
+  <env name="MOHASEB_HOME" value="__DATADIR__" />
+  <env name="MOHASEB_PG_PORT" value="__PGPORT__" />
+  <serviceaccount>
+    <user>.\__PGACCOUNT__</user>
+    <password>__PGACCOUNTPW__</password>
+    <allowservicelogon>true</allowservicelogon>
+  </serviceaccount>
+  <startmode>Automatic</startmode>
+  <logpath>__DATADIR__\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>4</keepFiles>
+  </log>
+  <onfailure action="restart" delay="10 sec" />
+  <stoptimeout>60sec</stoptimeout>
+</service>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WinSW template for the MohasebPro application service.
+  install-services.ps1 replaces the __TOKENS__ and installs this file
+  next to a copy of WinSW named MohasebPro.exe. The app runs the
+  bundled embedded Python with runtime/launcher.py, in-process, as
+  LocalSystem.
+-->
+<service>
+  <id>MohasebPro</id>
+  <name>Mohaseb Pro</name>
+  <description>Mohaseb Pro invoicing application (web UI + API on one port). Managed by the Mohaseb Pro installer.</description>
+  <executable>__APPDIR__\runtime\python\python.exe</executable>
+  <arguments>"__APPDIR__\runtime\launcher.py"</arguments>
+  <workingdirectory>__APPDIR__\backend</workingdirectory>
+  <env name="MOHASEB_HOME" value="__DATADIR__" />
+  <depend>MohasebProPG</depend>
+  <startmode>Automatic</startmode>
+  <logpath>__DATADIR__\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+  <onfailure action="restart" delay="10 sec" />
+  <stoptimeout>30sec</stoptimeout>
+</service>

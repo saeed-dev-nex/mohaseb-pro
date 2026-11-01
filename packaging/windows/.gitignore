@@ -1,0 +1,5 @@
+# Build-machine artifacts: downloaded prerequisites, the staged
+# payload tree and the compiled installer are never committed.
+.cache/
+dist-stage/
+output/
