@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import os
 import shutil
 import subprocess
 import sys
@@ -77,7 +78,15 @@ def build_frontend(stage: Path) -> None:
     frontend = REPO / "frontend"
     if not (frontend / "node_modules").exists():
         run([npm, "ci"], cwd=frontend)
-    run([npm, "run", "build"], cwd=frontend)
+    # The package serves the API from the SAME origin as the page
+    # (single-port Daphne). Declare that at build time: without a
+    # configured VITE_API_URL, the app's resolver rewrites the dev /
+    # preview ports (5173, 4173) to a separate dev backend on :8000 —
+    # correct for its two-process dev mode, fatal for the package,
+    # where :8000 is dead and every API call is refused. A relative
+    # "/api" is the resolver's supported same-origin configuration.
+    env = {**os.environ, "VITE_API_URL": "/api"}
+    run([npm, "run", "build"], cwd=frontend, env=env)
     dest = stage / "frontend" / "dist"
     shutil.copytree(frontend / "dist", dest)
     print(f"frontend dist -> {dest}")
