@@ -650,11 +650,14 @@ const InvoiceForm = () => {
   }, []);
 
   const [form, setForm] = useState<InvoiceFormState>(() => {
-    // New invoices start from the operator's last-used status/card source.
+    // New invoices always start UNPAID (pending): the operator marks an
+    // invoice paid explicitly. Only the card source is remembered from
+    // the operator defaults — a remembered "paid" status here silently
+    // hid invoices from the default (pending) list filter.
     const defaults = loadInvoiceDefaults();
     return {
       customer: "",
-      status: defaults.status || "pending",
+      status: "pending",
       card_payment_source: defaults.card_payment_source || "customer",
       date: new Date().toISOString().slice(0, 10),
       due_date: "",
@@ -710,15 +713,12 @@ const InvoiceForm = () => {
   }, [queryClient]);
 
   // Maps an API invoice into form state. In clone mode the copy becomes a
-  // fresh invoice: today's date, no due date, and the operator's default
-  // status — payments are never carried over.
+  // fresh invoice: today's date, no due date, and status reset to unpaid
+  // (pending) — payments are never carried over.
   const applyInvoiceData = useCallback((data: any, forClone: boolean) => {
-    const defaults = loadInvoiceDefaults();
     setForm({
       customer: data.customer || "",
-      status: forClone
-        ? defaults.status || "pending"
-        : data.status || "pending",
+      status: forClone ? "pending" : data.status || "pending",
       card_payment_source: data.card_payment_source || "customer",
       date: forClone
         ? new Date().toISOString().slice(0, 10)
@@ -924,7 +924,7 @@ const InvoiceForm = () => {
     const defaults = loadInvoiceDefaults();
     setForm({
       customer: "",
-      status: defaults.status || "pending",
+      status: "pending",
       card_payment_source: defaults.card_payment_source || "customer",
       date: new Date().toISOString().slice(0, 10),
       due_date: "",
