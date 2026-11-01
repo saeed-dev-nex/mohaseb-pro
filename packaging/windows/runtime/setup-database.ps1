@@ -1,4 +1,4 @@
-# Mohaseb Pro - database provisioning (runs elevated during install).
+﻿# Mohaseb Pro - database provisioning (runs elevated during install).
 #
 # Fresh installs: creates the low-privilege MohasebPG account, installs
 # and starts the bundled PostgreSQL service, creates the application
@@ -49,6 +49,14 @@ function Set-DataDirAcl([string]$Account) {
     # to SYSTEM + Administrators; the DB account only gets the pgdata
     # subtree (granted separately once the cluster exists).
     icacls $DataDir /inheritance:r /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
+    # The service account must traverse the data-dir root and write the
+    # database service's wrapper logs: WinSW itself runs as the account,
+    # and without these grants the service dies before PostgreSQL even
+    # starts. (RX) has no inheritance flags, so it does NOT expose
+    # config.ini or other files inside to the account.
+    icacls $DataDir /grant:r "${Account}:(RX)" | Out-Null
+    $logs = Join-Path $DataDir 'logs'
+    icacls $logs /grant:r "${Account}:(OI)(CI)M" 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
     $pgdata = Join-Path $DataDir 'pgdata'
     if (-not (Test-Path $pgdata)) { New-Item -ItemType Directory -Path $pgdata -Force | Out-Null }
     icacls $pgdata /grant:r "${Account}:(OI)(CI)F" 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
@@ -125,6 +133,27 @@ try {
         Write-Log 'Existing config.ini found (upgrade): keeping config and DB credentials.'
         Install-PgService $PgAccount $accountPassword
         if (-not (Wait-PgReady 120)) { throw 'PostgreSQL did not become ready after upgrade.' }
+        # A previous install may have died between writing config.ini
+        # and creating the application role/database; make sure both
+        # exist, using the password already recorded in config.ini.
+        $superPwFile = Join-Path $DataDir 'pg-super.pw'
+        $urlLine = Get-Content $ConfigPath | Where-Object { $_ -match '^\s*url\s*=' } | Select-Object -First 1
+        if ((Test-Path $superPwFile) -and $urlLine -and ($urlLine -match 'postgres://[^:]+:([^@]+)@')) {
+            $existingDbPw = $Matches[1]
+            $superPw = (Get-Content $superPwFile -Raw).Trim()
+            Invoke-Psql $superPw @"
+DO `$`$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$PgUser') THEN
+    CREATE ROLE $PgUser LOGIN PASSWORD '$existingDbPw';
+  ELSE
+    ALTER ROLE $PgUser WITH LOGIN PASSWORD '$existingDbPw';
+  END IF;
+END `$`$;
+SELECT 'CREATE DATABASE $PgDb OWNER $PgUser'
+  WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$PgDb')\gexec
+"@
+            Write-Log 'Application role and database verified for upgrade.'
+        }
         Write-Log 'PostgreSQL service refreshed and running.'
         exit 0
     }

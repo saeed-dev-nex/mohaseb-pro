@@ -53,6 +53,8 @@ Source: "dist-stage\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\محاسب پرو"; Filename: "http://localhost:4173"
+Name: "{group}\عیب‌یابی محاسب پرو"; Filename: "powershell.exe"; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\runtime\collect-diagnostics.ps1"""
 Name: "{group}\پوشهٔ داده‌ها و پشتیبان"; Filename: "{#DataDir}"
 Name: "{group}\حذف نصب محاسب پرو"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\محاسب پرو"; Filename: "http://localhost:4173"; Tasks: desktopicon
@@ -67,6 +69,12 @@ Filename: "powershell.exe"; \
 Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\runtime\install-services.ps1"" -InstallDir ""{app}"" -DataDir ""{#DataDir}"""; \
   StatusMsg: "در حال نصب سرویس برنامه…"; Flags: runhidden waituntilterminated
+; 2b) Verify the app actually answers, and tell the user the outcome.
+;     First start includes cluster initdb + migrations, so this polls
+;     for up to ~150 seconds. The script always exits 0.
+Filename: "powershell.exe"; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\runtime\verify-install.ps1"""; \
+  StatusMsg: "در حال بررسی اجرای سرویس…"; Flags: waituntilterminated
 ; 3) Optional LAN access through the Windows firewall (private profile).
 Filename: "netsh.exe"; \
   Parameters: "advfirewall firewall delete rule name=""Mohaseb Pro"""; \
