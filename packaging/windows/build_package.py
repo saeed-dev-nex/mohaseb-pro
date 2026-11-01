@@ -123,6 +123,15 @@ def build_python(cache: Path, stage: Path) -> None:
         "--target", str(site_packages),
         *PY_PLATFORM, "--implementation", "cp", "--abi", "cp312",
         "--only-binary=:all:", "-r", str(REPO / "backend" / "requirements.txt"))
+    # Put the app's backend dir on sys.path for EVERY process using
+    # this interpreter (the launcher inserts it for itself, but its
+    # `manage.py migrate` subprocess cannot import `core` otherwise:
+    # the embedded interpreter's ._pth path setup does not add the
+    # script's directory). A .pth line is resolved relative to the
+    # site-packages folder: ...\runtime\python\Lib\site-packages
+    # -> up 3 -> {app} -> backend.
+    (site_packages / "mohaseb-backend.pth").write_text(
+        "..\\..\\..\\backend\n", encoding="ascii")
     wheels = sorted(p.name for p in wheelhouse.glob("*.whl"))
     print(f"site-packages populated from {len(wheels)} wheels")
     (stage / "BUILD-WHEELS.txt").write_text("\n".join(wheels) + "\n", encoding="utf-8")
