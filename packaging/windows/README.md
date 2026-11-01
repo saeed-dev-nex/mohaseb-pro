@@ -42,7 +42,8 @@
 ## ساخت بسته (روی ماشین توسعه)
 
 پیش‌نیازهای **ماشین ساخت** (نه ماشین کاربر): Python 3، ‏Node.js LTS و
-Inno Setup 6.
+Inno Setup 6 یا 7 (اسکریپت ساخت هر دو را خودکار پیدا می‌کند؛ در صورت
+نیاز مسیر ISCC.exe را با `-IsccPath` بدهید).
 
 ```powershell
 cd packaging\windows
