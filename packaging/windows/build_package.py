@@ -123,6 +123,18 @@ def build_python(cache: Path, stage: Path) -> None:
         "--target", str(site_packages),
         *PY_PLATFORM, "--implementation", "cp", "--abi", "cp312",
         "--only-binary=:all:", "-r", str(REPO / "backend" / "requirements.txt"))
+    # The system-tray companion's deps (packaging-only, exact pins in
+    # tray-requirements.txt — NOT part of the web app) join the same
+    # site-packages so the bundled pythonw.exe can run tray_app.py.
+    tray_req = HERE / "tray-requirements.txt"
+    pip("download", "-r", str(tray_req),
+        *PY_PLATFORM, "--only-binary=:all:", "-d", str(wheelhouse))
+    pip("install", "--no-index", "--find-links", str(wheelhouse),
+        "--target", str(site_packages),
+        *PY_PLATFORM, "--implementation", "cp", "--abi", "cp312",
+        "--only-binary=:all:", "-r", str(tray_req))
+    print("tray companion deps installed (pystray + Pillow)")
+
     # Put the app's backend dir on sys.path for EVERY process using
     # this interpreter (the launcher inserts it for itself, but its
     # `manage.py migrate` subprocess cannot import `core` otherwise:

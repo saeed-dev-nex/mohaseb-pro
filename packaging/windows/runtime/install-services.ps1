@@ -55,6 +55,19 @@ try {
     & $svcExe uninstall 2>$null | Out-Null
     & $svcExe install | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "WinSW install for MohasebPro failed ($LASTEXITCODE)" }
+    # Let standard users control this service from the tray icon
+    # without elevation: the default service security descriptor plus
+    # query-status (LC), start (RP) and stop (WP) for Builtin Users
+    # (BU). Non-fatal — the service itself is already installed.
+    try {
+        $sddl = 'D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)(A;;LCRPWP;;;BU)'
+        & sc.exe sdset MohasebPro $sddl | Out-Null
+        if ($LASTEXITCODE -eq 0) { Write-Log 'Granted local users start/stop rights on the MohasebPro service (tray control).' }
+        else { Write-Log "WARNING: sc sdset returned $LASTEXITCODE; tray start/stop may need elevation." }
+    }
+    catch {
+        Write-Log "WARNING: could not set service permissions: $($_.Exception.Message)"
+    }
     & $svcExe start | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "MohasebPro service failed to start ($LASTEXITCODE)" }
     Write-Log 'MohasebPro service installed and started.'

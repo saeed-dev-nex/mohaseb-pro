@@ -58,6 +58,13 @@ Name: "{group}\عیب‌یابی محاسب پرو"; Filename: "powershell.exe";
 Name: "{group}\پوشهٔ داده‌ها و پشتیبان"; Filename: "{#DataDir}"
 Name: "{group}\حذف نصب محاسب پرو"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\محاسب پرو"; Filename: "http://localhost:4173"; Tasks: desktopicon
+; System-tray companion (Plex-style): status + start/stop next to the
+; clock. Starts with the installing user's logon; also in Start Menu.
+Name: "{userstartup}\Mohaseb Pro Tray"; Filename: "{app}\runtime\python\pythonw.exe"; \
+  Parameters: """{app}\runtime\tray_app.py"""; WorkingDir: "{app}\runtime"; \
+  Comment: "آیکن وضعیت و کنترل سرور محاسب پرو"
+Name: "{group}\آیکن سینی محاسب پرو"; Filename: "{app}\runtime\python\pythonw.exe"; \
+  Parameters: """{app}\runtime\tray_app.py"""; WorkingDir: "{app}\runtime"
 
 [Run]
 ; 1) Provision the database (account, PostgreSQL service, role + db,
@@ -90,6 +97,12 @@ Filename: "netsh.exe"; \
 ;    enough if the page is not ready yet.
 Filename: "http://localhost:4173"; Description: "باز کردن محاسب پرو (شروع اول ممکن است کمی طول بکشد)"; \
   Flags: postinstall shellexec nowait skipifsilent unchecked
+; 5) Start the tray companion right away (it also auto-starts at logon
+;    via the Startup shortcut). Windowless pythonw; single-instance.
+Filename: "{app}\runtime\python\pythonw.exe"; \
+  Parameters: """{app}\runtime\tray_app.py"""; WorkingDir: "{app}\runtime"; \
+  Description: "نمایش آیکن محاسب پرو کنار ساعت (وضعیت و کنترل سرور)"; \
+  Flags: postinstall nowait skipifsilent
 
 [UninstallRun]
 Filename: "powershell.exe"; \

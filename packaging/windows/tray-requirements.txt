@@ -1,0 +1,7 @@
+# Packaging-only dependencies for the system-tray companion
+# (runtime/tray_app.py). These are NOT part of the web application:
+# they are installed into the same bundled site-packages by
+# build_package.py. Pillow is ranged (not pinned) so it lands on the
+# same version the backend dependency closure already provides.
+pystray==0.19.5
+Pillow>=11
