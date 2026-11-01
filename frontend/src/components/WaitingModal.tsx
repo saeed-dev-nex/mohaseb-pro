@@ -27,7 +27,7 @@ const WaitingModal: React.FC = () => {
   if (!active) return null;
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[300] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm"
       role="alertdialog"
       aria-modal="true"
       aria-label={message || "در حال انجام عملیات"}

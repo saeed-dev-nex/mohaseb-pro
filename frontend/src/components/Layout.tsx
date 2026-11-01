@@ -26,6 +26,7 @@ import {
   loadShortcuts,
 } from "../lib/shortcuts";
 import type { ShortcutMap } from "../lib/shortcuts";
+import { isWaitingActive } from "../lib/waiting";
 import WaitingModal from "./WaitingModal";
 
 type ChatNotice = { sender: string; text: string };
@@ -384,7 +385,7 @@ const Layout = () => {
       }
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.repeat) return;
+      if (e.repeat || isWaitingActive()) return;
       for (const [id, combo] of Object.entries(shortcutMap)) {
         if (combo && eventMatchesCombo(e, combo)) {
           if (run(id)) e.preventDefault();

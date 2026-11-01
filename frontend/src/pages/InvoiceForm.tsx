@@ -27,6 +27,7 @@ import JalaliDatePicker from "../components/JalaliDatePicker";
 import SearchableSelect from "../components/SearchableSelect";
 import { toPersianKeyboard } from "../utils/persian";
 import { isMotoPlate } from "../lib/vehicle";
+import { hideWaiting, showWaiting } from "../lib/waiting";
 import { VehicleInfoFields } from "../components/VehicleInfoFields";
 import { Field, Section, inputCls, selectCls } from "../components/FormSection";
 
@@ -868,6 +869,9 @@ const InvoiceForm = () => {
 
   // ── Draft autosave (new invoices only) ──────────────────────────
   const draftReadyRef = useRef(false);
+  // In-flight lock + waiting modal: while this user's save is running,
+  // no second submit (double click / Enter / shortcut) can start.
+  const submitLockRef = useRef(false);
   useEffect(() => {
     if (!isEdit && !cloneId) {
       try {
@@ -1006,6 +1010,7 @@ const InvoiceForm = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitLockRef.current) return;
     if (!form.customer) {
       setError("لطفاً مشتری را انتخاب کنید");
       return;
@@ -1016,6 +1021,8 @@ const InvoiceForm = () => {
     }
     setError("");
     setSaving(true);
+    submitLockRef.current = true;
+    showWaiting(isEdit ? "در حال ذخیرهٔ فاکتور…" : "در حال ثبت فاکتور…");
     const payload = {
       ...form,
       customer: Number(form.customer),
@@ -1073,6 +1080,8 @@ const InvoiceForm = () => {
         typeof msg === "object" ? JSON.stringify(msg) : "خطا در ذخیره فاکتور",
       );
     } finally {
+      submitLockRef.current = false;
+      hideWaiting();
       setSaving(false);
     }
   };
