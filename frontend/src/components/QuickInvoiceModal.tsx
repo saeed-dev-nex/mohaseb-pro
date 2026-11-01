@@ -17,6 +17,7 @@ import {
 } from "../utils/persian";
 import { MOTO_BRANDS } from "../lib/vehicle";
 import { enqueueQuickInvoice } from "../lib/offlineQueue";
+import { hideWaiting, showWaiting } from "../lib/waiting";
 
 const YEAR_OPTIONS = jalaliYearRange(1360, currentJalaliYear());
 
@@ -335,6 +336,9 @@ const QuickInvoiceModal = ({
   // One idempotency key per draft: retries (manual or from the offline
   // queue) resend the same key and the server dedupes them.
   const draftKeyRef = useRef<string | null>(null);
+  // In-flight lock + waiting modal: while this user's save is running,
+  // no second submit (double click / Ctrl+Enter / shortcut) can start.
+  const submitLockRef = useRef(false);
   const ensureDraftKey = () => {
     if (!draftKeyRef.current) {
       draftKeyRef.current =
@@ -632,6 +636,7 @@ const QuickInvoiceModal = ({
   };
 
   const handleSubmit = async () => {
+    if (submitLockRef.current) return;
     if (!customerName.trim()) {
       setError("نام مشتری الزامی است");
       setStep(1);
@@ -649,6 +654,8 @@ const QuickInvoiceModal = ({
     }
     setError("");
     setSaving(true);
+    submitLockRef.current = true;
+    showWaiting("در حال ثبت فاکتور…");
     let payload: any = null;
     try {
       payload = {
@@ -720,6 +727,8 @@ const QuickInvoiceModal = ({
           : "خطا در صدور فاکتور",
       );
     } finally {
+      submitLockRef.current = false;
+      hideWaiting();
       setSaving(false);
     }
   };

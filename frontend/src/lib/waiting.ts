@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 
 /**
  * Global "please wait" state for long-running operations (backup,
- * restore, exports…). Call showWaiting() before the await and
+ * restore, exports, invoice saving…). Call showWaiting() before the await and
  * hideWaiting() in a finally; <WaitingModal/> (mounted once in Layout)
  * renders the blocking overlay. A single shared slot is enough: these
  * operations are user-triggered one at a time.
@@ -27,6 +27,10 @@ function subscribe(cb: () => void): () => void {
 export function showWaiting(message: string): void {
   state = { active: true, message, since: Date.now() };
   emit();
+}
+
+export function isWaitingActive(): boolean {
+  return state.active;
 }
 
 export function hideWaiting(): void {
