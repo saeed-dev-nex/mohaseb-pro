@@ -73,11 +73,15 @@ Name: "{group}\آیکن سینی محاسب پرو"; Filename: "{app}\runtime\py
 ;    {commonappdata}\MohasebPro\logs\provisioning-console.log, so a
 ;    failed step can never again pass without a trace.
 Filename: "{cmd}"; \
-  Parameters: "/c ""{app}\runtime\run-setup-database.cmd"" ""{app}"" ""{#DataDir}"""; \
+  Parameters: "/c ""{app}\runtime\run-setup-database.cmd"""; \
   StatusMsg: "در حال راه‌اندازی پایگاه داده…"; Flags: runhidden waituntilterminated
 ; 2) Install + start the application service (same shim pattern).
+;    NOTE: the shims take NO arguments — cmd /c strips the first and
+;    last quote when the line holds several quoted segments, which
+;    silently mangled the earlier arg-passing form. Paths are derived
+;    inside the shims (%~dp0 and %ProgramData%).
 Filename: "{cmd}"; \
-  Parameters: "/c ""{app}\runtime\run-install-services.cmd"" ""{app}"" ""{#DataDir}"""; \
+  Parameters: "/c ""{app}\runtime\run-install-services.cmd"""; \
   StatusMsg: "در حال نصب سرویس برنامه…"; Flags: runhidden waituntilterminated
 ; 2b) Verify the app actually answers, and tell the user the outcome.
 ;     First start includes cluster initdb + migrations, so this polls
