@@ -36,7 +36,24 @@ if not SECRET_KEY:
             'DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is off. '
             'See .env.example in the repository root.'
         )
-    SECRET_KEY = secrets.token_urlsafe(50)
+    # Dev fallback: generate the key ONCE and persist it in
+    # backend/.secret_key — the same gitignored file run_production.bat
+    # maintains (it loads the file into DJANGO_SECRET_KEY, so both paths
+    # converge on one stable key). A fresh random key per boot silently
+    # orphaned everything encrypted under it: the cloud-backup secrets
+    # (api/secret_store derives its Fernet key from SECRET_KEY) read back
+    # as "not saved" after every restart, and sessions died with it.
+    _secret_key_file = BASE_DIR / '.secret_key'
+    try:
+        SECRET_KEY = _secret_key_file.read_text(encoding='utf-8').strip()
+    except OSError:
+        SECRET_KEY = ''
+    if not SECRET_KEY:
+        SECRET_KEY = secrets.token_urlsafe(50)
+        try:
+            _secret_key_file.write_text(SECRET_KEY, encoding='utf-8')
+        except OSError:
+            pass  # Read-only tree: keep the per-boot key for this run only.
 
 ALLOWED_HOSTS = [
     host.strip()
