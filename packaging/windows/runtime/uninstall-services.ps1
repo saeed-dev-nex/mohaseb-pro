@@ -1,4 +1,4 @@
-# Mohaseb Pro - service removal (runs elevated during uninstall).
+﻿# Mohaseb Pro - service removal (runs elevated during uninstall).
 # Stops and unregisters both services. The data directory
 # (%ProgramData%\MohasebPro: database cluster, config, media, logs) is
 # intentionally kept; the uninstaller only removes program files.
@@ -6,6 +6,13 @@
 param(
     [Parameter(Mandatory = $true)][string]$InstallDir
 )
+
+# The PostgreSQL service is registered by pg_ctl (not WinSW).
+$pgCtl = Join-Path $InstallDir 'pgsql\bin\pg_ctl.exe'
+if (Test-Path $pgCtl) {
+    Stop-Service -Name 'MohasebProPG' -Force -ErrorAction SilentlyContinue
+    & $pgCtl unregister -N MohasebProPG 2>$null | Out-Null
+}
 
 foreach ($name in @('MohasebPro', 'MohasebProPG')) {
     $svcExe = Join-Path $InstallDir "tools\$name.exe"
