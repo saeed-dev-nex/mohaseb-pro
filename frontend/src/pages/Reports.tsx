@@ -4,6 +4,7 @@ import { invoicesAPI } from "../services/api";
 import { hideWaiting, showWaiting } from "../lib/waiting";
 import JalaliDatePicker from "../components/JalaliDatePicker";
 import { Button, StatCard } from "../components/ui";
+import { jalaliMonthStartISO, jalaliPrevMonthRangeISO } from "../utils/persian";
 
 const fmt = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0) + " تومان";
@@ -69,7 +70,7 @@ type ReportData = {
   expense_total: number;
   net_profit: number | string;
   by_status?: Record<string, { count: number; amount: number }>;
-  monthly?: { month: string; received: number | string }[];
+  monthly?: { month: string; label?: string; received: number | string }[];
   expense_categories?: { name: string; amount: number }[];
   top_customers?: { name: string; count: number; amount: number }[];
   top_services?: { name: string; amount: number }[];
@@ -79,13 +80,10 @@ type ReportData = {
 
 const Reports = () => {
   const today = new Date().toISOString().slice(0, 10);
-  const firstOfMonth = new Date(
-    new Date().getFullYear(),
-    new Date().getMonth(),
-    1,
-  )
-    .toISOString()
-    .slice(0, 10);
+  // "This month" is the current JALALI month (e.g. آبان starts Oct 23),
+  // not the Gregorian one — the whole app runs on Shamsi dates.
+  const firstOfMonth = jalaliMonthStartISO();
+  const prevMonth = jalaliPrevMonthRangeISO();
 
   const [dateFrom, setDateFrom] = useState(firstOfMonth);
   const [dateTo, setDateTo] = useState(today);
@@ -241,16 +239,8 @@ const Reports = () => {
               { label: "این ماه", f: firstOfMonth, t: today },
               {
                 label: "ماه گذشته",
-                f: new Date(
-                  new Date().getFullYear(),
-                  new Date().getMonth() - 1,
-                  1,
-                )
-                  .toISOString()
-                  .slice(0, 10),
-                t: new Date(new Date().getFullYear(), new Date().getMonth(), 0)
-                  .toISOString()
-                  .slice(0, 10),
+                f: prevMonth.from,
+                t: prevMonth.to,
               },
               { label: "همه", f: "2020-01-01", t: today },
             ].map((q) => (
@@ -362,7 +352,9 @@ const Reports = () => {
                       key={row.month}
                       className="grid grid-cols-[5rem_1fr_auto] gap-3 items-center text-xs"
                     >
-                      <span className="text-slate-400">{row.month}</span>
+                      <span className="text-slate-400">
+                        {row.label ?? row.month}
+                      </span>
                       <div className="h-2 rounded bg-slate-700 overflow-hidden">
                         <div
                           className="h-full rounded bg-emerald-500"

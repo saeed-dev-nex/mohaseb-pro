@@ -13,7 +13,7 @@ from django.db.models.functions import Coalesce
 from django.db import transaction, connection
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
-from datetime import timedelta, date
+from datetime import timedelta, date, datetime, time
 from django.http import JsonResponse, HttpResponse
 from django.http import FileResponse
 from django.core.paginator import Paginator, EmptyPage
@@ -106,16 +106,20 @@ class DashboardViewSet(viewsets.ViewSet):
         # Total expenses
         total_expenses = Expense.objects.aggregate(t=Sum('amount'))['t'] or 0
 
-        # Monthly revenue (last 6 months)
+        # Monthly revenue (last 6 months) — JALALI months: in this app a
+        # month is a Shamsi month (e.g. آبان runs Oct 23 – Nov 21), so the
+        # buckets follow Jalali boundaries, never Gregorian ones.
+        from ..jalali import gregorian_to_jalali, jalali_month_bounds, jalali_month_label
         monthly_revenue = []
+        today_local = now.date()
+        cur_jy, cur_jm, _ = gregorian_to_jalali(today_local.year, today_local.month, today_local.day)
         for i in range(5, -1, -1):
-            absolute_month = now.year * 12 + now.month - 1 - i
+            absolute_month = cur_jy * 12 + (cur_jm - 1) - i
             month_year, month_zero_indexed = divmod(absolute_month, 12)
             month_number = month_zero_indexed + 1
-            month_start = now.replace(year=month_year, month=month_number, day=1, hour=0, minute=0, second=0, microsecond=0)
-            next_absolute_month = absolute_month + 1
-            next_year, next_zero_indexed = divmod(next_absolute_month, 12)
-            month_end = month_start.replace(year=next_year, month=next_zero_indexed + 1)
+            start_date, next_start_date = jalali_month_bounds(month_year, month_number)
+            month_start = datetime.combine(start_date, time.min, tzinfo=now.tzinfo)
+            month_end = datetime.combine(next_start_date, time.min, tzinfo=now.tzinfo)
 
             revenue = Invoice.objects.filter(
                 Q(status='paid') | Q(commission_paid=True),
@@ -124,13 +128,13 @@ class DashboardViewSet(viewsets.ViewSet):
             ).aggregate(total=Sum('commission_total'))['total'] or 0
 
             expense = Expense.objects.filter(
-                date__gte=month_start.date(),
-                date__lt=month_end.date()
+                date__gte=start_date,
+                date__lt=next_start_date
             ).aggregate(total=Sum('amount'))['total'] or 0
 
             monthly_revenue.append({
                 'month': f'{month_year:04d}-{month_number:02d}',
-                'label': f'{month_number}/{month_year}',
+                'label': jalali_month_label(month_year, month_number),
                 'revenue': int(revenue),
                 'expense': int(expense),
                 'profit': int(revenue) - int(expense),

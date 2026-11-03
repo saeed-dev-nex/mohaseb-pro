@@ -12,6 +12,7 @@ from decimal import Decimal
 from django.db.models import F, Sum
 from django.utils import timezone
 
+from ..jalali import gregorian_to_jalali, jalali_month_label
 from ..models import Expense, Invoice, InvoiceItem, InvoicePayment
 from .money import payment_totals, safe_spreadsheet_cell
 
@@ -94,8 +95,16 @@ def build_report_data(date_from='', date_to='', status_filter='', customer_searc
         if invoice.status != 'cancelled':
             invoice_amount += final
 
-        month = timezone.localtime(invoice.date).strftime('%Y-%m') if invoice.date else 'نامشخص'
-        bucket = by_month.setdefault(month, {'count': 0, 'amount': 0, 'received': 0})
+        # Monthly buckets are JALALI months (the app's calendar), keyed by
+        # their Jalali 'YYYY-MM' so sorting stays chronological.
+        if invoice.date:
+            local_date = timezone.localtime(invoice.date).date()
+            jy, jm, _ = gregorian_to_jalali(local_date.year, local_date.month, local_date.day)
+            month = f'{jy:04d}-{jm:02d}'
+            month_label = jalali_month_label(jy, jm)
+        else:
+            month, month_label = 'نامشخص', 'نامشخص'
+        bucket = by_month.setdefault(month, {'count': 0, 'amount': 0, 'received': 0, 'label': month_label})
         bucket['count'] += 1
         bucket['amount'] += final
         bucket['received'] += paid_total
