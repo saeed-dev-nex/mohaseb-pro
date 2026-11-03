@@ -305,7 +305,9 @@ class FinancialRegressionTests(APITestCase):
         InvoicePayment.objects.create(invoice=invoice, amount=10, paid_at=invoice.date)
         with timezone.override('Asia/Tehran'):
             data, _ = build_report_data()
-            self.assertEqual(data['monthly'][0]['month'], '2027-01')
+            # Local date is 2027-01-01 (Tehran) = 11 Dey 1405; the monthly
+            # series buckets by Jalali month.
+            self.assertEqual(data['monthly'][0]['month'], '1405-10')
             workbook = load_workbook(io.BytesIO(build_excel_bytes()))
             self.assertEqual(workbook['فاکتورها']['C2'].value, '2027-01-01')
             self.assertEqual(workbook['پرداخت‌ها']['C2'].value, '2027-01-01 01:00')

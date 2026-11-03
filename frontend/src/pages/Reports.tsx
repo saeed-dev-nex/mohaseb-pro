@@ -70,7 +70,7 @@ type ReportData = {
   expense_total: number;
   net_profit: number | string;
   by_status?: Record<string, { count: number; amount: number }>;
-  monthly?: { month: string; received: number | string }[];
+  monthly?: { month: string; label?: string; received: number | string }[];
   expense_categories?: { name: string; amount: number }[];
   top_customers?: { name: string; count: number; amount: number }[];
   top_services?: { name: string; amount: number }[];
@@ -352,7 +352,9 @@ const Reports = () => {
                       key={row.month}
                       className="grid grid-cols-[5rem_1fr_auto] gap-3 items-center text-xs"
                     >
-                      <span className="text-slate-400">{row.month}</span>
+                      <span className="text-slate-400">
+                        {row.label ?? row.month}
+                      </span>
                       <div className="h-2 rounded bg-slate-700 overflow-hidden">
                         <div
                           className="h-full rounded bg-emerald-500"

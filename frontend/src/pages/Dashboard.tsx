@@ -119,6 +119,10 @@ const BarChart = ({ data }: { data: MonthData[] }) => {
       maximumFractionDigits: 1,
     }).format(value || 0);
   const monthLabel = (month: MonthData) => {
+    // The API buckets by Jalali month and sends its Persian label
+    // (e.g. «آبان ۱۴۰۵») — it is authoritative; the Intl path below is
+    // only a fallback for payloads without a label.
+    if (month.label) return month.label;
     const [year, number] = (month.month || "").split("-").map(Number);
     if (!year || !number) return month.label;
     return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {

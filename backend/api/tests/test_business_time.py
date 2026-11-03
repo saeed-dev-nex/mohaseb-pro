@@ -41,13 +41,18 @@ class BusinessTimeTests(APITestCase):
         self.assertEqual([row['id'] for row in response.data], [invoice.pk])
 
     def test_dashboard_and_report_share_local_month_boundary(self):
+        # 2026-10-31 21:30 UTC is already 2026-11-01 01:00 in Tehran —
+        # 10 Aban 1405. Both monthly series bucket by the JALALI month,
+        # so the invoice lands in 1405-08 on both.
         now = datetime(2026, 10, 31, 21, 30, tzinfo=datetime_timezone.utc)
         Invoice.objects.create(total_amount=100, commission_total=Decimal(10), status='paid', date=now)
         with patch('django.utils.timezone.now', return_value=now):
             dashboard = self.client.get('/api/dashboard/stats/')
             report = self.client.get('/api/invoices/report/')
         self.assertEqual(dashboard.status_code, 200)
-        self.assertEqual(dashboard.data['monthly_revenue'][-1]['month'], '2026-11')
+        self.assertEqual(dashboard.data['monthly_revenue'][-1]['month'], '1405-08')
+        self.assertEqual(dashboard.data['monthly_revenue'][-1]['label'], 'آبان ۱۴۰۵')
         self.assertEqual(dashboard.data['monthly_revenue'][-1]['revenue'], 10)
         self.assertEqual(report.status_code, 200)
-        self.assertEqual(report.data['monthly'][0]['month'], '2026-11')
+        self.assertEqual(report.data['monthly'][0]['month'], '1405-08')
+        self.assertEqual(report.data['monthly'][0]['label'], 'آبان ۱۴۰۵')
