@@ -103,6 +103,48 @@ export function currentJalaliYear(): number {
 }
 
 /**
+ * Jalali year + month (1-12) of a Gregorian Date.
+ */
+export function jalaliYearMonth(d: Date = new Date()): {
+  jy: number;
+  jm: number;
+} {
+  const { jy, jm } = _toJalali(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  return { jy, jm };
+}
+
+function _isoFromLocal(d: Date): string {
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * ISO (Gregorian) date of the FIRST day of the Jalali month containing
+ * `d` — e.g. any day in آبان maps to Oct 23. "This month" ranges in this
+ * app are Jalali months, never Gregorian ones.
+ */
+export function jalaliMonthStartISO(d: Date = new Date()): string {
+  const { jy, jm } = jalaliYearMonth(d);
+  return toGregorianStr(jy, jm, 1);
+}
+
+/**
+ * ISO range covering the whole Jalali month before the one containing
+ * `d`: from its 1st to the day before this month's 1st.
+ */
+export function jalaliPrevMonthRangeISO(d: Date = new Date()): {
+  from: string;
+  to: string;
+} {
+  const { jy, jm } = jalaliYearMonth(d);
+  const prev = jm === 1 ? { jy: jy - 1, jm: 12 } : { jy, jm: jm - 1 };
+  const from = toGregorianStr(prev.jy, prev.jm, 1);
+  const start = new Date(`${jalaliMonthStartISO(d)}T00:00:00`);
+  start.setDate(start.getDate() - 1);
+  return { from, to: _isoFromLocal(start) };
+}
+
+/**
  * Return array of Jalali years from startYear to endYear (inclusive).
  */
 export function jalaliYearRange(startYear: number, endYear: number): number[] {

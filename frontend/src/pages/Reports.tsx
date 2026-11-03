@@ -4,6 +4,7 @@ import { invoicesAPI } from "../services/api";
 import { hideWaiting, showWaiting } from "../lib/waiting";
 import JalaliDatePicker from "../components/JalaliDatePicker";
 import { Button, StatCard } from "../components/ui";
+import { jalaliMonthStartISO, jalaliPrevMonthRangeISO } from "../utils/persian";
 
 const fmt = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0) + " تومان";
@@ -79,13 +80,10 @@ type ReportData = {
 
 const Reports = () => {
   const today = new Date().toISOString().slice(0, 10);
-  const firstOfMonth = new Date(
-    new Date().getFullYear(),
-    new Date().getMonth(),
-    1,
-  )
-    .toISOString()
-    .slice(0, 10);
+  // "This month" is the current JALALI month (e.g. آبان starts Oct 23),
+  // not the Gregorian one — the whole app runs on Shamsi dates.
+  const firstOfMonth = jalaliMonthStartISO();
+  const prevMonth = jalaliPrevMonthRangeISO();
 
   const [dateFrom, setDateFrom] = useState(firstOfMonth);
   const [dateTo, setDateTo] = useState(today);
@@ -241,16 +239,8 @@ const Reports = () => {
               { label: "این ماه", f: firstOfMonth, t: today },
               {
                 label: "ماه گذشته",
-                f: new Date(
-                  new Date().getFullYear(),
-                  new Date().getMonth() - 1,
-                  1,
-                )
-                  .toISOString()
-                  .slice(0, 10),
-                t: new Date(new Date().getFullYear(), new Date().getMonth(), 0)
-                  .toISOString()
-                  .slice(0, 10),
+                f: prevMonth.from,
+                t: prevMonth.to,
               },
               { label: "همه", f: "2020-01-01", t: today },
             ].map((q) => (
