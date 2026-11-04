@@ -12,7 +12,7 @@ from .models import (
     Cheque, InvoiceSettings, ChatMessage, SocialNetwork, UserModuleAccess
 )
 from .validators import validate_customer_documents_path, validate_customer_identifier, validate_national_code_field, validate_tax_id
-from .services.money import invoice_payment_totals, final_amount, office_card_fee, MAX_INVOICE_AMOUNT, MAX_ITEM_AMOUNT
+from .services.money import invoice_payment_totals, final_amount, office_card_fee, compute_rounding_adjustment, MAX_INVOICE_AMOUNT, MAX_ITEM_AMOUNT
 
 
 class SafeTokenRefreshSerializer(TokenRefreshSerializer):
@@ -473,6 +473,12 @@ class InvoiceSerializer(serializers.ModelSerializer):
     tax = serializers.DecimalField(
         max_digits=5, decimal_places=2, required=False, default=0, min_value=0, max_value=100
     )
+    # Optional manual rounding target (the exact final amount the user
+    # wants). Write-only input: the persisted result is rounding_amount,
+    # derived server-side in validate() — never trusted from the client.
+    rounding_target = serializers.IntegerField(
+        write_only=True, required=False, allow_null=True, min_value=0
+    )
 
     class Meta:
         model = Invoice
@@ -481,7 +487,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'card_payment_source',
             'date', 'due_date', 'description', 'total_amount',
             'commission_total', 'discount', 'tax', 'status', 'status_display',
-            'commission_paid',
+            'commission_paid', 'rounding_enabled', 'rounding_amount', 'rounding_target',
             'paper_size', 'final_amount', 'items', 'created_at', 'updated_at',
             'edit_request_status', 'can_edit', 'payments', 'paid_amount', 'remaining_amount',
             # vehicle / custom fields
@@ -489,7 +495,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'vehicle_year', 'custom_fields', 'created_by',
             'green_card_owner_name', 'green_card_owner_national_id', 'tags',
         ]
-        read_only_fields = ['invoice_number', 'created_at', 'updated_at', 'created_by']
+        read_only_fields = ['invoice_number', 'created_at', 'updated_at', 'created_by', 'rounding_amount']
 
 
     def get_operator_name(self, obj):
@@ -570,7 +576,37 @@ class InvoiceSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         # Client totals are never trusted; include the generated fee before checking limits.
         attrs['total_amount'] = self._validated_total(attrs)
+        self._apply_rounding(attrs)
         return attrs
+
+    def _apply_rounding(self, attrs):
+        """Derive the persisted rounding_amount from the trusted total.
+
+        Runs only when the payload touches rounding; a manual
+        rounding_target wins, otherwise the final rounds to the nearest
+        10,000 Toman (remainders of 5,000+ round up). create()/update()
+        re-validate the already-validated data — the target is consumed
+        on the first pass, so a second pass keeps the derived amount.
+        """
+        target = attrs.pop('rounding_target', None)
+        if target is None and 'rounding_amount' in attrs:
+            return
+        if 'rounding_enabled' not in attrs and target is None:
+            return
+        enabled = attrs.get(
+            'rounding_enabled', getattr(self.instance, 'rounding_enabled', False))
+        if not enabled:
+            attrs['rounding_amount'] = Decimal(0)
+            return
+        base = final_amount(
+            attrs['total_amount'],
+            *(attrs.get(field, getattr(self.instance, field, 0))
+              for field in ('tax', 'discount', 'commission_total')))
+        adjustment = compute_rounding_adjustment(base, target)
+        if not 0 <= int(base) + adjustment <= MAX_INVOICE_AMOUNT:
+            raise serializers.ValidationError(
+                {'rounding_target': 'مبلغ رندشده باید نامنفی و در محدودهٔ مجاز باشد.'})
+        attrs['rounding_amount'] = adjustment
 
     def _sync_office_card_fee(self, invoice, items_total):
         """Rebuild the generated office-card fee row from trusted invoice data."""

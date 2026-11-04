@@ -54,6 +54,9 @@ export type InvoiceData = {
   discount?: number;
   tax?: number;
   commission_total?: number;
+  final_amount?: number;
+  rounding_enabled?: boolean;
+  rounding_amount?: number;
   paid_amount?: number;
   remaining_amount?: number;
 };
