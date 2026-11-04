@@ -187,6 +187,8 @@ class Invoice(models.Model):
     commission_paid = models.BooleanField(default=False, verbose_name='کارمزد پرداخت شده')
     discount = models.DecimalField(max_digits=15, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='تخفیف')
     tax = models.DecimalField(max_digits=5, decimal_places=2, default=0, validators=[MinValueValidator(0), MaxValueValidator(100)], verbose_name='مالیات (%)')
+    rounding_enabled = models.BooleanField(default=False, verbose_name='رند کردن مبلغ فاکتور')
+    rounding_amount = models.DecimalField(max_digits=15, decimal_places=0, default=0, verbose_name='تعدیل رند (تومان)')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='وضعیت')
     invoice_number = models.CharField(max_length=50, unique=True, blank=True, verbose_name='شماره فاکتور')
     paper_size = models.CharField(max_length=10, choices=PAPER_SIZE_CHOICES, default='a5', verbose_name='سایز کاغذ')
@@ -242,7 +244,7 @@ class Invoice(models.Model):
 
     @property
     def final_amount(self):
-        return final_amount(self.total_amount, self.tax, self.discount, self.commission_total)
+        return final_amount(self.total_amount, self.tax, self.discount, self.commission_total) + self.rounding_amount
 
     def clean(self):
         super().clean()

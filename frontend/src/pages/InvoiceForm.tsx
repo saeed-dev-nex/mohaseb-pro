@@ -26,6 +26,7 @@ import PriceInput from "../components/PriceInput";
 import JalaliDatePicker from "../components/JalaliDatePicker";
 import SearchableSelect from "../components/SearchableSelect";
 import { toPersianKeyboard } from "../utils/persian";
+import { computeRoundingAdjustment } from "../utils/money";
 import { isMotoPlate } from "../lib/vehicle";
 import { hideWaiting, showWaiting } from "../lib/waiting";
 import { VehicleInfoFields } from "../components/VehicleInfoFields";
@@ -108,6 +109,8 @@ type InvoiceFormState = {
   discount: number | string;
   tax: number | string;
   commission_total: number | string;
+  rounding_enabled: boolean;
+  rounding_target: number | string;
   paper_size: string;
   vehicle_plate: string;
   vehicle_vin: string;
@@ -666,6 +669,8 @@ const InvoiceForm = () => {
       discount: 0,
       tax: 0,
       commission_total: 0,
+      rounding_enabled: false,
+      rounding_target: "",
       paper_size: "a5",
       vehicle_plate: "",
       vehicle_vin: "",
@@ -731,6 +736,12 @@ const InvoiceForm = () => {
       discount: data.discount || 0,
       tax: data.tax || 0,
       commission_total: data.commission_total || 0,
+      // Pin the current payable as the rounding target so an untouched
+      // edit (or a clone) keeps the exact rounded total it already has.
+      rounding_enabled: !!data.rounding_enabled,
+      rounding_target: data.rounding_enabled
+        ? String(data.final_amount || "")
+        : "",
       paper_size: data.paper_size || "a5",
       vehicle_plate: data.vehicle_plate || "",
       vehicle_vin: data.vehicle_vin || "",
@@ -936,6 +947,8 @@ const InvoiceForm = () => {
       discount: 0,
       tax: 0,
       commission_total: 0,
+      rounding_enabled: false,
+      rounding_target: "",
       paper_size: "a5",
       vehicle_plate: "",
       vehicle_vin: "",
@@ -978,6 +991,16 @@ const InvoiceForm = () => {
     commissionAmt +
     taxAmount -
     Number(form.discount || 0);
+  // Optional rounding (user's choice): a typed target wins; otherwise the
+  // final rounds to the nearest 10,000 Toman (5,000+ rounds up). The
+  // server re-derives the same adjustment — this is the live preview.
+  const roundingAdjustment = form.rounding_enabled
+    ? computeRoundingAdjustment(
+        finalAmount,
+        Number(form.rounding_target) > 0 ? Number(form.rounding_target) : null,
+      )
+    : 0;
+  const payableAmount = finalAmount + roundingAdjustment;
 
   const handleItemChange = useCallback(
     (idx: number, updated: InvoiceItemForm) => {
@@ -1005,8 +1028,10 @@ const InvoiceForm = () => {
   const handleAddFromPicker = (rows: InvoiceItemForm[]) =>
     setItems((prev) => [...prev, ...rows]);
 
-  const setField = (k: keyof InvoiceFormState, v: string | number | string[]) =>
-    setForm((f) => ({ ...f, [k]: v }) as InvoiceFormState);
+  const setField = (
+    k: keyof InvoiceFormState,
+    v: string | number | string[] | boolean,
+  ) => setForm((f) => ({ ...f, [k]: v }) as InvoiceFormState);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1029,6 +1054,11 @@ const InvoiceForm = () => {
       discount: Number(form.discount) || 0,
       tax: Number(form.tax) || 0,
       commission_total: Number(form.commission_total) || 0,
+      rounding_enabled: !!form.rounding_enabled,
+      rounding_target:
+        form.rounding_enabled && Number(form.rounding_target) > 0
+          ? Number(form.rounding_target)
+          : null,
       due_date: form.due_date || null,
       vehicle_year: form.vehicle_year || "",
       green_card_owner_name: form.green_card_owner_name || "",
@@ -1482,6 +1512,43 @@ const InvoiceForm = () => {
                 </p>
               </div>
 
+              {/* Optional rounding of the final amount */}
+              <div className="mt-4 bg-sky-500/5 border border-sky-500/25 rounded-xl p-4">
+                <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={!!form.rounding_enabled}
+                    onChange={(e) =>
+                      setField("rounding_enabled", e.target.checked)
+                    }
+                    className="accent-sky-500"
+                  />
+                  🔢 رند کردن مبلغ فاکتور
+                </label>
+                {form.rounding_enabled && (
+                  <div className="mt-3">
+                    <Field label="مبلغ نهایی دلخواه (اختیاری)">
+                      <PriceInput
+                        value={form.rounding_target}
+                        onChange={(v) => setField("rounding_target", v)}
+                        borderColor="border-sky-500/30 focus:ring-sky-500/30"
+                        blankWhenZero
+                      />
+                    </Field>
+                    <p className="text-sky-500/60 text-[10px] mt-2">
+                      اگر مبلغی وارد نکنید، مبلغ فاکتور به نزدیک‌ترین ۱۰ هزار
+                      تومان رند می‌شود: ریزِ کمتر از ۵ هزار تومان به پایین و ۵
+                      هزار تومان یا بیشتر به بالا.
+                    </p>
+                    <p className="text-sky-300 text-xs mt-2">
+                      مبلغ نهایی پس از رند: {fmt(payableAmount)}
+                      {roundingAdjustment !== 0 &&
+                        ` (${roundingAdjustment > 0 ? "+" : "−"}${fmt(Math.abs(roundingAdjustment))} تومان)`}
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <div className="mt-4 space-y-2 pt-4 border-t border-slate-700/50">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">جمع خدمات</span>
@@ -1520,10 +1587,19 @@ const InvoiceForm = () => {
                       </span>
                     </div>
                   )}
+                {form.rounding_enabled && roundingAdjustment !== 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-sky-400/80">رند مبلغ</span>
+                    <span className="text-sky-400">
+                      {roundingAdjustment > 0 ? "+" : "−"}
+                      {fmt(Math.abs(roundingAdjustment))}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between text-base font-bold border-t border-slate-600 pt-3">
                   <span className="text-white">جمع قابل پرداخت توسط مشتری</span>
                   <span className="text-blue-400 text-lg">
-                    {fmt(finalAmount)}
+                    {fmt(payableAmount)}
                   </span>
                 </div>
                 {Number(form.commission_total) > 0 && (
