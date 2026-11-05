@@ -12,6 +12,7 @@ import { F, Section, inp } from "./settings/shared";
 import { ServicePackagesSection } from "./settings/ServicePackagesSection";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { BackupTab } from "./settings/BackupTab";
+import { DatabaseTab } from "./settings/DatabaseTab";
 import { ServerFolderPicker } from "./settings/ServerFolderPicker";
 
 type ProfileForm = {
@@ -116,6 +117,12 @@ const Settings = () => {
       visible: isSuperuser,
     },
     { id: "backup", label: "پشتیبان‌گیری", icon: "💾", visible: isSuperuser },
+    {
+      id: "database",
+      label: "پایگاه داده",
+      icon: "🗄️",
+      visible: isSuperuser,
+    },
   ].filter((t) => t.visible);
   const [invoiceCfg, setInvoiceCfg] = useState<InvoiceCfg>({
     office_card_fee_threshold: 0,
@@ -1000,6 +1007,11 @@ const Settings = () => {
           {/* ── Backup Section ── */}
           {activeTab === "backup" && isSuperuser && (
             <BackupTab isSuperuser={isSuperuser} />
+          )}
+
+          {/* ── Database Section ── */}
+          {activeTab === "database" && isSuperuser && (
+            <DatabaseTab isSuperuser={isSuperuser} />
           )}
           <ServerFolderPicker
             open={docsPickerOpen}

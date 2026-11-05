@@ -121,7 +121,7 @@ CHANNEL_LAYERS = channel_layers_from_env()
 
 # SQLite file by default; set DATABASE_URL (e.g. a postgres:// URL) to
 # run on an external database — see core/db_config.py.
-DATABASES = databases_from_env(base_dir=BASE_DIR)
+DATABASES = databases_from_env(base_dir=BASE_DIR, secret_key=SECRET_KEY)
 
 
 # Password validation
