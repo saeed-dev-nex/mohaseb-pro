@@ -56,6 +56,13 @@ class ApiConfig(AppConfig):
         )
         if not should_start_backup_scheduler():
             return
+        # A staged PostgreSQL migration (Settings → پایگاه داده) imports
+        # its exported payload exactly once, here, before anything else
+        # serves traffic: the launchers have already run migrations
+        # against the new empty database, so the tables exist.
+        from .db_migration import perform_pending_migration
+
+        perform_pending_migration()
         from .scheduler import start_backup_scheduler
 
         start_backup_scheduler()

@@ -20,6 +20,16 @@ backend/db.sqlite3-shm
 backend/db.sqlite3-journal
 *.sqlite3-wal
 *.sqlite3-shm
+# Backup-scheduler interprocess lock on external databases: PostgreSQL
+# has no local DB file to anchor the lock to, so the scheduler keeps it
+# beside the project (backend/api/scheduler.py). A runtime file like
+# the ones above — it must never trip the updater's clean-tree check.
+backend/.backup-scheduler.lock
+# PostgreSQL migration wizard artifacts (Settings → پایگاه داده): the
+# config carries the encrypted database password, the pending file a
+# full data export — runtime files, never commit, never trip updates.
+backend/.db_config.json
+backend/.db_migration_pending.json
 backend/media/
 backend/staticfiles/
 .env

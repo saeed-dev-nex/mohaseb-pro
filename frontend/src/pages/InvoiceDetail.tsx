@@ -81,6 +81,7 @@ const InvoiceDetail = () => {
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
   // Optional rounding of the payable amount (same control as the form).
   const [roundingOn, setRoundingOn] = useState(false);
+  const [roundingShow, setRoundingShow] = useState(false);
   const [roundingTarget, setRoundingTarget] = useState<number | string>("");
   const [roundingSaving, setRoundingSaving] = useState(false);
   const [roundingMsg, setRoundingMsg] = useState("");
@@ -88,12 +89,18 @@ const InvoiceDetail = () => {
   useEffect(() => {
     if (!invoice) return;
     setRoundingOn(!!invoice.rounding_enabled);
+    setRoundingShow(!!invoice.rounding_show_amount);
     // Pin the current payable as the target so re-applying without
     // changes keeps the exact rounded total the invoice already has.
     setRoundingTarget(
       invoice.rounding_enabled ? String(invoice.final_amount || "") : "",
     );
-  }, [invoice?.id, invoice?.rounding_enabled, invoice?.rounding_amount]);
+  }, [
+    invoice?.id,
+    invoice?.rounding_enabled,
+    invoice?.rounding_amount,
+    invoice?.rounding_show_amount,
+  ]);
 
   const handleApplyRounding = async () => {
     if (!invoice) return;
@@ -106,6 +113,7 @@ const InvoiceDetail = () => {
           roundingOn && Number(roundingTarget) > 0
             ? Number(roundingTarget)
             : null,
+        rounding_show_amount: roundingShow,
       });
       setInvoice(data);
       window.dispatchEvent(new Event("mohaseb:data-changed"));
@@ -1444,6 +1452,18 @@ const InvoiceDetail = () => {
                         خالی بماند: رند به نزدیک‌ترین ۱۰ هزار تومان (ریزِ کمتر
                         از ۵ هزار به پایین، ۵ هزار و بیشتر به بالا).
                       </p>
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={roundingShow}
+                          onChange={(e) => setRoundingShow(e.target.checked)}
+                          className="accent-sky-500"
+                        />
+                        نمایش مبلغ رند در فاکتور
+                        <span className="text-slate-500">
+                          (پیش‌فرض: بدون نمایش)
+                        </span>
+                      </label>
                       <p className="text-sky-300 text-xs">
                         مبلغ نهایی پس از رند:{" "}
                         {fmt(roundingBase + roundingPreview)}
@@ -1504,15 +1524,16 @@ const InvoiceDetail = () => {
                       </span>
                     </div>
                   )}
-                {Number(invoice.rounding_amount || 0) !== 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">رند مبلغ</span>
-                    <span className="text-sky-400">
-                      {Number(invoice.rounding_amount) > 0 ? "+" : "−"}
-                      {fmt(Math.abs(Number(invoice.rounding_amount)))}
-                    </span>
-                  </div>
-                )}
+                {invoice.rounding_show_amount &&
+                  Number(invoice.rounding_amount || 0) !== 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">رند مبلغ</span>
+                      <span className="text-sky-400">
+                        {Number(invoice.rounding_amount) > 0 ? "+" : "−"}
+                        {fmt(Math.abs(Number(invoice.rounding_amount)))}
+                      </span>
+                    </div>
+                  )}
                 <div className="flex justify-between text-base font-bold border-t border-slate-600 pt-3">
                   <span className="text-slate-100">
                     جمع قابل پرداخت توسط مشتری

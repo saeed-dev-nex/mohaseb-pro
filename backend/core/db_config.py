@@ -8,14 +8,88 @@ purely through environment variables, with no code change:
 - ``DATABASE_URL``  e.g. ``postgres://user:pass@db-host:5432/mohaseb``
 - ``REDIS_URL``     e.g. ``redis://127.0.0.1:6379/0``
 
+Between the environment and the SQLite default sits one more source:
+the app-managed local config file ``backend/.db_config.json``, written
+by the in-app PostgreSQL migration wizard (Settings → پایگاه داده).
+It lets a non-technical user switch databases without ever touching a
+terminal or an environment variable. Precedence: ``DATABASE_URL`` wins
+(servers/Docker keep full control), then the local config file, then
+the historical SQLite default. The file is gitignored — it carries the
+database password, encrypted with the same Fernet derivation as
+``api/secret_store`` (SHA-256 of SECRET_KEY, ``enc:v1:`` prefix).
+
 Kept as pure functions of an environ mapping so they can be unit-tested
 without reloading Django settings.
 """
+import base64
+import hashlib
+import json
 import os
 from pathlib import Path
 
+LOCAL_DB_CONFIG_FILENAME = '.db_config.json'
+_SECRET_PREFIX = 'enc:v1:'
 
-def databases_from_env(environ=None, base_dir=None):
+
+def local_db_config_path(base_dir):
+    return Path(base_dir) / LOCAL_DB_CONFIG_FILENAME
+
+
+def _decrypt_local_secret(value, secret_key):
+    """Mirror of api.secret_store.decrypt_secret for settings-load time.
+
+    core/ cannot import api.secret_store while settings are still being
+    built, so the (small, stable) derivation is duplicated here; the
+    wizard's write side uses api.secret_store itself, and both must
+    agree — a test round-trips a value through both implementations.
+    """
+    if not value:
+        return ''
+    value = str(value)
+    if not value.startswith(_SECRET_PREFIX):
+        return value  # legacy plaintext, same passthrough as secret_store
+    if not secret_key:
+        return ''
+    from cryptography.fernet import Fernet, InvalidToken
+
+    digest = hashlib.sha256(secret_key.encode('utf-8')).digest()
+    fernet = Fernet(base64.urlsafe_b64encode(digest))
+    try:
+        return fernet.decrypt(value[len(_SECRET_PREFIX):].encode('ascii')).decode('utf-8')
+    except (InvalidToken, ValueError, UnicodeDecodeError):
+        return ''
+
+
+def databases_from_local_config(base_dir, secret_key=None):
+    """DATABASES dict from the wizard's local config file, or None."""
+    try:
+        raw = json.loads(local_db_config_path(base_dir).read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(raw, dict) or raw.get('engine') != 'postgresql':
+        return None
+    name = str(raw.get('name') or '').strip()
+    user = str(raw.get('user') or '').strip()
+    if not name or not user:
+        return None
+    try:
+        port = int(raw.get('port') or 5432)
+    except (TypeError, ValueError):
+        port = 5432
+    return {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': name,
+            'USER': user,
+            'PASSWORD': _decrypt_local_secret(raw.get('password') or '', secret_key),
+            'HOST': str(raw.get('host') or 'localhost').strip() or 'localhost',
+            'PORT': port,
+            'CONN_MAX_AGE': 60,
+        }
+    }
+
+
+def databases_from_env(environ=None, base_dir=None, secret_key=None):
     """Return the Django ``DATABASES`` dict for the given environment."""
     environ = os.environ if environ is None else environ
     url = (environ.get('DATABASE_URL') or '').strip()
@@ -26,6 +100,9 @@ def databases_from_env(environ=None, base_dir=None):
             'default': dj_database_url.parse(url, conn_max_age=60)
         }
     base_dir = Path(base_dir) if base_dir is not None else Path(__file__).resolve().parent.parent
+    local = databases_from_local_config(base_dir, secret_key)
+    if local is not None:
+        return local
     return {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',

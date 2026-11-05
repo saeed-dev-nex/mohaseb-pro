@@ -52,6 +52,36 @@ def encrypt_backup(plain_text, passphrase):
     }
 
 
+def decrypt_backup_with_fallbacks(envelope, candidates):
+    """Decrypt with the first candidate passphrase that works.
+
+    Backup passphrases come from two places: the one-time passphrase
+    typed for a single manual backup, and the stored backup passphrase
+    (used by the scheduler and the cloud uploader). Users reasonably
+    mix them up — and the stored one may have changed since a file was
+    made — so restores try every candidate instead of failing on the
+    first mismatch. Returns ``(backup, matched)`` with the candidate
+    string that worked. Raises the first candidate's ValueError when
+    no candidate works (or the "passphrase required" error when every
+    candidate is empty).
+    """
+    unique = []
+    for candidate in candidates:
+        candidate = (candidate or '').strip()
+        if candidate and candidate not in unique:
+            unique.append(candidate)
+    if not unique:
+        raise ValueError('این بکاپ رمزنگاری شده است؛ گذرواژهٔ بکاپ را وارد کنید.')
+    first_error = None
+    for candidate in unique:
+        try:
+            return decrypt_backup(envelope, candidate), candidate
+        except ValueError as error:
+            if first_error is None:
+                first_error = error
+    raise first_error
+
+
 def decrypt_backup(envelope, passphrase):
     """Decrypt an encrypted backup envelope back to the plain backup dict."""
     if not is_encrypted_backup(envelope):

@@ -290,6 +290,16 @@ export const backupConfigAPI = {
     api.post("backup-config/restore_cloud/", data),
 };
 
+// ---- Database (PostgreSQL migration wizard) ----
+export const databaseConfigAPI = {
+  get: () => api.get("database-config/"),
+  testConnection: (data: Payload) =>
+    api.post("database-config/test_connection/", data),
+  startMigration: (data: Payload) =>
+    api.post("database-config/start_migration/", data),
+  rollback: () => api.post("database-config/rollback/", {}),
+};
+
 export const invoiceSettingsAPI = {
   get: () => api.get("invoice-settings/"),
   update: (data: Payload) => api.patch("invoice-settings/update_config/", data),

@@ -101,8 +101,9 @@ class BackupConfigViewSet(viewsets.ViewSet):
         """Save to an explicit server path or return a downloadable backup.
 
         An optional ``passphrase`` encrypts the backup (AES-256-GCM) both for
-        download and for server-path saves; scheduled backups stay plain and
-        rely on the secrecy of the server path.
+        download and for server-path saves. Scheduled backups are encrypted
+        with the stored backup passphrase when one is configured (and stay
+        plain otherwise).
         """
         cfg = BackupConfig.load()
         backup_path = (request.data.get('path') or '').strip()
@@ -240,7 +241,7 @@ class BackupConfigViewSet(viewsets.ViewSet):
         with it, the current data is replaced, exactly like a file restore.
         """
         from ..cloud_backup import download_object, get_s3_client
-        from ..backup_utils import decrypt_backup, is_encrypted_backup, restore_backup, validate_backup
+        from ..backup_utils import decrypt_backup_with_fallbacks, is_encrypted_backup, restore_backup, validate_backup
         cfg = BackupConfig.load()
         key = (request.data.get('key') or '').strip()
         if not key:
@@ -252,18 +253,23 @@ class BackupConfigViewSet(viewsets.ViewSet):
         try:
             raw = download_object(get_s3_client(candidate), candidate.cloud_bucket, key)
             backup = json.loads(raw.decode('utf-8'))
+            passphrase_source = None
             if is_encrypted_backup(backup):
-                passphrase = (request.data.get('passphrase') or '').strip()
-                if not passphrase:
-                    return Response(
-                        {'detail': 'این بکاپ رمزنگاری شده است؛ گذرواژهٔ بکاپ ابری لازم است.'},
-                        status=status.HTTP_400_BAD_REQUEST)
-                backup = decrypt_backup(backup, passphrase)
+                # Cloud backups are encrypted with the stored backup
+                # passphrase, so it is the natural default: no typing
+                # needed while it is unchanged. A typed passphrase (the
+                # one from when the file was made) is tried first.
+                typed = (request.data.get('passphrase') or '').strip()
+                backup, matched = decrypt_backup_with_fallbacks(
+                    backup,
+                    [typed, cfg.decrypted_cloud_passphrase()],
+                )
+                passphrase_source = 'typed' if typed and matched == typed else 'stored'
             counts = validate_backup(backup)
             if request.data.get('confirm_replace') is not True:
-                return Response({'valid': True, 'counts': counts, 'requires_confirmation': True})
+                return Response({'valid': True, 'counts': counts, 'requires_confirmation': True, 'passphrase_source': passphrase_source})
             restore_backup(backup, fallback_user_id=request.user.pk)
-            return Response({'valid': True, 'restored': True, 'counts': counts})
+            return Response({'valid': True, 'restored': True, 'counts': counts, 'passphrase_source': passphrase_source})
         except Exception as error:
             return Response({'detail': str(error) or 'بازیابی از بکاپ ابری انجام نشد.'},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -307,13 +313,24 @@ class BackupViewSet(viewsets.ViewSet):
         try:
             if request.data.get('backup_json'):
                 backup = json.loads(request.data['backup_json'])
-            from ..backup_utils import decrypt_backup, is_encrypted_backup, restore_backup, validate_backup
+            from ..backup_utils import decrypt_backup_with_fallbacks, is_encrypted_backup, restore_backup, validate_backup
+            passphrase_source = None
             if is_encrypted_backup(backup):
-                backup = decrypt_backup(backup, (request.data.get('passphrase') or '').strip())
+                # Recovery: the typed passphrase wins, but the stored
+                # backup passphrase is tried too — scheduler and cloud
+                # backups are made with it, and it may have been what
+                # encrypted this file even if the user typed another.
+                stored = BackupConfig.load().decrypted_cloud_passphrase()
+                typed = (request.data.get('passphrase') or '').strip()
+                backup, matched = decrypt_backup_with_fallbacks(
+                    backup,
+                    [typed, stored],
+                )
+                passphrase_source = 'typed' if typed and matched == typed else 'stored'
             counts = validate_backup(backup)
             if request.data.get('confirm_replace') is not True:
-                return Response({'valid': True, 'counts': counts, 'requires_confirmation': True})
+                return Response({'valid': True, 'counts': counts, 'requires_confirmation': True, 'passphrase_source': passphrase_source})
             restore_backup(backup, fallback_user_id=request.user.pk)
-            return Response({'valid': True, 'restored': True, 'counts': counts})
+            return Response({'valid': True, 'restored': True, 'counts': counts, 'passphrase_source': passphrase_source})
         except Exception as error:
             return Response({'detail': str(error) or 'بازیابی نسخهٔ پشتیبان انجام نشد.'}, status=400)

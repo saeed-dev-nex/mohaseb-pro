@@ -189,6 +189,10 @@ class Invoice(models.Model):
     tax = models.DecimalField(max_digits=5, decimal_places=2, default=0, validators=[MinValueValidator(0), MaxValueValidator(100)], verbose_name='مالیات (%)')
     rounding_enabled = models.BooleanField(default=False, verbose_name='رند کردن مبلغ فاکتور')
     rounding_amount = models.DecimalField(max_digits=15, decimal_places=0, default=0, verbose_name='تعدیل رند (تومان)')
+    # Display choice only — never affects the math: when False (default)
+    # the invoice shows no rounding row; the adjustment is silently part
+    # of the final payable amount.
+    rounding_show_amount = models.BooleanField(default=False, verbose_name='نمایش مبلغ رند در فاکتور')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='وضعیت')
     invoice_number = models.CharField(max_length=50, unique=True, blank=True, verbose_name='شماره فاکتور')
     paper_size = models.CharField(max_length=10, choices=PAPER_SIZE_CHOICES, default='a5', verbose_name='سایز کاغذ')
