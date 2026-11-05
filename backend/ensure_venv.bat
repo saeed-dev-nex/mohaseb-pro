@@ -42,8 +42,19 @@ set "BACKEND_PYTHON=%VENV_PYTHON%"
 rem A previous installation may have stopped before installing any packages.
 rem Check every direct dependency, including Pillow's compiled image module.
 call :check_dependencies
+if errorlevel 1 goto :install_dependencies
+rem The import probe alone cannot notice packages ADDED to
+rem requirements.txt by an update: a package that was never installed
+rem breaks nothing already present, so the probe and pip check both
+rem pass while the new code cannot import it (this is how the
+rem dj-database-url addition broke older installs). Compare a hash of
+rem requirements.txt with the stamp written after the last successful
+rem install, and refresh the environment when the file has changed.
+call :check_requirements_stamp
 if not errorlevel 1 exit /b 0
+echo [INFO] requirements.txt changed since the last dependency install.
 
+:install_dependencies
 echo [INFO] Installing missing or incomplete backend dependencies...
 rem Allow more time to fetch large package indexes on slow connections.
 rem Autobahn's optional NVX extensions do not yet provide wheels for every
@@ -67,10 +78,20 @@ if errorlevel 1 (
     exit /b 1
 )
 
+call :write_requirements_stamp
+
 exit /b 0
 
 :check_dependencies
-"%BACKEND_PYTHON%" -c "import django, rest_framework, rest_framework_simplejwt, corsheaders, cryptography, openpyxl, whitenoise, boto3, botocore; from PIL import Image; assert django.VERSION >= (4, 2)" >nul 2>&1
+"%BACKEND_PYTHON%" -c "import django, rest_framework, rest_framework_simplejwt, corsheaders, cryptography, openpyxl, whitenoise, boto3, botocore, dj_database_url, psycopg, channels_redis, redis; from PIL import Image; assert django.VERSION >= (4, 2)" >nul 2>&1
 if errorlevel 1 exit /b 1
 "%BACKEND_PYTHON%" -m pip check >nul 2>&1
 exit /b %errorlevel%
+
+:check_requirements_stamp
+"%BACKEND_PYTHON%" -c "import hashlib, pathlib, sys; req = pathlib.Path(r'%BACKEND%requirements.txt'); stamp = pathlib.Path(r'%VENV_DIR%\.requirements.sha256'); current = hashlib.sha256(req.read_bytes()).hexdigest(); sys.exit(0 if stamp.exists() and stamp.read_text(encoding='utf-8').strip() == current else 1)" >nul 2>&1
+exit /b %errorlevel%
+
+:write_requirements_stamp
+"%BACKEND_PYTHON%" -c "import hashlib, pathlib; req = pathlib.Path(r'%BACKEND%requirements.txt'); stamp = pathlib.Path(r'%VENV_DIR%\.requirements.sha256'); stamp.write_text(hashlib.sha256(req.read_bytes()).hexdigest(), encoding='utf-8')" >nul 2>&1
+exit /b 0
