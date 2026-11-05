@@ -111,6 +111,7 @@ type InvoiceFormState = {
   commission_total: number | string;
   rounding_enabled: boolean;
   rounding_target: number | string;
+  rounding_show_amount: boolean;
   paper_size: string;
   vehicle_plate: string;
   vehicle_vin: string;
@@ -671,6 +672,7 @@ const InvoiceForm = () => {
       commission_total: 0,
       rounding_enabled: false,
       rounding_target: "",
+      rounding_show_amount: false,
       paper_size: "a5",
       vehicle_plate: "",
       vehicle_vin: "",
@@ -742,6 +744,7 @@ const InvoiceForm = () => {
       rounding_target: data.rounding_enabled
         ? String(data.final_amount || "")
         : "",
+      rounding_show_amount: !!data.rounding_show_amount,
       paper_size: data.paper_size || "a5",
       vehicle_plate: data.vehicle_plate || "",
       vehicle_vin: data.vehicle_vin || "",
@@ -949,6 +952,7 @@ const InvoiceForm = () => {
       commission_total: 0,
       rounding_enabled: false,
       rounding_target: "",
+      rounding_show_amount: false,
       paper_size: "a5",
       vehicle_plate: "",
       vehicle_vin: "",
@@ -1059,6 +1063,7 @@ const InvoiceForm = () => {
         form.rounding_enabled && Number(form.rounding_target) > 0
           ? Number(form.rounding_target)
           : null,
+      rounding_show_amount: !!form.rounding_show_amount,
       due_date: form.due_date || null,
       vehicle_year: form.vehicle_year || "",
       green_card_owner_name: form.green_card_owner_name || "",
@@ -1540,6 +1545,21 @@ const InvoiceForm = () => {
                       تومان رند می‌شود: ریزِ کمتر از ۵ هزار تومان به پایین و ۵
                       هزار تومان یا بیشتر به بالا.
                     </p>
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300 mt-3">
+                      <input
+                        type="checkbox"
+                        checked={!!form.rounding_show_amount}
+                        onChange={(e) =>
+                          setField("rounding_show_amount", e.target.checked)
+                        }
+                        className="accent-sky-500"
+                      />
+                      نمایش مبلغ رند در فاکتور
+                      <span className="text-slate-500">
+                        (پیش‌فرض: نمایش داده نمی‌شود؛ رند فقط در مبلغ نهایی
+                        اعمال می‌شود)
+                      </span>
+                    </label>
                     <p className="text-sky-300 text-xs mt-2">
                       مبلغ نهایی پس از رند: {fmt(payableAmount)}
                       {roundingAdjustment !== 0 &&
@@ -1587,15 +1607,17 @@ const InvoiceForm = () => {
                       </span>
                     </div>
                   )}
-                {form.rounding_enabled && roundingAdjustment !== 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-sky-400/80">رند مبلغ</span>
-                    <span className="text-sky-400">
-                      {roundingAdjustment > 0 ? "+" : "−"}
-                      {fmt(Math.abs(roundingAdjustment))}
-                    </span>
-                  </div>
-                )}
+                {form.rounding_enabled &&
+                  form.rounding_show_amount &&
+                  roundingAdjustment !== 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-sky-400/80">رند مبلغ</span>
+                      <span className="text-sky-400">
+                        {roundingAdjustment > 0 ? "+" : "−"}
+                        {fmt(Math.abs(roundingAdjustment))}
+                      </span>
+                    </div>
+                  )}
                 <div className="flex justify-between text-base font-bold border-t border-slate-600 pt-3">
                   <span className="text-white">جمع قابل پرداخت توسط مشتری</span>
                   <span className="text-blue-400 text-lg">

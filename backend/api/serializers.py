@@ -487,7 +487,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'card_payment_source',
             'date', 'due_date', 'description', 'total_amount',
             'commission_total', 'discount', 'tax', 'status', 'status_display',
-            'commission_paid', 'rounding_enabled', 'rounding_amount', 'rounding_target',
+            'commission_paid', 'rounding_enabled', 'rounding_amount', 'rounding_target', 'rounding_show_amount',
             'paper_size', 'final_amount', 'items', 'created_at', 'updated_at',
             'edit_request_status', 'can_edit', 'payments', 'paid_amount', 'remaining_amount',
             # vehicle / custom fields

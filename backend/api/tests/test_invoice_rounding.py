@@ -97,6 +97,34 @@ class RoundingApiTests(APITestCase):
         self.assertEqual(int(response.data['rounding_amount']), 0)
         self.assertEqual(int(response.data['final_amount']), 1257800)
 
+    def test_show_amount_defaults_to_hidden_and_persists_when_chosen(self):
+        # Default: the rounding happens but is NOT shown on the invoice.
+        response = self.client.post(
+            '/api/invoices/', self.payload(1253200, rounding_enabled=True), format='json')
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.data['rounding_show_amount'], False)
+        self.assertEqual(int(response.data['final_amount']), 1250000)
+
+        # Opt-in: the user chooses to show the rounding amount.
+        response = self.client.post(
+            '/api/invoices/',
+            self.payload(1253200, rounding_enabled=True, rounding_show_amount=True),
+            format='json')
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.data['rounding_show_amount'], True)
+        self.assertEqual(int(response.data['final_amount']), 1250000)
+
+    def test_patch_show_flag_alone_preserves_adjustment(self):
+        created = self.client.post(
+            '/api/invoices/', self.payload(1253200, rounding_enabled=True), format='json')
+        self.assertEqual(created.status_code, 201, created.content)
+        url = f"/api/invoices/{created.data['id']}/"
+        response = self.client.patch(url, {'rounding_show_amount': True}, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data['rounding_show_amount'], True)
+        self.assertEqual(int(response.data['rounding_amount']), -3200)
+        self.assertEqual(int(response.data['final_amount']), 1250000)
+
     def test_negative_target_is_rejected(self):
         response = self.client.post(
             '/api/invoices/',
