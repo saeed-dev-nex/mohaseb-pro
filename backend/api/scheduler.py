@@ -95,6 +95,35 @@ def run_due_backup():
             return {'ran': False, 'reason': 'backup failed; see server logs'}
 
 
+def _maybe_encrypt_scheduled_payload(payload, config):
+    """Encrypt a scheduled backup with the stored backup passphrase.
+
+    Automatic backups use the same passphrase as cloud copies, so one
+    passphrase opens every backup the system produces on its own
+    (previously scheduled files stayed plain, which made their restore
+    behaviour differ from every other backup kind). Without a stored
+    passphrase the file stays plain, as before. An unusable stored
+    passphrase (e.g. too short) must never lose the backup itself: log
+    loudly and keep the plain file — the cloud-upload step records the
+    same problem in ``last_cloud_error`` for the settings UI.
+    """
+    from .secret_store import decrypt_secret
+
+    passphrase = decrypt_secret(getattr(config, 'cloud_passphrase', '') or '').strip()
+    if not passphrase:
+        return payload
+    from .backup_utils import encrypt_backup
+
+    try:
+        envelope = encrypt_backup(payload, passphrase)
+    except ValueError:
+        logger.exception(
+            'Stored backup passphrase unusable; saving the scheduled backup plain'
+        )
+        return payload
+    return json.dumps(envelope, ensure_ascii=False, indent=2)
+
+
 def _run_due_backup_locked():
     """Use the most recent due slot, catching up once after a missed Monday."""
     from .backup_utils import build_backup
@@ -126,6 +155,7 @@ def _run_due_backup_locked():
     try:
         backup = build_backup()
         payload = json.dumps(backup, ensure_ascii=False, indent=2, default=str)
+        payload = _maybe_encrypt_scheduled_payload(payload, config)
         with open(temporary, 'w', encoding='utf-8') as backup_file:
             backup_file.write(payload)
             backup_file.flush()
