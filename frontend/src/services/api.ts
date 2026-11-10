@@ -291,6 +291,14 @@ export const backupConfigAPI = {
 };
 
 // ---- Database (PostgreSQL migration wizard) ----
+// ---- App updates (superuser-approved, in-app) ----
+export const appUpdateAPI = {
+  status: (quick = false) =>
+    api.get("app-update/", { params: quick ? { quick: 1 } : {} }),
+  check: () => api.post("app-update/check/", {}),
+  apply: () => api.post("app-update/apply/", {}),
+};
+
 export const databaseConfigAPI = {
   get: () => api.get("database-config/"),
   testConnection: (data: Payload) =>
@@ -343,6 +351,19 @@ export const chatSocketProtocols = (): string[] => {
   return access ? ["mohaseb-chat", access] : ["mohaseb-chat"];
 };
 
+export const alertsSocketURL = (): string => {
+  const apiURL = new URL(API_BASE_URL, window.location.href);
+  apiURL.protocol = apiURL.protocol === "https:" ? "wss:" : "ws:";
+  apiURL.pathname = `${apiURL.pathname.replace(/\/api\/?$/, "").replace(/\/$/, "")}/ws/alerts/`;
+  apiURL.search = "";
+  return apiURL.toString();
+};
+
+export const alertsSocketProtocols = (): string[] => {
+  const access = Cookies.get("access_token");
+  return access ? ["mohaseb-alerts", access] : ["mohaseb-alerts"];
+};
+
 // ---- Vehicle Types ----
 export const vehicleTypesAPI = {
   list: () => api.get("vehicle-types/"),
@@ -362,6 +383,10 @@ export const usersAPI = {
     api.put(`users/${id}/module_access/`, data),
   setRole: (userId: Id, role: string) =>
     api.post("users/set_role/", { user_id: userId, role }),
+  performanceSummary: (range: string) =>
+    api.get("users/performance-summary/", { params: { range } }),
+  performance: (id: Id, range: string) =>
+    api.get(`users/${id}/performance/`, { params: { range } }),
 };
 
 // ---- Cheques ----

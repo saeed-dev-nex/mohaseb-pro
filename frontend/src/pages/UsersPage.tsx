@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { usersAPI } from "../services/api";
 import { ALL_MODULES, MODULE_LABELS, ceilingFor } from "../utils/modules";
@@ -381,6 +382,14 @@ export default function UsersPage() {
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center justify-center gap-2">
+                        <Link
+                          to={`/users/${user.id}/performance`}
+                          className="px-3 py-1.5 bg-slate-700/50 hover:bg-violet-500/20 text-slate-300 hover:text-violet-300
+                            rounded-lg text-xs font-medium transition-all duration-200 border border-slate-600/50
+                            hover:border-violet-500/30 flex items-center gap-1.5"
+                        >
+                          📊 عملکرد
+                        </Link>
                         <button
                           onClick={() => openEdit(user)}
                           className="px-3 py-1.5 bg-slate-700/50 hover:bg-blue-500/20 text-slate-300 hover:text-blue-300

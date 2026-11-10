@@ -23,6 +23,7 @@ const Expenses = lazy(() => import("./pages/Expenses"));
 const Cheques = lazy(() => import("./pages/Cheques"));
 const StaffPage = lazy(() => import("./pages/StaffPage"));
 const UsersPage = lazy(() => import("./pages/UsersPage"));
+const UserPerformancePage = lazy(() => import("./pages/UserPerformancePage"));
 const Chat = lazy(() => import("./pages/Chat"));
 const Layout = lazy(() => import("./components/Layout"));
 
@@ -186,6 +187,14 @@ function App() {
               element={
                 <ModuleRoute module="users">
                   <UsersPage />
+                </ModuleRoute>
+              }
+            />
+            <Route
+              path="users/:id/performance"
+              element={
+                <ModuleRoute module="users">
+                  <UserPerformancePage />
                 </ModuleRoute>
               }
             />

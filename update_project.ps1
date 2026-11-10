@@ -1,4 +1,4 @@
-param([switch]$SkipBuild)
+param([switch]$SkipBuild, [switch]$Force)
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
@@ -31,6 +31,17 @@ if ($changes) {
     exit 2
 }
 
+# Updates are approved inside the app by the superuser (Settings ->
+# Updates). A launcher start without the approval flag must NOT pull
+# new code: it starts the version that is already installed. The flag
+# is written by the backend when the superuser approves an update, or
+# the apply helper passes -Force after that same approval.
+$approvalFlag = Join-Path $projectRoot 'update-approved.flag'
+if (-not $Force -and -not (Test-Path -LiteralPath $approvalFlag -PathType Leaf)) {
+    Write-Output '[INFO] No approved update pending. Starting the current version.'
+    exit 0
+}
+
 Invoke-Git @('fetch', 'origin')
 $branch = (& git -C $projectRoot branch --show-current).Trim()
 if ([string]::IsNullOrWhiteSpace($branch)) { throw 'The current Git branch could not be determined.' }
@@ -43,6 +54,7 @@ $ahead = [int]$counts[0]
 $behind = [int]$counts[1]
 if ($behind -eq 0) {
     Write-Output 'This system is already synchronized with GitHub.'
+    if (Test-Path -LiteralPath $approvalFlag -PathType Leaf) { Remove-Item -LiteralPath $approvalFlag -Force }
     exit 0
 }
 if ($ahead -gt 0) {
@@ -69,3 +81,8 @@ if (-not $SkipBuild) {
     }
     Write-Output 'Dependencies, migrations, and the production build are ready.'
 }
+
+# The approved update is fully applied; consume the approval flag so
+# later starts do not re-apply it. (On failure above, the script has
+# already thrown and the flag stays for the next start to retry.)
+if (Test-Path -LiteralPath $approvalFlag -PathType Leaf) { Remove-Item -LiteralPath $approvalFlag -Force }

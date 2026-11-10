@@ -447,6 +447,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             edit_request = InvoiceEditRequest.objects.create(invoice=invoice, requested_by=request.user)
             created = True
             record_audit(user=request.user, instance=invoice, action='approval', after={'event': 'edit_requested', 'request_id': edit_request.id, 'requested_by': request.user.username})
+            from ..alerts import notify_edit_request_created
+            notify_edit_request_created(edit_request)
         return Response({'id': edit_request.id, 'status': edit_request.status, 'created_at': edit_request.created_at}, status=201 if created else 200)
 
     @action(detail=False, methods=['get'], url_path='edit-requests')
@@ -481,6 +483,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         edit_request.reviewed_at = timezone.now()
         edit_request.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
         record_audit(user=request.user, instance=invoice, action='approval', before={'request_id': edit_request.id, 'status': 'pending'}, after={'request_id': edit_request.id, 'status': edit_request.status, 'reviewed_by': request.user.username})
+        from ..alerts import notify_edit_request_reviewed
+        notify_edit_request_reviewed(edit_request)
         return Response({'id': edit_request.id, 'status': edit_request.status})
 
     @action(detail=False, methods=['get'])

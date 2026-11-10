@@ -436,6 +436,155 @@ class UserViewSet(viewsets.ModelViewSet):
         self.perform_update(serializer)
         return Response(serializer.data)
 
+    # ---- User performance monitoring (per-user profile) ----
+
+    def _performance_range_start(self, range_key):
+        """Inclusive local start date for a performance range, or None."""
+        today = timezone.localdate()
+        if range_key == '30d':
+            return today - timedelta(days=29)
+        if range_key == 'month':
+            from ..jalali import gregorian_to_jalali, jalali_to_gregorian
+            jy, jm, _ = gregorian_to_jalali(today.year, today.month, today.day)
+            gy, gm, gd = jalali_to_gregorian(jy, jm, 1)
+            return date(gy, gm, gd)
+        return None
+
+    def _user_stats(self, user, start):
+        invoices = Invoice.objects.filter(created_by=user)
+        payments = InvoicePayment.objects.filter(created_by=user)
+        edit_requests = InvoiceEditRequest.objects.filter(requested_by=user)
+        activity = AuditLog.objects.filter(user=user)
+        if start is not None:
+            invoices = invoices.filter(date__date__gte=start)
+            payments = payments.filter(paid_at__date__gte=start)
+            edit_requests = edit_requests.filter(created_at__date__gte=start)
+            activity = activity.filter(created_at__date__gte=start)
+        invoice_totals = invoices.aggregate(
+            count=Count('id'),
+            total=Coalesce(Sum('total_amount'), Value(Decimal('0')), output_field=DecimalField(max_digits=30, decimal_places=0)),
+        )
+        payment_totals = payments.aggregate(
+            count=Count('id'),
+            total=Coalesce(Sum('amount'), Value(Decimal('0')), output_field=DecimalField(max_digits=30, decimal_places=0)),
+        )
+        return {
+            'invoices_issued': invoice_totals['count'],
+            'invoices_total': int(invoice_totals['total'] or 0),
+            'payments_recorded': payment_totals['count'],
+            'payments_total': int(payment_totals['total'] or 0),
+            'edit_requests': edit_requests.count(),
+            'edit_requests_approved': edit_requests.filter(status__in=['approved', 'used']).count(),
+            'activity_events': activity.count(),
+        }
+
+    @action(detail=False, methods=['get'], url_path='performance-summary')
+    def performance_summary(self, request):
+        """Headline per-user stats for the users list (superuser only)."""
+        start = self._performance_range_start(request.query_params.get('range', 'month'))
+        rows = []
+        for user in User.objects.all().order_by('id'):
+            stats = self._user_stats(user, start)
+            last_activity = (
+                AuditLog.objects.filter(user=user).order_by('-created_at')
+                .values_list('created_at', flat=True).first()
+            )
+            rows.append({
+                'id': user.id,
+                'username': user.username,
+                'full_name': user.get_full_name(),
+                'is_active': user.is_active,
+                'is_staff': user.is_staff,
+                'is_superuser': user.is_superuser,
+                'last_login': user.last_login,
+                'last_activity': last_activity,
+                **stats,
+            })
+        return Response({'range': request.query_params.get('range', 'month'), 'users': rows})
+
+    @action(detail=True, methods=['get'])
+    def performance(self, request, pk=None):
+        """One user's performance profile (superuser only)."""
+        user = self.get_object()
+        range_key = request.query_params.get('range', 'month')
+        start = self._performance_range_start(range_key)
+        stats = self._user_stats(user, start)
+
+        # Monthly issued-invoice series over the last 6 Jalali months.
+        from ..jalali import gregorian_to_jalali, jalali_month_bounds, jalali_month_label
+        today = timezone.localdate()
+        cur_jy, cur_jm, _ = gregorian_to_jalali(today.year, today.month, today.day)
+        months = []
+        jy, jm = cur_jy, cur_jm
+        for _ in range(6):
+            months.append((jy, jm))
+            jm -= 1
+            if jm == 0:
+                jm = 12
+                jy -= 1
+        months.reverse()
+        series = []
+        for month_year, month_number in months:
+            month_start, next_month_start = jalali_month_bounds(month_year, month_number)
+            totals = Invoice.objects.filter(
+                created_by=user,
+                date__date__gte=month_start,
+                date__date__lt=next_month_start,
+            ).aggregate(
+                count=Count('id'),
+                total=Coalesce(Sum('total_amount'), Value(Decimal('0')), output_field=DecimalField(max_digits=30, decimal_places=0)),
+            )
+            series.append({
+                'label': jalali_month_label(month_year, month_number),
+                'count': totals['count'],
+                'total': int(totals['total'] or 0),
+            })
+
+        recent_invoices = [
+            {
+                'id': invoice.id,
+                'invoice_number': invoice.invoice_number,
+                'customer_name': invoice.customer.name if invoice.customer else '',
+                'status': invoice.status,
+                'total_amount': int(invoice.total_amount or 0),
+                'date': invoice.date,
+            }
+            for invoice in Invoice.objects.filter(created_by=user).select_related('customer').order_by('-date')[:10]
+        ]
+        recent_payments = [
+            {
+                'id': payment.id,
+                'invoice_id': payment.invoice_id,
+                'invoice_number': payment.invoice.invoice_number,
+                'amount': int(payment.amount or 0),
+                'method': payment.method,
+                'paid_at': payment.paid_at,
+            }
+            for payment in InvoicePayment.objects.filter(created_by=user).select_related('invoice').order_by('-paid_at')[:10]
+        ]
+        last_activity = (
+            AuditLog.objects.filter(user=user).order_by('-created_at')
+            .values_list('created_at', flat=True).first()
+        )
+        return Response({
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'full_name': user.get_full_name(),
+                'is_active': user.is_active,
+                'is_staff': user.is_staff,
+                'is_superuser': user.is_superuser,
+                'date_joined': user.date_joined,
+                'last_login': user.last_login,
+                'last_activity': last_activity,
+            },
+            'range': range_key,
+            'stats': stats,
+            'monthly_series': series,
+            'recent_invoices': recent_invoices,
+            'recent_payments': recent_payments,
+        })
+
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated, IsManagerOrAdmin, HasModuleAccess]
     module_name = 'reports'

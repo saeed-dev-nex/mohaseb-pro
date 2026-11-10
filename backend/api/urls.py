@@ -6,7 +6,7 @@ from .views import (
     DocumentViewSet, DashboardViewSet,
     BusinessProfileViewSet, ExpenseCategoryViewSet,
     ExpenseViewSet, StaffViewSet, BackupViewSet, VehicleTypeViewSet,
-    UserViewSet, BackupConfigViewSet, DatabaseConfigViewSet, InvoiceSettingsViewSet, ChequeViewSet, AuditLogViewSet, ChatMessageViewSet,
+    UserViewSet, BackupConfigViewSet, DatabaseConfigViewSet, AppUpdateViewSet, InvoiceSettingsViewSet, ChequeViewSet, AuditLogViewSet, ChatMessageViewSet,
     WelcomeSettingsViewSet, SocialNetworkViewSet
 )
 from .serializers import SafeTokenRefreshSerializer
@@ -26,6 +26,7 @@ router.register(r'staff', StaffViewSet, basename='staff')
 router.register(r'backup', BackupViewSet, basename='backup')
 router.register(r'backup-config', BackupConfigViewSet, basename='backup-config')
 router.register(r'database-config', DatabaseConfigViewSet, basename='database-config')
+router.register(r'app-update', AppUpdateViewSet, basename='app-update')
 router.register(r'invoice-settings', InvoiceSettingsViewSet, basename='invoice-settings')
 router.register(r'vehicle-types', VehicleTypeViewSet, basename='vehicle-type')
 router.register(r'users', UserViewSet, basename='user')

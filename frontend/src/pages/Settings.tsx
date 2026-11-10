@@ -13,6 +13,7 @@ import { ServicePackagesSection } from "./settings/ServicePackagesSection";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { BackupTab } from "./settings/BackupTab";
 import { DatabaseTab } from "./settings/DatabaseTab";
+import { UpdateTab } from "./settings/UpdateTab";
 import { ServerFolderPicker } from "./settings/ServerFolderPicker";
 
 type ProfileForm = {
@@ -93,7 +94,19 @@ const Settings = () => {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const [activeTab, setActiveTab] = useState("brand");
+  const [activeTab, setActiveTab] = useState(() => {
+    // The layout's update banner deep-links here via this one-shot key.
+    try {
+      const wanted = window.localStorage.getItem("mohaseb:settings-tab");
+      if (wanted) {
+        window.localStorage.removeItem("mohaseb:settings-tab");
+        return wanted;
+      }
+    } catch {
+      /* Storage may be unavailable; fall through to the default tab. */
+    }
+    return "brand";
+  });
   const settingsTabs = [
     { id: "brand", label: "برند و تماس", icon: "🎨", visible: true },
     { id: "invoice", label: "تنظیمات فاکتور", icon: "🧾", visible: isManager },
@@ -121,6 +134,12 @@ const Settings = () => {
       id: "database",
       label: "پایگاه داده",
       icon: "🗄️",
+      visible: isSuperuser,
+    },
+    {
+      id: "update",
+      label: "به‌روزرسانی",
+      icon: "⬆️",
       visible: isSuperuser,
     },
   ].filter((t) => t.visible);
@@ -1012,6 +1031,11 @@ const Settings = () => {
           {/* ── Database Section ── */}
           {activeTab === "database" && isSuperuser && (
             <DatabaseTab isSuperuser={isSuperuser} />
+          )}
+
+          {/* ── App Update Section ── */}
+          {activeTab === "update" && isSuperuser && (
+            <UpdateTab isSuperuser={isSuperuser} />
           )}
           <ServerFolderPicker
             open={docsPickerOpen}
