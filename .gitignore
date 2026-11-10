@@ -30,6 +30,12 @@ backend/.backup-scheduler.lock
 # full data export — runtime files, never commit, never trip updates.
 backend/.db_config.json
 backend/.db_migration_pending.json
+# In-app update flow (Settings → به‌روزرسانی): the approval flag is
+# written by the backend when the superuser approves an update and
+# consumed by update_project.ps1; the status cache is runtime state.
+# Neither may trip the updater's clean-tree guard.
+/update-approved.flag
+backend/.update_status_cache.json
 backend/media/
 backend/staticfiles/
 .env

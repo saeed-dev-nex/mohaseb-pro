@@ -5,6 +5,7 @@ import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
 import QuickInvoiceModal from "./QuickInvoiceModal";
 import InvoiceEditRequestAlerts from "./InvoiceEditRequestAlerts";
+import UpdateBanner from "./UpdateBanner";
 import WelcomeModal from "./WelcomeModal";
 import {
   backupConfigAPI,
@@ -488,6 +489,7 @@ const Layout = () => {
         className={`${sidebarCollapsed ? "lg:mr-20" : "lg:mr-64"} flex flex-col min-h-screen transition-[margin] duration-300`}
       >
         <Navbar onMenuToggle={() => setSidebarOpen((prev) => !prev)} />
+        <UpdateBanner />
         <main className="flex-1 p-6">
           <Outlet />
         </main>

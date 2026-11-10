@@ -16,6 +16,7 @@ from .settings_admin import (
     BusinessProfileViewSet, InvoiceSettingsViewSet, SocialNetworkViewSet, WelcomeSettingsViewSet,
 )
 from .backup import BackupConfigViewSet, BackupViewSet
+from .app_update import AppUpdateViewSet
 from .database_config import DatabaseConfigViewSet
 from .management_views import AuditLogViewSet, DashboardViewSet, StaffViewSet, UserViewSet
 
@@ -25,5 +26,5 @@ __all__ = [
     'DocumentViewSet', 'ChatMessageViewSet', 'ChequeViewSet', 'ExpenseCategoryViewSet',
     'ExpenseViewSet', 'BusinessProfileViewSet', 'InvoiceSettingsViewSet',
     'SocialNetworkViewSet', 'WelcomeSettingsViewSet', 'BackupConfigViewSet',
-    'BackupViewSet', 'DatabaseConfigViewSet', 'AuditLogViewSet', 'DashboardViewSet', 'StaffViewSet', 'UserViewSet',
+    'BackupViewSet', 'DatabaseConfigViewSet', 'AppUpdateViewSet', 'AuditLogViewSet', 'DashboardViewSet', 'StaffViewSet', 'UserViewSet',
 ]
