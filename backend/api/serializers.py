@@ -474,11 +474,13 @@ class InvoiceSerializer(serializers.ModelSerializer):
         max_digits=5, decimal_places=2, required=False, default=0, min_value=0, max_value=100
     )
     # Optional manual rounding target (the exact final amount the user
-    # wants). Write-only input: the persisted result is rounding_amount,
-    # derived server-side in validate() — never trusted from the client.
+    # wants). Read/write: it is the stored rounding RULE (see
+    # _apply_rounding). An explicit null means "auto". The persisted
+    # result is rounding_amount, derived server-side in validate().
     rounding_target = serializers.IntegerField(
-        write_only=True, required=False, allow_null=True, min_value=0
+        required=False, allow_null=True, min_value=0
     )
+    rounding_cleared = serializers.SerializerMethodField()
 
     class Meta:
         model = Invoice
@@ -488,6 +490,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'date', 'due_date', 'description', 'total_amount',
             'commission_total', 'discount', 'tax', 'status', 'status_display',
             'commission_paid', 'rounding_enabled', 'rounding_amount', 'rounding_target', 'rounding_show_amount',
+            'rounding_cleared',
             'paper_size', 'final_amount', 'items', 'created_at', 'updated_at',
             'edit_request_status', 'can_edit', 'payments', 'paid_amount', 'remaining_amount',
             # vehicle / custom fields
@@ -528,6 +531,12 @@ class InvoiceSerializer(serializers.ModelSerializer):
       if obj.status != 'paid' or request.user.is_staff or request.user.is_superuser:
           return True
       return any(row.requested_by_id == request.user.pk and row.status == 'approved' for row in obj.edit_requests.all())
+
+    def get_rounding_cleared(self, obj):
+      # True only when this save dropped a stored manual rounding target
+      # because the invoice amounts moved (see _apply_rounding). The flag
+      # is set during validate() on this serializer instance.
+      return bool(getattr(self, '_rounding_cleared', False))
 
     def get_final_amount(self, obj):
       return int(obj.final_amount)
@@ -580,29 +589,61 @@ class InvoiceSerializer(serializers.ModelSerializer):
         return attrs
 
     def _apply_rounding(self, attrs):
-        """Derive the persisted rounding_amount from the trusted total.
+        """Derive rounding_amount from the stored RULE and the trusted base.
 
-        Runs only when the payload touches rounding; a manual
-        rounding_target wins, otherwise the final rounds to the nearest
-        10,000 Toman (remainders of 5,000+ round up). create()/update()
-        re-validate the already-validated data — the target is consumed
-        on the first pass, so a second pass keeps the derived amount.
+        The rule is (rounding_enabled, rounding_target): a manual target
+        pins the exact final the user chose; with no target the final
+        rounds to the nearest 10,000 Toman (remainders of 5,000+ round
+        up). The adjustment is re-derived on EVERY save, so an amount
+        change can never leave a stale rounded total behind.
+
+        A stored manual target is one-shot: if the invoice base moved
+        since it was set, the rounding is cleared (enabled off, target
+        and amount zeroed) and the caller is told via rounding_cleared —
+        unless the same payload carries a fresh target for the new base,
+        which wins as a new manual entry. A base is the pre-rounding
+        final: total + tax - discount + commission. Edits that do not
+        move the base (notes, show flag, status) preserve the rule.
+
+        create()/update() re-validate the already-validated data, so
+        this must be idempotent on a second pass over the same attrs:
+        the target is never popped, and the cleared flag is only ever
+        set, never reset, within one request.
         """
-        target = attrs.pop('rounding_target', None)
-        if target is None and 'rounding_amount' in attrs:
-            return
-        if 'rounding_enabled' not in attrs and target is None:
-            return
+        _ABSENT = object()
+        instance = self.instance
+        target = attrs.get('rounding_target', _ABSENT)
         enabled = attrs.get(
-            'rounding_enabled', getattr(self.instance, 'rounding_enabled', False))
-        if not enabled:
-            attrs['rounding_amount'] = Decimal(0)
-            return
+            'rounding_enabled', getattr(instance, 'rounding_enabled', False))
         base = final_amount(
             attrs['total_amount'],
-            *(attrs.get(field, getattr(self.instance, field, 0))
+            *(attrs.get(field, getattr(instance, field, 0))
               for field in ('tax', 'discount', 'commission_total')))
-        adjustment = compute_rounding_adjustment(base, target)
+        if not enabled:
+            attrs['rounding_amount'] = Decimal(0)
+            attrs['rounding_target'] = None
+            return
+        fresh_target = target is not _ABSENT and target is not None
+        if instance is not None:
+            old_base = final_amount(
+                instance.total_amount, instance.tax, instance.discount,
+                instance.commission_total)
+            old_manual = bool(instance.rounding_enabled
+                              and instance.rounding_target is not None)
+            # Only when the payload says nothing about the target: an
+            # explicit null means "auto from now on", a fresh target
+            # means "manual for the new base" — neither is a stale rule.
+            if old_manual and base != old_base and target is _ABSENT:
+                attrs['rounding_enabled'] = False
+                attrs['rounding_target'] = None
+                attrs['rounding_amount'] = Decimal(0)
+                self._rounding_cleared = True
+                return
+        effective_target = (
+            target if fresh_target
+            else target if target is not _ABSENT
+            else getattr(instance, 'rounding_target', None))
+        adjustment = compute_rounding_adjustment(base, effective_target)
         if not 0 <= int(base) + adjustment <= MAX_INVOICE_AMOUNT:
             raise serializers.ValidationError(
                 {'rounding_target': 'مبلغ رندشده باید نامنفی و در محدودهٔ مجاز باشد.'})

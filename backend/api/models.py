@@ -189,6 +189,13 @@ class Invoice(models.Model):
     tax = models.DecimalField(max_digits=5, decimal_places=2, default=0, validators=[MinValueValidator(0), MaxValueValidator(100)], verbose_name='مالیات (%)')
     rounding_enabled = models.BooleanField(default=False, verbose_name='رند کردن مبلغ فاکتور')
     rounding_amount = models.DecimalField(max_digits=15, decimal_places=0, default=0, verbose_name='تعدیل رند (تومان)')
+    # The stored rounding RULE, not the result: a manual target pins the
+    # exact final the user chose; None means "auto" (nearest 10,000).
+    # rounding_amount is a derived cache, re-computed from this rule and
+    # the current totals on every save — a manual target is one-shot:
+    # when the invoice amounts move, the serializer clears the rule
+    # instead of dragging a stale rounded total along.
+    rounding_target = models.DecimalField(max_digits=15, decimal_places=0, null=True, blank=True, default=None, verbose_name='هدف دستی رند (تومان)')
     # Display choice only — never affects the math: when False (default)
     # the invoice shows no rounding row; the adjustment is silently part
     # of the final payable amount.

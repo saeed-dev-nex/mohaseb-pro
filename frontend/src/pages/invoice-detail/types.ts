@@ -57,7 +57,9 @@ export type InvoiceData = {
   final_amount?: number;
   rounding_enabled?: boolean;
   rounding_amount?: number;
+  rounding_target?: number | null;
   rounding_show_amount?: boolean;
+  rounding_cleared?: boolean;
   paid_amount?: number;
   remaining_amount?: number;
 };

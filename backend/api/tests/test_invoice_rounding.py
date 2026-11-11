@@ -131,3 +131,95 @@ class RoundingApiTests(APITestCase):
             self.payload(1253200, rounding_enabled=True, rounding_target=-5),
             format='json')
         self.assertEqual(response.status_code, 400)
+
+    def test_rounding_target_is_readable(self):
+        manual = self.client.post(
+            '/api/invoices/',
+            self.payload(1253200, rounding_enabled=True, rounding_target=1200000),
+            format='json')
+        self.assertEqual(manual.status_code, 201, manual.content)
+        self.assertEqual(int(manual.data['rounding_target']), 1200000)
+        auto = self.client.post(
+            '/api/invoices/', self.payload(1253200, rounding_enabled=True),
+            format='json')
+        self.assertEqual(auto.status_code, 201, auto.content)
+        self.assertIsNone(auto.data['rounding_target'])
+
+    def test_auto_rounding_rederives_after_amount_change(self):
+        created = self.client.post(
+            '/api/invoices/', self.payload(1253200, rounding_enabled=True),
+            format='json')
+        self.assertEqual(created.status_code, 201, created.content)
+        url = f"/api/invoices/{created.data['id']}/"
+        # The amounts move: auto rounding follows the NEW base.
+        response = self.client.patch(url, self.payload(1257800), format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(int(response.data['rounding_amount']), 2200)
+        self.assertEqual(int(response.data['final_amount']), 1260000)
+        self.assertFalse(response.data['rounding_cleared'])
+
+    def test_manual_target_cleared_when_amounts_change(self):
+        created = self.client.post(
+            '/api/invoices/',
+            self.payload(1253200, rounding_enabled=True, rounding_target=1200000),
+            format='json')
+        self.assertEqual(created.status_code, 201, created.content)
+        url = f"/api/invoices/{created.data['id']}/"
+        # Same invoice, new amounts, no fresh target: the one-shot manual
+        # rounding is dropped and the caller is told.
+        response = self.client.patch(url, self.payload(1300000), format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.data['rounding_cleared'])
+        self.assertFalse(response.data['rounding_enabled'])
+        self.assertIsNone(response.data['rounding_target'])
+        self.assertEqual(int(response.data['rounding_amount']), 0)
+        self.assertEqual(int(response.data['final_amount']), 1300000)
+
+    def test_manual_target_survives_unrelated_patch(self):
+        created = self.client.post(
+            '/api/invoices/',
+            self.payload(1253200, rounding_enabled=True, rounding_target=1200000),
+            format='json')
+        self.assertEqual(created.status_code, 201, created.content)
+        url = f"/api/invoices/{created.data['id']}/"
+        response = self.client.patch(url, {'description': 'یادداشت'}, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(response.data['rounding_cleared'])
+        self.assertTrue(response.data['rounding_enabled'])
+        self.assertEqual(int(response.data['rounding_target']), 1200000)
+        self.assertEqual(int(response.data['rounding_amount']), -53200)
+        self.assertEqual(int(response.data['final_amount']), 1200000)
+
+    def test_fresh_target_replaces_manual_in_same_save(self):
+        created = self.client.post(
+            '/api/invoices/',
+            self.payload(1253200, rounding_enabled=True, rounding_target=1200000),
+            format='json')
+        self.assertEqual(created.status_code, 201, created.content)
+        url = f"/api/invoices/{created.data['id']}/"
+        # New amounts AND a new target in one save: the fresh target wins.
+        payload = self.payload(1300000, rounding_target=1280000)
+        response = self.client.patch(url, payload, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(response.data['rounding_cleared'])
+        self.assertTrue(response.data['rounding_enabled'])
+        self.assertEqual(int(response.data['rounding_target']), 1280000)
+        self.assertEqual(int(response.data['rounding_amount']), -20000)
+        self.assertEqual(int(response.data['final_amount']), 1280000)
+
+    def test_clearing_target_switches_manual_to_auto(self):
+        created = self.client.post(
+            '/api/invoices/',
+            self.payload(1253200, rounding_enabled=True, rounding_target=1200000),
+            format='json')
+        self.assertEqual(created.status_code, 201, created.content)
+        url = f"/api/invoices/{created.data['id']}/"
+        # Explicit null target with new amounts: auto from now on, no clear.
+        payload = self.payload(1300000, rounding_target=None)
+        response = self.client.patch(url, payload, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(response.data['rounding_cleared'])
+        self.assertTrue(response.data['rounding_enabled'])
+        self.assertIsNone(response.data['rounding_target'])
+        self.assertEqual(int(response.data['rounding_amount']), 0)
+        self.assertEqual(int(response.data['final_amount']), 1300000)

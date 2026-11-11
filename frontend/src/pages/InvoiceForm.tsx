@@ -574,6 +574,15 @@ const InvoiceForm = () => {
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [creatingVehicleType, setCreatingVehicleType] = useState(false);
   const [inlineNotice, setInlineNotice] = useState("");
+  // Snapshot of the rounding rule the loaded invoice had: its
+  // pre-rounding base and its manual target ("" = auto). A stored manual
+  // target is one-shot — once the amounts move, it is dropped live (see
+  // the effect below) and the server drops it on save.
+  const [loadedRoundingBase, setLoadedRoundingBase] = useState<number | null>(
+    null,
+  );
+  const [loadedRoundingTarget, setLoadedRoundingTarget] = useState("");
+  const [roundingClearedNotice, setRoundingClearedNotice] = useState(false);
   const [invoiceDocuments, setInvoiceDocuments] = useState<File[]>([]);
   // New customer modal state
   const [newCustomerModal, setNewCustomerModal] =
@@ -738,12 +747,13 @@ const InvoiceForm = () => {
       discount: data.discount || 0,
       tax: data.tax || 0,
       commission_total: data.commission_total || 0,
-      // Pin the current payable as the rounding target so an untouched
-      // edit (or a clone) keeps the exact rounded total it already has.
+      // The stored rounding RULE loads as-is: a manual target only when
+      // the invoice actually has one; auto mode loads with an empty
+      // target. Never pin the current payable here — that froze the
+      // rounded total against later amount changes.
       rounding_enabled: !!data.rounding_enabled,
-      rounding_target: data.rounding_enabled
-        ? String(data.final_amount || "")
-        : "",
+      rounding_target:
+        data.rounding_target != null ? String(data.rounding_target) : "",
       rounding_show_amount: !!data.rounding_show_amount,
       paper_size: data.paper_size || "a5",
       vehicle_plate: data.vehicle_plate || "",
@@ -755,6 +765,18 @@ const InvoiceForm = () => {
       green_card_owner_national_id: data.green_card_owner_national_id || "",
       tags: data.tags || [],
     });
+    // Remember the loaded rounding rule so amount changes can drop a
+    // stale manual target (a clone carries the same amounts, so the
+    // snapshot stays valid for it too).
+    setLoadedRoundingBase(
+      data.rounding_enabled
+        ? Number(data.final_amount || 0) - Number(data.rounding_amount || 0)
+        : null,
+    );
+    setLoadedRoundingTarget(
+      data.rounding_target != null ? String(data.rounding_target) : "",
+    );
+    setRoundingClearedNotice(false);
     setItems(
       (data.items || [])
         .filter((it: any) => !it.is_office_card_fee)
@@ -1006,6 +1028,25 @@ const InvoiceForm = () => {
     : 0;
   const payableAmount = finalAmount + roundingAdjustment;
 
+  // A stored manual rounding is one-shot: once the amounts move, the
+  // server drops it on save. Mirror that live — clear the field and
+  // warn, so the operator sees it before saving instead of after.
+  useEffect(() => {
+    // Compare whole Tomans: the client total is a float, the server
+    // base can carry fractions — float dust must not drop the target.
+    if (
+      loadedRoundingTarget !== "" &&
+      loadedRoundingBase != null &&
+      Math.round(finalAmount) !== Math.round(loadedRoundingBase) &&
+      form.rounding_target !== ""
+    ) {
+      setField("rounding_target", "");
+      setRoundingClearedNotice(true);
+    }
+    // Intentionally only on the live base changing; setField is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finalAmount, loadedRoundingBase, loadedRoundingTarget]);
+
   const handleItemChange = useCallback(
     (idx: number, updated: InvoiceItemForm) => {
       setItems((prev) => prev.map((it, i) => (i === idx ? updated : it)));
@@ -1081,7 +1122,17 @@ const InvoiceForm = () => {
     };
     try {
       if (isEdit) {
-        await invoicesAPI.update(id, payload);
+        const { data } = await invoicesAPI.update(id, payload);
+        // The server drops a stale manual rounding on save; the form
+        // already warned live, but flag it for the details page too so
+        // the message survives the navigation.
+        if (data?.rounding_cleared) {
+          try {
+            sessionStorage.setItem("mohaseb:rounding-cleared", "1");
+          } catch {
+            /* storage blocked: non-fatal */
+          }
+        }
         navigate(`/invoices/${id}`);
       } else {
         const { data } = await invoicesAPI.create(payload);
@@ -1535,7 +1586,10 @@ const InvoiceForm = () => {
                     <Field label="مبلغ نهایی دلخواه (اختیاری)">
                       <PriceInput
                         value={form.rounding_target}
-                        onChange={(v) => setField("rounding_target", v)}
+                        onChange={(v) => {
+                          setField("rounding_target", v);
+                          setRoundingClearedNotice(false);
+                        }}
                         borderColor="border-sky-500/30 focus:ring-sky-500/30"
                         blankWhenZero
                       />
@@ -1543,8 +1597,16 @@ const InvoiceForm = () => {
                     <p className="text-sky-500/60 text-[10px] mt-2">
                       اگر مبلغی وارد نکنید، مبلغ فاکتور به نزدیک‌ترین ۱۰ هزار
                       تومان رند می‌شود: ریزِ کمتر از ۵ هزار تومان به پایین و ۵
-                      هزار تومان یا بیشتر به بالا.
+                      هزار تومان یا بیشتر به بالا. اگر مبلغ نهایی دلخواه را وارد
+                      کنید و بعد مبلغ فاکتور عوض شود، رند دستی حذف می‌شود و باید
+                      دوباره واردش کنید.
                     </p>
+                    {roundingClearedNotice && (
+                      <p className="text-amber-400 text-xs mt-2">
+                        ⚠️ رند دستی قبلی با تغییر مبلغ فاکتور حذف شد؛ در صورت
+                        تمایل مبلغ جدید را دوباره وارد کنید.
+                      </p>
+                    )}
                     <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300 mt-3">
                       <input
                         type="checkbox"
