@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
@@ -339,6 +339,12 @@ const Layout = () => {
   const currentUser = useSelector((state: any) => state.auth.currentUser);
   const isSuperuser = !!currentUser?.is_superuser;
   const canQuickInvoice = hasModule(currentUser, "invoices");
+  const location = useLocation();
+  // The FAB is redundant — and covers the submit button — on the full
+  // invoice form (create and edit), so it stays hidden there.
+  const isInvoiceForm =
+    location.pathname === "/invoices/new" ||
+    /^\/invoices\/[^/]+\/edit$/.test(location.pathname);
 
   // Global keyboard shortcuts — editable in Settings → میانبرهای
   // صفحه‌کلید (defaults: Alt+N quick invoice, Alt+Shift+N new invoice,
@@ -459,7 +465,7 @@ const Layout = () => {
   return (
     <div
       data-theme={localStorage.getItem("app-theme") || "dark"}
-      className="min-h-screen bg-slate-950 font-vazirmatn"
+      className="min-h-screen bg-slate-950 font-vazirmatn overflow-x-clip"
       dir="rtl"
     >
       {/* Sidebar */}
@@ -496,7 +502,7 @@ const Layout = () => {
       </div>
 
       {/* Quick Invoice FAB */}
-      {canQuickInvoice && (
+      {canQuickInvoice && !isInvoiceForm && (
         <button
           onClick={() => setQuickInvoice(true)}
           title="فاکتور سریع"

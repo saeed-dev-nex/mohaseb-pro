@@ -184,7 +184,11 @@ const Sidebar = ({
           bg-gradient-to-b from-slate-900 to-slate-800
           border-l border-slate-700/50 shadow-2xl
           transform transition-transform duration-300
-          ${isOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"}`}
+          ${
+            isOpen
+              ? "translate-x-0"
+              : "translate-x-full lg:translate-x-0 pointer-events-none lg:pointer-events-auto"
+          }`}
       >
         {/* Logo + current user */}
         <div className="p-6 border-b border-slate-700/50">

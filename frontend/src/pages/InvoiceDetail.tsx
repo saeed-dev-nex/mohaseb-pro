@@ -747,7 +747,7 @@ const InvoiceDetail = () => {
               ← بازگشت به فاکتورها
             </Link>
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-bold text-white">
+              <h2 className="text-2xl font-bold text-white whitespace-nowrap">
                 {invoice.invoice_number}
               </h2>
               <StatusBadge
@@ -1004,7 +1004,7 @@ const InvoiceDetail = () => {
                 </div>
               </div>
               <div className="text-left space-y-1">
-                <p className="text-blue-400 font-mono text-lg font-bold">
+                <p className="text-blue-400 font-mono text-lg font-bold whitespace-nowrap">
                   {invoice.invoice_number}
                 </p>
                 <StatusBadge
