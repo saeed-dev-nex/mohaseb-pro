@@ -117,6 +117,53 @@ class GitUpdateStatusTests(TestCase):
         self.assertEqual(data['requested_by'], 'admin')
 
 
+class UpdateStatusFailureTests(SimpleTestCase):
+    """Local failures must degrade to a readable status, never a 500.
+
+    Regression: on a Windows install whose server process could not
+    see git on PATH, GET /api/app-update/ returned HTTP 500 because
+    FileNotFoundError (an OSError) escaped get_update_status.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        base = Path(self.tmp.name)
+        self.cache = base / 'cache.json'
+        for target, value in (
+            ('repo_root', base),
+            ('_cache_path', self.cache),
+        ):
+            patcher = patch.object(app_update, target, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_missing_git_is_a_handled_failure(self):
+        with patch.object(
+            app_update.subprocess, 'run',
+            side_effect=FileNotFoundError(2, 'No such file or directory', 'git'),
+        ):
+            status = app_update.get_update_status(force=True)
+        self.assertFalse(status['available'])
+        self.assertIn('بررسی آپدیت انجام نشد', status['reason'])
+
+    def test_naive_cache_timestamp_does_not_crash(self):
+        from datetime import datetime
+
+        self.cache.write_text(
+            json.dumps({
+                'checked_at': datetime.now().isoformat(),  # no timezone
+                'available': False,
+                'current_version': '3.5.1',
+            }),
+            encoding='utf-8',
+        )
+        status = app_update.get_update_status()
+        self.assertEqual(status['current_version'], '3.5.1')
+        quick = app_update.quick_update_status()
+        self.assertEqual(quick['current_version'], '3.5.1')
+
+
 class AppUpdateApiTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_superuser(username='upd-admin', password='admin' + '-pass-12345')
