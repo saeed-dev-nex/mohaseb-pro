@@ -35,12 +35,20 @@ def repo_root():
 
 
 def _run_git(args, timeout=GIT_TIMEOUT):
-    completed = subprocess.run(
-        ['git', '-C', str(repo_root()), *args],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+    try:
+        completed = subprocess.run(
+            ['git', '-C', str(repo_root()), *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except FileNotFoundError:
+        # git is not on the PATH of the server process (seen on a
+        # Windows install whose launcher environment lacked it) — turn
+        # it into a handled failure instead of a 500.
+        raise RuntimeError('git در دسترس نیست (در PATH پروسهٔ سرور پیدا نشد)')
+    except PermissionError:
+        raise RuntimeError('اجازهٔ اجرای git داده نشد')
     if completed.returncode != 0:
         raise RuntimeError((completed.stderr or completed.stdout or 'git error').strip())
     return completed.stdout.strip()
@@ -109,10 +117,14 @@ def _read_cache():
     try:
         data = json.loads(_cache_path().read_text(encoding='utf-8'))
         checked_at = datetime.fromisoformat(data['checked_at'])
+        if checked_at.tzinfo is None:
+            # A cache written without a timezone must not crash the
+            # freshness subtraction below — read it as UTC.
+            checked_at = checked_at.replace(tzinfo=dt_timezone.utc)
         if datetime.now(dt_timezone.utc) - checked_at > CACHE_MAX_AGE:
             return None
         return data
-    except (OSError, ValueError, KeyError):
+    except (OSError, ValueError, KeyError, TypeError):
         return None
 
 
@@ -155,7 +167,7 @@ def get_update_status(force=False):
             status['latest_version'] = _run_git(['show', f"origin/{status['branch']}:VERSION"]).strip()
             changelog = _run_git(['show', f"origin/{status['branch']}:CHANGELOG.md"])
             status['changes'] = changes_since(changelog, status['current_version'])
-    except (RuntimeError, subprocess.SubprocessError, ValueError) as error:
+    except (RuntimeError, subprocess.SubprocessError, ValueError, OSError) as error:
         status['reason'] = f'بررسی آپدیت انجام نشد: {str(error)[:200]}'
         logger.warning('Update check failed: %s', error)
     _write_cache(status)
@@ -204,7 +216,11 @@ def approve_update(requested_by=''):
         'requested_by': requested_by,
         'at': datetime.now(dt_timezone.utc).isoformat(),
     }
-    (root / FLAG_FILENAME).write_text(json.dumps(flag, ensure_ascii=False), encoding='utf-8')
+    try:
+        (root / FLAG_FILENAME).write_text(json.dumps(flag, ensure_ascii=False), encoding='utf-8')
+    except OSError:
+        logger.exception('Could not write the update approval flag')
+        return False, {'detail': 'نوشتن فایل تأیید آپدیت انجام نشد.'}
     spawned = False
     if os.name == 'nt':
         helper = root / 'apply_update.ps1'
