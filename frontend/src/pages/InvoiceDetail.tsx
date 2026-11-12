@@ -90,15 +90,30 @@ const InvoiceDetail = () => {
     if (!invoice) return;
     setRoundingOn(!!invoice.rounding_enabled);
     setRoundingShow(!!invoice.rounding_show_amount);
-    // Pin the current payable as the target so re-applying without
-    // changes keeps the exact rounded total the invoice already has.
+    // The stored rounding RULE loads as-is: a manual target only when
+    // the invoice actually has one; auto mode loads with an empty
+    // target. Never pin the current payable here — that froze the
+    // rounded total against later amount changes.
     setRoundingTarget(
-      invoice.rounding_enabled ? String(invoice.final_amount || "") : "",
+      invoice.rounding_target != null ? String(invoice.rounding_target) : "",
     );
+    // The edit form flags a dropped manual rounding here so the message
+    // survives the navigation from the form to this page.
+    try {
+      if (sessionStorage.getItem("mohaseb:rounding-cleared") === "1") {
+        sessionStorage.removeItem("mohaseb:rounding-cleared");
+        setRoundingMsg(
+          "⚠️ رند دستی قبلی با تغییر مبلغ فاکتور حذف شد؛ در صورت تمایل مبلغ جدید را دوباره وارد کنید.",
+        );
+      }
+    } catch {
+      /* storage blocked: non-fatal */
+    }
   }, [
     invoice?.id,
     invoice?.rounding_enabled,
     invoice?.rounding_amount,
+    invoice?.rounding_target,
     invoice?.rounding_show_amount,
   ]);
 
@@ -117,7 +132,11 @@ const InvoiceDetail = () => {
       });
       setInvoice(data);
       window.dispatchEvent(new Event("mohaseb:data-changed"));
-      setRoundingMsg("✅ رند مبلغ اعمال شد");
+      setRoundingMsg(
+        data?.rounding_cleared
+          ? "⚠️ رند دستی قبلی با تغییر مبلغ فاکتور حذف شد؛ در صورت تمایل مبلغ جدید را دوباره وارد کنید."
+          : "✅ رند مبلغ اعمال شد",
+      );
     } catch {
       setRoundingMsg("❌ خطا در اعمال رند مبلغ");
     } finally {
@@ -728,7 +747,7 @@ const InvoiceDetail = () => {
               ← بازگشت به فاکتورها
             </Link>
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-bold text-white">
+              <h2 className="text-2xl font-bold text-white whitespace-nowrap">
                 {invoice.invoice_number}
               </h2>
               <StatusBadge
@@ -985,7 +1004,7 @@ const InvoiceDetail = () => {
                 </div>
               </div>
               <div className="text-left space-y-1">
-                <p className="text-blue-400 font-mono text-lg font-bold">
+                <p className="text-blue-400 font-mono text-lg font-bold whitespace-nowrap">
                   {invoice.invoice_number}
                 </p>
                 <StatusBadge
@@ -1450,7 +1469,9 @@ const InvoiceDetail = () => {
                       />
                       <p className="text-sky-500/60 text-[10px]">
                         خالی بماند: رند به نزدیک‌ترین ۱۰ هزار تومان (ریزِ کمتر
-                        از ۵ هزار به پایین، ۵ هزار و بیشتر به بالا).
+                        از ۵ هزار به پایین، ۵ هزار و بیشتر به بالا). اگر مبلغ
+                        نهایی دلخواه را وارد کنید و بعد مبلغ فاکتور عوض شود، رند
+                        دستی حذف می‌شود و باید دوباره واردش کنید.
                       </p>
                       <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
                         <input

@@ -67,9 +67,11 @@ const Navbar = ({ onMenuToggle }: NavbarProps) => {
         >
           {theme === "dark" ? "☀️ حالت روشن" : "🌙 حالت تیره"}
         </button>
-        <span className="text-slate-400 text-sm">{persianDate}</span>
-        <div className="w-px h-5 bg-slate-700" />
-        <div className="flex items-center gap-2">
+        <span className="hidden sm:inline text-slate-400 text-sm">
+          {persianDate}
+        </span>
+        <div className="w-px h-5 bg-slate-700 hidden sm:block" />
+        <div className="hidden sm:flex items-center gap-2">
           <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
           <span className="text-slate-400 text-xs">آنلاین</span>
         </div>

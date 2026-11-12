@@ -178,6 +178,16 @@ const Settings = () => {
   const socialLogoInputRef = useRef<HTMLInputElement>(null);
   const [docsPickerOpen, setDocsPickerOpen] = useState(false);
 
+  // On small screens the tab row scrolls horizontally — keep the
+  // active tab visible instead of leaving it off-screen.
+  useEffect(() => {
+    document.querySelector('[aria-current="page"]')?.scrollIntoView({
+      behavior: "smooth",
+      inline: "center",
+      block: "nearest",
+    });
+  }, [activeTab]);
+
   useEffect(() => {
     Promise.all([
       profileAPI.get(),
@@ -409,7 +419,7 @@ const Settings = () => {
         {/* Vertical tab sidebar */}
         <aside className="w-full md:w-56 shrink-0 md:sticky md:top-6">
           <nav
-            className="flex md:flex-col gap-1.5 overflow-x-auto md:overflow-visible pb-1 md:pb-0"
+            className="flex md:flex-col gap-1.5 overflow-x-auto md:overflow-visible pb-1 md:pb-0 [mask-image:linear-gradient(to_left,transparent,black_20px,black_calc(100%-20px),transparent)] md:[mask-image:none]"
             aria-label="بخش‌های تنظیمات"
           >
             {settingsTabs.map((t) => (

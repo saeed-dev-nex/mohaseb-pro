@@ -891,7 +891,7 @@ const QuickInvoiceModal = ({
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
       <div
         ref={panelRef}
-        className="bg-slate-800 border border-slate-700/60 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col"
+        className="bg-slate-800 border border-slate-700/60 rounded-2xl shadow-2xl w-full max-w-[calc(100vw-2rem)] sm:max-w-xl max-h-[90vh] flex flex-col min-w-0"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -916,7 +916,7 @@ const QuickInvoiceModal = ({
         </div>
 
         {/* Steps */}
-        <div className="flex items-center gap-1.5 px-5 pt-4 shrink-0">
+        <div className="flex items-center gap-1.5 px-5 pt-4 shrink-0 overflow-x-auto min-w-0 w-full">
           {[
             { n: 1, l: "مشتری و خودرو" },
             { n: 2, l: "خدمات" },
@@ -942,7 +942,7 @@ const QuickInvoiceModal = ({
               >
                 <span className="font-bold">{fmt(s.n)}</span> {s.l}
               </button>
-              {i < 3 && <div className="flex-1 h-px bg-slate-700/60" />}
+              {i < 3 && <div className="flex-1 min-w-3 h-px bg-slate-700/60" />}
             </React.Fragment>
           ))}
         </div>

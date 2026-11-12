@@ -520,27 +520,27 @@ const Dashboard = () => {
       {/* Top Customers + Quick Actions */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Top Customers */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 min-w-0 overflow-hidden">
           <h3 className="text-white font-semibold mb-4">🏆 بهترین مشتریان</h3>
           {(stats?.top_customers || []).length > 0 ? (
             <div className="space-y-2">
               {stats.top_customers.map((c, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between bg-slate-700/30 rounded-xl p-3"
+                  className="flex items-center justify-between gap-2 min-w-0 bg-slate-700/30 rounded-xl p-3"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <span
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold
+                      className={`w-7 h-7 shrink-0 rounded-lg flex items-center justify-center text-xs font-bold
                       ${i === 0 ? "bg-yellow-500/20 text-yellow-400" : i === 1 ? "bg-slate-400/20 text-slate-300" : "bg-orange-500/20 text-orange-400"}`}
                     >
                       {i + 1}
                     </span>
-                    <span className="text-white text-sm font-medium">
+                    <span className="text-white text-sm font-medium truncate min-w-0">
                       {c.customer__name || "---"}
                     </span>
                   </div>
-                  <div className="text-left">
+                  <div className="text-left shrink-0 whitespace-nowrap">
                     <p className="text-blue-400 font-semibold text-sm">
                       {formatPrice(c.total)}
                     </p>
@@ -626,7 +626,7 @@ const Dashboard = () => {
       {/* Recent Invoices + Upcoming Cheques */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Invoices */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 min-w-0 overflow-hidden">
           <div className="flex items-center justify-between mb-5">
             <h3 className="text-white font-semibold">آخرین فاکتورها</h3>
             <Link
@@ -642,22 +642,22 @@ const Dashboard = () => {
               {stats.recent_invoices.map((inv) => (
                 <div
                   key={inv.id}
-                  className="flex items-center justify-between p-3 rounded-xl bg-slate-700/30 hover:bg-slate-700/50 transition-all group"
+                  className="flex items-center justify-between gap-2 min-w-0 p-3 rounded-xl bg-slate-700/30 hover:bg-slate-700/50 transition-all group"
                 >
-                  <div className="flex items-center gap-4">
-                    <span className="text-blue-400 font-mono text-xs bg-blue-500/10 px-2 py-1 rounded-lg">
+                  <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+                    <span className="text-blue-400 font-mono text-xs bg-blue-500/10 px-2 py-1 rounded-lg shrink-0 whitespace-nowrap">
                       {inv.invoice_number}
                     </span>
-                    <span className="text-slate-200 text-sm">
+                    <span className="text-slate-200 text-sm truncate min-w-0">
                       {inv.customer_name}
                     </span>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-slate-300 text-sm font-medium">
+                  <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+                    <span className="text-slate-300 text-sm font-medium whitespace-nowrap">
                       {formatPrice(inv.total_amount)}
                     </span>
                     <StatusBadge status={inv.status} />
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex gap-1">
                       <Link
                         to={`/invoices/${inv.id}`}
                         className="text-xs px-2 py-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-600 transition-all"
@@ -685,7 +685,7 @@ const Dashboard = () => {
         </div>
 
         {/* Upcoming Cheques */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 min-w-0 overflow-hidden">
           <div className="flex items-center justify-between mb-5">
             <h3 className="text-white font-semibold">
               🎫 چک‌های سررسید نزدیک (۱۰ روز آینده)
@@ -703,11 +703,11 @@ const Dashboard = () => {
               {stats.upcoming_cheques.map((chq) => (
                 <div
                   key={chq.id}
-                  className="flex items-center justify-between p-3 rounded-xl bg-slate-700/30 hover:bg-slate-700/50 transition-all group"
+                  className="flex items-center justify-between gap-2 min-w-0 p-3 rounded-xl bg-slate-700/30 hover:bg-slate-700/50 transition-all group"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
                     <span
-                      className={`text-xs px-2 py-1 rounded-lg font-medium border ${
+                      className={`text-xs px-2 py-1 rounded-lg font-medium border shrink-0 whitespace-nowrap ${
                         chq.type === "incoming"
                           ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
                           : "bg-purple-500/10 border-purple-500/20 text-purple-400"
@@ -715,17 +715,17 @@ const Dashboard = () => {
                     >
                       {chq.type === "incoming" ? "دریافتی" : "پرداختی"}
                     </span>
-                    <div>
-                      <span className="text-slate-200 text-sm font-medium">
+                    <div className="min-w-0">
+                      <span className="block text-slate-200 text-sm font-medium truncate">
                         {chq.bank_name} ({chq.customer_name})
                       </span>
-                      <span className="block text-[10px] text-slate-500 mt-0.5 font-mono">
+                      <span className="block text-[10px] text-slate-500 mt-0.5 font-mono truncate">
                         شماره چک: {chq.cheque_number}
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-slate-300 text-sm font-medium">
+                  <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+                    <span className="text-slate-300 text-sm font-medium whitespace-nowrap">
                       {formatPrice(chq.amount)}
                     </span>
                     <span className="text-xs text-yellow-400 font-mono bg-yellow-500/10 px-2 py-1 rounded-lg">

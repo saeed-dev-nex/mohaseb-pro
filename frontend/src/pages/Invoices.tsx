@@ -340,7 +340,7 @@ const Invoices = () => {
               <div className="text-sm text-slate-700">
                 <Link
                   to={`/invoices/${item.invoice_id}`}
-                  className="font-semibold text-blue-600 hover:underline"
+                  className="font-semibold text-blue-600 hover:underline whitespace-nowrap"
                 >
                   {item.invoice_number}
                 </Link>
@@ -621,7 +621,7 @@ const Invoices = () => {
                     className="hover:bg-slate-700/20 transition-colors"
                   >
                     <td className="py-3.5 px-4">
-                      <span className="text-blue-400 font-mono text-xs bg-blue-500/10 px-2 py-1 rounded-lg">
+                      <span className="text-blue-400 font-mono text-xs bg-blue-500/10 px-2 py-1 rounded-lg whitespace-nowrap">
                         {inv.invoice_number}
                       </span>
                     </td>
