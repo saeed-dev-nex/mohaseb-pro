@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
@@ -34,17 +35,66 @@ def repo_root():
     return Path(settings.BASE_DIR).parent
 
 
+_GIT_EXECUTABLE = None
+
+
+def _windows_git_candidates():
+    """Well-known Git for Windows install locations (PATH fallback)."""
+    candidates = []
+    for env_name in ('ProgramFiles', 'ProgramFiles(x86)'):
+        base = os.environ.get(env_name)
+        if base:
+            candidates.append(str(Path(base) / 'Git' / 'cmd' / 'git.exe'))
+            candidates.append(str(Path(base) / 'Git' / 'bin' / 'git.exe'))
+    local = os.environ.get('LOCALAPPDATA')
+    if local:
+        candidates.append(str(Path(local) / 'Programs' / 'Git' / 'cmd' / 'git.exe'))
+        candidates.append(str(Path(local) / 'Git' / 'cmd' / 'git.exe'))
+    return candidates
+
+
+def _git_executable():
+    """Resolve git even when the server process's PATH does not have it.
+
+    The update check runs inside the server process, whose environment
+    can differ from the interactive shell where the launcher's own
+    updater works (a restricted PATH, a different Windows account, an
+    autostart context). Relying on PATH alone made the status check
+    fail on a real install, so on Windows the standard Git install
+    locations are probed as a fallback.
+    """
+    global _GIT_EXECUTABLE
+    if _GIT_EXECUTABLE is not None:
+        return _GIT_EXECUTABLE
+    found = shutil.which('git')
+    if not found:
+        for candidate in _windows_git_candidates():
+            if Path(candidate).is_file():
+                found = candidate
+                break
+    _GIT_EXECUTABLE = found or 'git'
+    return _GIT_EXECUTABLE
+
+
 def _run_git(args, timeout=GIT_TIMEOUT):
+    root = str(repo_root())
+    # safe.directory: when the server runs under a different Windows
+    # account than the user who owns the clone, git refuses every
+    # command with "detected dubious ownership" — scope trust to this
+    # repo only. GIT_TERMINAL_PROMPT=0 keeps a credential prompt from
+    # ever hanging the request; the fetch then fails fast and handled.
+    command = [_git_executable(), '-c', f'safe.directory={root}', '-C', root, *args]
+    env = {**os.environ, 'GIT_TERMINAL_PROMPT': '0'}
     try:
         completed = subprocess.run(
-            ['git', '-C', str(repo_root()), *args],
+            command,
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=env,
         )
     except FileNotFoundError:
-        # git is not on the PATH of the server process (seen on a
-        # Windows install whose launcher environment lacked it) — turn
+        # git is not reachable from the server process at all — turn
         # it into a handled failure instead of a 500.
         raise RuntimeError('git در دسترس نیست (در PATH پروسهٔ سرور پیدا نشد)')
     except PermissionError:
