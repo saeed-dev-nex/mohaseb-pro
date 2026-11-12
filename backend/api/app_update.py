@@ -90,6 +90,14 @@ def _run_git(args, timeout=GIT_TIMEOUT):
             command,
             capture_output=True,
             text=True,
+            # Decode as UTF-8 explicitly: with text=True alone, Windows
+            # decodes git's output with the locale code page (cp1252),
+            # and the Persian CHANGELOG's UTF-8 bytes kill the reader
+            # thread — subprocess then returns stdout=None and the
+            # status check died with AttributeError (the real cause of
+            # the 500 on a live install, confirmed by its traceback).
+            encoding='utf-8',
+            errors='replace',
             timeout=timeout,
             env=env,
         )
@@ -100,8 +108,10 @@ def _run_git(args, timeout=GIT_TIMEOUT):
     except PermissionError:
         raise RuntimeError('اجازهٔ اجرای git داده نشد')
     if completed.returncode != 0:
-        raise RuntimeError((completed.stderr or completed.stdout or 'git error').strip())
-    return completed.stdout.strip()
+        raise RuntimeError(
+            (completed.stderr or completed.stdout or 'git error').strip()
+        )
+    return (completed.stdout or '').strip()
 
 
 def _read_version(root):
