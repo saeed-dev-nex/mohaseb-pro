@@ -210,6 +210,45 @@ class GitResolutionTests(SimpleTestCase):
         )
         self.assertEqual(captured['kwargs']['env']['GIT_TERMINAL_PROMPT'], '0')
 
+    def test_run_git_decodes_output_as_utf8(self):
+        captured = {}
+
+        class Done:
+            returncode = 0
+            stdout = 'ok\n'
+            stderr = ''
+
+        def fake_run(command, **kwargs):
+            captured.update(kwargs)
+            return Done()
+
+        with patch.object(app_update.subprocess, 'run', fake_run):
+            app_update._run_git(['status'])
+        # Locale decoding (cp1252 on the user's Windows install) is
+        # what killed the real check — never leave it to the locale.
+        self.assertEqual(captured['encoding'], 'utf-8')
+        self.assertEqual(captured['errors'], 'replace')
+
+    def test_run_git_survives_none_stdout(self):
+        # When the decode reader thread dies, subprocess hands back
+        # stdout=None; the live install crashed on .strip() of None.
+        class Done:
+            returncode = 0
+            stdout = None
+            stderr = None
+
+        with patch.object(app_update.subprocess, 'run', return_value=Done()):
+            self.assertEqual(app_update._run_git(['status']), '')
+
+        class Failed:
+            returncode = 1
+            stdout = None
+            stderr = None
+
+        with patch.object(app_update.subprocess, 'run', return_value=Failed()):
+            with self.assertRaises(RuntimeError):
+                app_update._run_git(['status'])
+
 
 class AppUpdateApiTests(TestCase):
     def setUp(self):
