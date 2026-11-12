@@ -164,6 +164,53 @@ class UpdateStatusFailureTests(SimpleTestCase):
         self.assertEqual(quick['current_version'], '3.5.1')
 
 
+class GitResolutionTests(SimpleTestCase):
+    """The update check must find and drive git from inside the server
+    process, whose PATH can differ from the interactive shell."""
+
+    def setUp(self):
+        cache_patcher = patch.object(app_update, '_GIT_EXECUTABLE', None)
+        cache_patcher.start()
+        self.addCleanup(cache_patcher.stop)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root_patcher = patch.object(
+            app_update, 'repo_root', return_value=Path(self.tmp.name)
+        )
+        root_patcher.start()
+        self.addCleanup(root_patcher.stop)
+
+    def test_fallback_probes_standard_locations_when_path_lacks_git(self):
+        import shutil as shutil_module
+
+        real_git = shutil_module.which('git')
+        self.assertIsNotNone(real_git)
+        with patch.object(app_update.shutil, 'which', return_value=None), patch.object(
+            app_update, '_windows_git_candidates', return_value=[real_git]
+        ):
+            self.assertEqual(app_update._git_executable(), real_git)
+
+    def test_run_git_scopes_trust_and_disables_prompts(self):
+        captured = {}
+
+        class Done:
+            returncode = 0
+            stdout = 'ok\n'
+            stderr = ''
+
+        def fake_run(command, **kwargs):
+            captured['command'] = command
+            captured['kwargs'] = kwargs
+            return Done()
+
+        with patch.object(app_update.subprocess, 'run', fake_run):
+            self.assertEqual(app_update._run_git(['status']), 'ok')
+        self.assertIn(
+            f'safe.directory={Path(self.tmp.name)}', captured['command']
+        )
+        self.assertEqual(captured['kwargs']['env']['GIT_TERMINAL_PROMPT'], '0')
+
+
 class AppUpdateApiTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_superuser(username='upd-admin', password='admin' + '-pass-12345')
