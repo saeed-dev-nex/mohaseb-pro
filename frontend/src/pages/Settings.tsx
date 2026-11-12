@@ -181,13 +181,11 @@ const Settings = () => {
   // On small screens the tab row scrolls horizontally — keep the
   // active tab visible instead of leaving it off-screen.
   useEffect(() => {
-    document
-      .querySelector('[aria-current="page"]')
-      ?.scrollIntoView({
-        behavior: "smooth",
-        inline: "center",
-        block: "nearest",
-      });
+    document.querySelector('[aria-current="page"]')?.scrollIntoView({
+      behavior: "smooth",
+      inline: "center",
+      block: "nearest",
+    });
   }, [activeTab]);
 
   useEffect(() => {
