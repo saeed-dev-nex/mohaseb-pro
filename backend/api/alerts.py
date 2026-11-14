@@ -31,6 +31,7 @@ def edit_request_payload(kind, edit_request):
         'invoice_number': invoice.invoice_number if invoice else '',
         'requested_by_id': edit_request.requested_by_id,
         'requested_by': _display_name(edit_request.requested_by),
+        'reason': edit_request.reason,
         'reviewed_by_id': edit_request.reviewed_by_id,
         'reviewed_by': _display_name(edit_request.reviewed_by),
         'status': edit_request.status,

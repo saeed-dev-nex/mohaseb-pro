@@ -19,6 +19,7 @@ import {
 } from "../components/ui";
 import { invoicesAPI, invoiceSettingsAPI } from "../services/api";
 import JalaliDatePicker from "../components/JalaliDatePicker";
+import RequestEditModal from "../components/RequestEditModal";
 
 type FilterUser = {
   id: number;
@@ -247,10 +248,18 @@ const Invoices = () => {
       window.removeEventListener("mohaseb:data-changed", refreshEditRequests);
   }, [isManager]);
 
-  const requestEdit = async (id: number) => {
+  const [requestTarget, setRequestTarget] = useState<{
+    id: number;
+    invoice_number: string;
+  } | null>(null);
+
+  const requestEdit = async (reason: string) => {
+    if (!requestTarget) return;
+    const id = requestTarget.id;
     setActionLoading(`${id}_request`);
     try {
-      await invoicesAPI.requestEdit(id);
+      await invoicesAPI.requestEdit(id, reason || undefined);
+      setRequestTarget(null);
       await queryClient.invalidateQueries({ queryKey: invoiceKeys.all });
     } finally {
       setActionLoading(null);
@@ -714,7 +723,7 @@ const Invoices = () => {
                             </button>
                           ) : (
                             <button
-                              onClick={() => requestEdit(inv.id)}
+                              onClick={() => setRequestTarget(inv)}
                               disabled={!!actionLoading}
                               className="text-xs px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 border border-amber-500/20 disabled:opacity-50"
                             >
@@ -795,6 +804,14 @@ const Invoices = () => {
           </div>
         )}
       </div>
+
+      <RequestEditModal
+        open={!!requestTarget}
+        invoiceNumber={requestTarget?.invoice_number}
+        submitting={actionLoading === `${requestTarget?.id}_request`}
+        onClose={() => setRequestTarget(null)}
+        onSubmit={requestEdit}
+      />
 
       <ConfirmDialog
         isOpen={!!deleteTarget}

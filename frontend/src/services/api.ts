@@ -137,7 +137,8 @@ export const invoicesAPI = {
   exportCsv: (params: Params = {}) =>
     api.get("invoices/export_csv/", { params, responseType: "blob" }),
   quickCreate: (data: Payload) => api.post("invoices/quick_create/", data),
-  requestEdit: (id: Id) => api.post(`invoices/${id}/request-edit/`),
+  requestEdit: (id: Id, reason?: string) =>
+    api.post(`invoices/${id}/request-edit/`, reason ? { reason } : {}),
   editRequests: () => api.get("invoices/edit-requests/"),
   reviewEditRequest: (invoiceId: Id, requestId: Id, decision: string) =>
     api.post(`invoices/${invoiceId}/review-edit-request/`, {

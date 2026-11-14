@@ -81,9 +81,50 @@ class EditRequestAlertHookTests(TestCase):
     def test_payload_shape(self):
         edit_request = InvoiceEditRequest.objects.create(
             invoice=self.invoice, requested_by=self.operator,
+            reason='اصلاح مبلغ ردیف دوم',
         )
         payload = edit_request_payload('edit_request_created', edit_request)
         self.assertEqual(payload['request_id'], edit_request.id)
         self.assertEqual(payload['invoice_id'], self.invoice.id)
         self.assertEqual(payload['requested_by'], 'op-alerts')
         self.assertEqual(payload['status'], 'pending')
+        self.assertEqual(payload['reason'], 'اصلاح مبلغ ردیف دوم')
+
+    def test_request_reason_is_stored_broadcast_and_listed(self):
+        self.client.force_authenticate(self.operator)
+        response = self.client.post(
+            f'/api/invoices/{self.invoice.id}/request-edit/',
+            {'reason': '  اشتباه در مبلغ پرداختی  '},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        # Stored trimmed, echoed in the response and in the alert payload.
+        self.assertEqual(response.data['reason'], 'اشتباه در مبلغ پرداختی')
+        edit_request = InvoiceEditRequest.objects.get(pk=response.data['id'])
+        self.assertEqual(edit_request.reason, 'اشتباه در مبلغ پرداختی')
+        payload = self.layer.sent[0][1]['payload']
+        self.assertEqual(payload['reason'], 'اشتباه در مبلغ پرداختی')
+
+        # The manager review list carries the reason.
+        self.client.force_authenticate(self.manager)
+        response = self.client.get('/api/invoices/edit-requests/')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data[0]['reason'], 'اشتباه در مبلغ پرداختی')
+
+        # Re-requesting while pending attaches a corrected reason.
+        self.client.force_authenticate(self.operator)
+        response = self.client.post(
+            f'/api/invoices/{self.invoice.id}/request-edit/',
+            {'reason': 'دلیل اصلاح‌شده'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        edit_request.refresh_from_db()
+        self.assertEqual(edit_request.reason, 'دلیل اصلاح‌شده')
+
+    def test_request_without_reason_stays_empty(self):
+        self.client.force_authenticate(self.operator)
+        response = self.client.post(f'/api/invoices/{self.invoice.id}/request-edit/', {}, format='json')
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.data['reason'], '')
+        self.assertEqual(self.layer.sent[0][1]['payload']['reason'], '')
