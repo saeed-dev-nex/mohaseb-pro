@@ -34,6 +34,7 @@ import type {
 } from "./invoice-detail/types";
 
 import PriceInput from "../components/PriceInput";
+import RequestEditModal from "../components/RequestEditModal";
 import {
   Button,
   ErrorNotice,
@@ -144,6 +145,7 @@ const InvoiceDetail = () => {
     }
   };
   const [requestingEdit, setRequestingEdit] = useState(false);
+  const [showRequestEditModal, setShowRequestEditModal] = useState(false);
   const [paymentForm, setPaymentForm] = useState<PaymentFormData>({
     amount: "",
     method: "cash",
@@ -457,10 +459,11 @@ const InvoiceDetail = () => {
     }
   };
 
-  const handleRequestEdit = async () => {
+  const handleRequestEdit = async (reason: string) => {
     setRequestingEdit(true);
     try {
-      await invoicesAPI.requestEdit(id);
+      await invoicesAPI.requestEdit(id, reason || undefined);
+      setShowRequestEditModal(false);
       const res = await invoicesAPI.detail(id);
       setInvoice(res.data);
     } finally {
@@ -874,7 +877,7 @@ const InvoiceDetail = () => {
                 </button>
               ) : (
                 <button
-                  onClick={handleRequestEdit}
+                  onClick={() => setShowRequestEditModal(true)}
                   disabled={requestingEdit}
                   className="px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-700 text-sm disabled:opacity-50"
                 >
@@ -1656,6 +1659,14 @@ const InvoiceDetail = () => {
           )}
         </div>
       </div>
+      <RequestEditModal
+        open={showRequestEditModal}
+        invoiceNumber={invoice.invoice_number}
+        submitting={requestingEdit}
+        onClose={() => setShowRequestEditModal(false)}
+        onSubmit={handleRequestEdit}
+      />
+
       {isManager && showPriorSnapshot && priorSnapshot && (
         <div
           className="no-print fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-3 sm:p-6"

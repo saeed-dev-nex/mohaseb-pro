@@ -13,6 +13,7 @@ type EditRequestItem = {
   invoice_id: number;
   invoice_number: string;
   requested_by: string;
+  reason?: string;
 };
 
 type AlertPayload = {
@@ -22,6 +23,7 @@ type AlertPayload = {
   invoice_number: string;
   requested_by_id: number;
   requested_by: string;
+  reason?: string;
   reviewed_by_id: number | null;
   reviewed_by: string;
   status: string;
@@ -217,6 +219,12 @@ const InvoiceEditRequestAlerts = () => {
                     </Link>{" "}
                     درخواست داده است.
                   </p>
+                  {item.reason ? (
+                    <p className="mt-1.5 rounded-lg bg-amber-50 border border-amber-200/70 px-2.5 py-1.5 text-sm text-slate-700">
+                      <span className="font-medium text-slate-500">دلیل: </span>
+                      {item.reason}
+                    </p>
+                  ) : null}
                   <div className="mt-3 flex gap-2">
                     <button
                       type="button"

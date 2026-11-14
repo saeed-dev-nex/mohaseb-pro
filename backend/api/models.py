@@ -312,6 +312,7 @@ class InvoiceEditRequest(models.Model):
 
     invoice = models.ForeignKey(Invoice, related_name='edit_requests', on_delete=models.CASCADE)
     requested_by = models.ForeignKey(User, related_name='invoice_edit_requests', on_delete=models.CASCADE)
+    reason = models.CharField(max_length=500, blank=True, default='')
     reviewed_by = models.ForeignKey(User, related_name='reviewed_invoice_edit_requests', on_delete=models.SET_NULL, null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)

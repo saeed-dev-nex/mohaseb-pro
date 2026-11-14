@@ -440,16 +440,22 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if request.user.is_staff or request.user.is_superuser:
             return Response({'detail': 'مدیران برای ویرایش این فاکتور نیازی به درخواست ندارند.'}, status=400)
         existing = invoice.edit_requests.filter(requested_by=request.user, status__in=['pending', 'approved']).first()
+        reason = str(request.data.get('reason') or '').strip()[:500]
         if existing:
             edit_request = existing
             created = False
+            if reason and reason != edit_request.reason:
+                # Re-requesting with a reason attaches/corrects it on the
+                # still-open request instead of silently dropping it.
+                edit_request.reason = reason
+                edit_request.save(update_fields=['reason'])
         else:
-            edit_request = InvoiceEditRequest.objects.create(invoice=invoice, requested_by=request.user)
+            edit_request = InvoiceEditRequest.objects.create(invoice=invoice, requested_by=request.user, reason=reason)
             created = True
-            record_audit(user=request.user, instance=invoice, action='approval', after={'event': 'edit_requested', 'request_id': edit_request.id, 'requested_by': request.user.username})
+            record_audit(user=request.user, instance=invoice, action='approval', after={'event': 'edit_requested', 'request_id': edit_request.id, 'requested_by': request.user.username, 'reason': reason})
             from ..alerts import notify_edit_request_created
             notify_edit_request_created(edit_request)
-        return Response({'id': edit_request.id, 'status': edit_request.status, 'created_at': edit_request.created_at}, status=201 if created else 200)
+        return Response({'id': edit_request.id, 'status': edit_request.status, 'reason': edit_request.reason, 'created_at': edit_request.created_at}, status=201 if created else 200)
 
     @action(detail=False, methods=['get'], url_path='edit-requests')
     def edit_requests(self, request):
@@ -462,6 +468,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             'invoice_number': item.invoice.invoice_number,
             'customer_name': item.invoice.customer.name if item.invoice.customer else '',
             'requested_by': item.requested_by.get_full_name() or item.requested_by.username,
+            'reason': item.reason,
             'created_at': item.created_at,
         } for item in requests])
 
