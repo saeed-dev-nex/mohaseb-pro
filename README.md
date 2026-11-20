@@ -1,90 +1,93 @@
-# محاسب پرو | Mohaseb Pro
+# Mohaseb Pro | محاسب پرو
 
 [![CI](https://github.com/saeed-dev-nex/mohaseb-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/saeed-dev-nex/mohaseb-pro/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-3.5.0-blue.svg)](VERSION)
+[![Version](https://img.shields.io/badge/version-3.5.1-blue.svg)](VERSION)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-سامانهٔ فارسی مدیریت مالی و صدور فاکتور برای کسب‌وکارهای خدماتی — با تمرکز بر سرعت صدور فاکتور، دقت اطلاعات خودرو و پشتیبان‌گیری امن. رابط کاربری کاملاً راست‌چین است و تاریخ شمسی، ارقام فارسی و چاپ استاندارد فاکتور را پشتیبانی می‌کند.
+[![English](https://img.shields.io/badge/Language-English-blue?style=for-the-badge)](README.md)
+[![فارسی](https://img.shields.io/badge/Language-%D9%81%D8%A7%D8%B1%D8%B3%DB%8C-green?style=for-the-badge)](README.fa.md)
 
-**نسخهٔ فعلی: 3.5.0** — جزئیات تغییرات در [CHANGELOG](CHANGELOG.md) و برنامهٔ توسعه در [ROADMAP](ROADMAP.md)
+A Persian financial management and invoicing system for service businesses — focused on fast invoicing, accurate vehicle information, and secure backups. The user interface is fully right-to-left and supports the Jalali (Persian) calendar, Persian digits, and standard invoice printing.
 
-## نمایی از برنامه
+**Current version: 3.5.1** — see the [CHANGELOG](CHANGELOG.md) for release details and the [ROADMAP](ROADMAP.md) for the development plan. This README is also available in [فارسی (Persian)](README.fa.md).
 
-> تصاویر از محیط واقعی برنامه گرفته شده‌اند؛ اطلاعات شخصی مشتریان در آن‌ها محو شده است.
+## Screenshots
 
-![داشبورد](docs/images/dashboard.png)
+> Screenshots are taken from the real application; customers' personal information has been blurred.
 
-| فاکتور جدید | فاکتورها |
+![Dashboard](docs/images/dashboard.png)
+
+| New invoice | Invoices |
 |---|---|
-| ![فاکتور جدید](docs/images/new-invoice.png) | ![فاکتورها](docs/images/invoices.png) |
+| ![New invoice](docs/images/new-invoice.png) | ![Invoices](docs/images/invoices.png) |
 
-| جزئیات فاکتور | گزارش‌های مالی |
+| Invoice details | Financial reports |
 |---|---|
-| ![جزئیات فاکتور](docs/images/invoice-detail.png) | ![گزارش مالی](docs/images/reports.png) |
+| ![Invoice details](docs/images/invoice-detail.png) | ![Financial reports](docs/images/reports.png) |
 
-| مشتریان | خدمات |
+| Customers | Services |
 |---|---|
-| ![مشتریان](docs/images/customers.png) | ![خدمات](docs/images/services.png) |
+| ![Customers](docs/images/customers.png) | ![Services](docs/images/services.png) |
 
-| هزینه‌ها | مدیریت چک‌ها |
+| Expenses | Cheque management |
 |---|---|
-| ![هزینه‌ها](docs/images/expenses.png) | ![چک‌ها](docs/images/cheques.png) |
+| ![Expenses](docs/images/expenses.png) | ![Cheques](docs/images/cheques.png) |
 
-| تنظیمات | گفت‌وگوی کاربران |
+| Settings | User chat |
 |---|---|
-| ![تنظیمات](docs/images/settings.png) | ![گفت‌وگو](docs/images/chat.png) |
+| ![Settings](docs/images/settings.png) | ![Chat](docs/images/chat.png) |
 
-## امکانات
+## Features
 
-### صدور فاکتور
-- **فاکتور سریع مرحله‌ای** — صدور در چهار مرحلهٔ کوتاه (مشتری و خودرو ← خدمات ← کارمزد ← وضعیت و ثبت)، کاملاً قابل انجام با صفحه‌کلید
-- **پیشنهاد پلاک** — با واردکردن پلاک کامل، آخرین فاکتور همان خودرو پیشنهاد و با یک کلیک مشخصات و ردیف‌هایش بارگذاری می‌شود
-- **پکیج‌های خدمات آماده** — تعریف پکیج در تنظیمات و افزودن همهٔ خدماتش با یک کلیک
-- **صدور مشابه**، پیش‌نویس خودکار، و پیش‌فرض‌های به‌یادماندنی اپراتور (وضعیت و کارت پرداخت)
-- فرم کامل فاکتور با بخش ساخت‌یافتهٔ خودرو/موتورسیکلت (پلاک، شاسی، نوع، مدل، سال)، برگ سبز و سررسید
-- **چاپ دقیق یک‌صفحه‌ای** در اندازه‌های A4 و A5 و A6 و خروجی PDF/JPG از برگ فاکتور
+### Invoicing
+- **Step-by-step quick invoice** — issue an invoice in four short steps (customer & vehicle → services → commission → status & save), fully keyboard-driven
+- **License-plate suggestion** — entering a full plate number suggests the vehicle's latest invoice and loads its details and line items with one click
+- **Ready-made service packages** — define packages in Settings and add all their services with one click
+- **Clone invoice**, automatic drafts, and remembered operator defaults (status and payment card)
+- Full invoice form with a structured vehicle/motorcycle section (plate, VIN, type, model, year), registration document and due date
+- **Precise one-page printing** in A4, A5 and A6 sizes, plus PDF/JPG export of the invoice sheet
 
-### مدیریت و گزارش
-- مشتریان، خدمات، هزینه‌ها، چک‌ها، کارکنان و کاربران با **سطوح دسترسی ماژولی**
-- گزارش‌های مالی با خروجی Excel و CSV و سابقهٔ تغییرات (Audit)
-- گفت‌وگوی زندهٔ کاربران با پیوست فایل و اعلان پیام جدید
-- افزونهٔ صدور سریع فاکتور برای Chrome و Firefox
+### Management & reporting
+- Customers, services, expenses, cheques, staff and users with **module-level access control**
+- Financial reports with Excel and CSV export, and a change history (audit log)
+- Live user chat with file attachments and new-message notifications
+- Quick-invoice browser extension for Chrome and Firefox
 
-### پشتیبان‌گیری و امنیت
-- پشتیبان‌گیری محلی زمان‌بندی‌شده + **پشتیبان ابری رمزنگاری‌شده** روی فضای S3 (مانند آروان‌کلاد) با بررسی checksum و حذف خودکار نسخه‌های قدیمی
-- کلیدهای ابری به‌صورت رمزنگاری‌شده در پایگاه‌داده نگهداری می‌شوند، نه متن ساده
-- احراز هویت JWT، محدودسازی نرخ تلاش‌های ورود و ثبت رویدادهای حساس
+### Backup & security
+- Scheduled local backups + **encrypted cloud backup** to S3-compatible storage (e.g. ArvanCloud) with checksum verification and automatic pruning of old versions
+- Cloud keys are stored encrypted in the database, never in plain text
+- JWT authentication, login-attempt rate limiting, and logging of sensitive events
 
-### تجربهٔ کاربری
-- تم تیره و روشن با کنتراست بررسی‌شده (استاندارد WCAG AA)
-- میانبرهای صفحه‌کلید قابل ویرایش از تنظیمات
-- رابط کاملاً فارسی و راست‌چین با تاریخ شمسی و ارقام فارسی، قابل نصب به‌صورت PWA
+### User experience
+- Dark and light themes with checked contrast (WCAG AA standard)
+- Keyboard shortcuts editable from Settings
+- Fully Persian, right-to-left interface with Jalali dates and Persian digits, installable as a PWA
 
-## فناوری‌ها
+## Tech stack
 
-| بخش | فناوری |
+| Part | Technology |
 |---|---|
-| Backend | Django 5 + Django REST Framework، Daphne (WebSocket)، SQLite |
-| Frontend | React + TypeScript، Vite، TanStack Query، Tailwind CSS |
-| چاپ و خروجی | CSS Print اختصاصی، خروجی Excel (openpyxl) |
-| پشتیبان ابری | S3-Compatible (boto3) + رمزنگاری AES (Fernet) |
+| Backend | Django 5 + Django REST Framework, Daphne (WebSocket), SQLite |
+| Frontend | React + TypeScript, Vite, TanStack Query, Tailwind CSS |
+| Printing & export | Dedicated CSS Print, Excel export (openpyxl) |
+| Cloud backup | S3-compatible (boto3) + AES encryption (Fernet) |
 
-## پیش‌نیازها
+## Prerequisites
 
-- Windows 10 یا جدیدتر برای اسکریپت‌های آماده
-- Python 3.10 یا جدیدتر (برای Python 3.15 در Windows، راه‌انداز پروژه به‌طور خودکار وابستگی شبکه را بدون افزونهٔ اختیاری C++ نصب می‌کند.)
-- Node.js 18 یا جدیدتر و npm
+- Windows 10 or later for the ready-made scripts
+- Python 3.10 or later (on Windows with Python 3.15, the project launcher automatically installs the network dependency without the optional C++ extension)
+- Node.js 18 or later and npm
 
-## راه‌اندازی در Windows
+## Getting started on Windows
 
-1. مخزن را دریافت کنید:
+1. Clone the repository:
 
    ```powershell
    git clone https://github.com/saeed-dev-nex/mohaseb-pro.git
    cd mohaseb-pro
    ```
 
-2. فایل `run.bat` را اجرا کنید و حالت `dev` را انتخاب کنید. اسکریپت محیط مجازی Python و وابستگی‌های backend را آماده می‌کند؛ وابستگی‌های frontend را نیز در اولین اجرا با npm نصب کنید:
+2. Run `run.bat` and choose the `dev` mode. The script prepares the Python virtual environment and the backend dependencies; on the first run, also install the frontend dependencies with npm:
 
    ```powershell
    cd frontend
@@ -93,38 +96,38 @@
    .\run.bat
    ```
 
-3. برنامه را در نشانی `http://localhost:5173` باز کنید. API در `http://localhost:8000/api/` در دسترس است.
+3. Open the app at `http://localhost:5173`. The API is available at `http://localhost:8000/api/`.
 
-در نخستین راه‌اندازی backend، حساب مدیر ساخته می‌شود و گذرواژهٔ اولیه فقط همان‌بار در خروجی ترمینال نمایش داده می‌شود. آن را امن نگه دارید و پس از ورود تغییر دهید.
+On the first backend start, an admin account is created and its initial password is printed to the terminal output only that one time. Keep it safe and change it after signing in.
 
-برای اجرای production روی یک پورت واحد، از `run_production.bat` و برای دسترسی سایر سیستم‌های شبکهٔ محلی، از `run_network.bat` استفاده کنید.
+For a single-port production run use `run_production.bat`; for access from other machines on the local network use `run_network.bat`.
 
-### نصب به‌صورت اپلیکیشن (PWA)
+### Install as an app (PWA)
 
-پس از اجرای نسخهٔ production با `npm run build` و `npm run preview`، برنامه را یک‌بار از `http://localhost:4173` در Chrome یا Edge باز کنید و دکمهٔ «نصب محاسب پرو» را انتخاب کنید (یا از آیکون نصب در نوار آدرس استفاده کنید). سپس برنامه از منوی Start یا میانبر دسکتاپ، بدون وارد کردن آدرس، اجرا می‌شود. نصب PWA به `localhost` یا HTTPS نیاز دارد؛ مرورگرها آن را روی نشانی HTTP شبکهٔ محلی نصب نمی‌کنند.
+After running the production build with `npm run build` and `npm run preview`, open the app once from `http://localhost:4173` in Chrome or Edge and choose "Install Mohaseb Pro" (or use the install icon in the address bar). The app then launches from the Start menu or a desktop shortcut, without typing an address. PWA installation requires `localhost` or HTTPS; browsers do not install it over plain HTTP on a LAN address.
 
-### به‌روزرسانی در هر سیستم
+### Updating on each machine
 
-برای دریافت ایمن تغییرات GitHub، در پوشهٔ اصلی پروژه این دستور را اجرا کنید:
+To safely receive changes from GitHub, run this command in the project root:
 
 ```powershell
 .\update_project.ps1
 ```
 
-اسکریپت ابتدا تغییرات ثبت‌نشده را بررسی می‌کند و اگر وجود داشته باشند هیچ فایلی را بازنویسی نمی‌کند. سپس تغییرات شاخهٔ فعلی را از `origin` ادغام می‌کند و migrationهای backend، وابستگی‌های frontend و build production را به‌روزرسانی می‌کند. برای دریافت کد بدون build، از `./update_project.ps1 -SkipBuild` استفاده کنید. این بررسی اکنون پیش از اجرای `run.bat` و `run_network.bat` نیز انجام می‌شود؛ اگر GitHub در دسترس نباشد یا تغییر محلی ثبت‌نشده‌ای داشته باشید، برنامه با نسخهٔ محلی اجرا می‌شود. به‌روزرسانی خودکار فقط برای پوشه‌ای کار می‌کند که با `git clone` دریافت شده باشد؛ نسخه‌های دانلودشده به‌صورت ZIP یا پوشهٔ انتشار، مخزن Git ندارند و با پیام اطلاع‌رسانی از نسخهٔ محلی اجرا می‌شوند.
+The script first checks for uncommitted changes and, if any exist, does not overwrite any file. It then merges the current branch's changes from `origin` and updates backend migrations, frontend dependencies and the production build. To fetch code without building, use `./update_project.ps1 -SkipBuild`. This check now also runs before `run.bat` and `run_network.bat`; if GitHub is unreachable or you have uncommitted local changes, the app runs with the local version. Automatic updating only works for a folder obtained with `git clone`; copies downloaded as ZIP or release folders have no Git repository and run the local version with an informational message.
 
-## اجرا با Docker (همهٔ سیستم‌عامل‌ها)
+## Running with Docker (all operating systems)
 
-اگر Docker دارید، بدون نصب Python و Node برنامه کامل بالا می‌آید:
+If you have Docker, the full app runs without installing Python or Node:
 
 ```bash
-cp .env.example .env   # سپس در .env یک DJANGO_SECRET_KEY تصادفی بگذارید
+cp .env.example .env   # then put a random DJANGO_SECRET_KEY in .env
 docker compose up --build
 ```
 
-برنامه در `http://localhost:8080` باز می‌شود و API هم مستقیم در `http://localhost:8000/api/` در دسترس است. گذرواژهٔ اولیهٔ مدیر فقط در اولین اجرا در لاگ بک‌اند چاپ می‌شود: `docker compose logs backend`. دیتابیس و فایل‌های آپلودی در والیوم `mohaseb_data` می‌مانند و با خاموش/روشن‌کردن کانتینرها پاک نمی‌شوند.
+The app opens at `http://localhost:8080` and the API is also directly available at `http://localhost:8000/api/`. The initial admin password is printed only on the first run in the backend logs: `docker compose logs backend`. The database and uploaded files persist in the `mohaseb_data` volume and are not lost when containers stop and start.
 
-### اجرای دستی
+### Manual run
 
 Backend:
 
@@ -132,14 +135,14 @@ Backend:
 cd backend
 py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-$env:AUTOBAHN_USE_NVX = "0" # برای Python 3.15 در Windows
+$env:AUTOBAHN_USE_NVX = "0" # for Python 3.15 on Windows
 python -m pip install -r requirements.txt
 python manage.py migrate
 python manage.py ensure_admin
 python manage.py runserver
 ```
 
-Frontend، در ترمینال جداگانه:
+Frontend, in a separate terminal:
 
 ```powershell
 cd frontend
@@ -147,53 +150,53 @@ npm install
 npm run dev
 ```
 
-## پیکربندی
+## Configuration
 
-تنظیمات Django را با متغیرهای محیطی انجام دهید؛ نمونهٔ همهٔ متغیرها در فایل [`.env.example`](.env.example) آمده است. برای محیط واقعی، `DJANGO_SECRET_KEY` را به یک مقدار تصادفی و خصوصی تغییر دهید، `DJANGO_DEBUG` را خاموش کنید و دامنه‌های مورداعتماد را صریحاً تعیین کنید. توجه: اگر `DJANGO_DEBUG` خاموش باشد و `DJANGO_SECRET_KEY` تنظیم نشده باشد، backend عمداً اجرا نمی‌شود؛ چون کلید تصادفیِ هر اجرا، همهٔ توکن‌های ورود را با هر ری‌استارت باطل می‌کند.
+Configure Django through environment variables; every variable is exemplified in [`.env.example`](.env.example). For a real deployment, set `DJANGO_SECRET_KEY` to a random, private value, turn `DJANGO_DEBUG` off, and explicitly set the trusted hosts. Note: if `DJANGO_DEBUG` is off and `DJANGO_SECRET_KEY` is not set, the backend deliberately refuses to start, because a per-run random key would invalidate all login tokens on every restart.
 
-| متغیر | پیش‌فرض توسعه | توضیح |
+| Variable | Development default | Description |
 | --- | --- | --- |
-| `DJANGO_SECRET_KEY` | کلید تصادفی در هر اجرا | کلید خصوصی و پایدار Django را برای محیط واقعی تنظیم کنید. |
-| `DJANGO_DEBUG` | `true` | برای محیط واقعی روی `false` بگذارید. |
-| `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` | نام میزبان‌های مجاز، جداشده با ویرگول. |
-| `DJANGO_CORS_ALLOWED_ORIGINS` | آدرس‌های loopback روی 5173 و 4173 | مبدأهای مجاز frontend، جداشده با ویرگول. |
-| `VITE_API_URL` | نشانی backend بر اساس میزبان فعلی مرورگر | نشانی پایهٔ API برای frontend؛ `/api/` را نیز اضافه کنید. |
+| `DJANGO_SECRET_KEY` | Random key on each run | Set a private, stable Django key for real deployments. |
+| `DJANGO_DEBUG` | `true` | Set to `false` for production. |
+| `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` | Allowed host names, comma-separated. |
+| `DJANGO_CORS_ALLOWED_ORIGINS` | Loopback addresses on 5173 and 4173 | Allowed frontend origins, comma-separated. |
+| `VITE_API_URL` | Backend address based on the browser's current host | Base API URL for the frontend; append `/api/` as well. |
 
-پایگاه‌دادهٔ SQLite و فایل‌های بارگذاری‌شده در پوشهٔ `backend/` نگهداری می‌شوند و بخشی از مخزن نیستند. از آن‌ها جداگانه پشتیبان بگیرید.
+The SQLite database and uploaded files are stored in the `backend/` folder and are not part of the repository. Back them up separately.
 
-## افزونه‌های مرورگر
+## Browser extensions
 
-- **Chrome:** از صفحهٔ افزونه‌ها حالت Developer mode را فعال و `chrome-extension/` را بارگذاری کنید.
-- **Firefox:** برای آزمایش موقت، `about:debugging` → `This Firefox` → `Load Temporary Add-on` را باز کنید و `firefox-extension/manifest.json` را انتخاب کنید؛ نصب موقت با بستن Firefox پاک می‌شود. برای نصب پایدار، بسته را با `firefox-extension/package.ps1` بسازید و پس از دریافت امضای AMO، فایل XPI را نصب کنید. راهنمای تصویری مرحله‌به‌مرحله در [`firefox-extension/INSTALL_FIREFOX_FA.md`](firefox-extension/INSTALL_FIREFOX_FA.md) است.
+- **Chrome:** enable Developer mode on the extensions page and load the `chrome-extension/` folder unpacked.
+- **Firefox:** for a temporary test, open `about:debugging` → `This Firefox` → `Load Temporary Add-on` and select `firefox-extension/manifest.json`; a temporary install is removed when Firefox closes. For a permanent install, build the package with `firefox-extension/package.ps1` and, after AMO signing, install the XPI file. A step-by-step illustrated guide (in Persian) is in [`firefox-extension/INSTALL_FIREFOX_FA.md`](firefox-extension/INSTALL_FIREFOX_FA.md).
 
-افزونه‌ها به backend محلی در `http://localhost:8000` متصل می‌شوند.
+The extensions connect to the local backend at `http://localhost:8000`.
 
-## ساختار مخزن
+## Repository structure
 
 ```text
-backend/           Django REST API، مدل‌ها و مهاجرت‌های پایگاه‌داده
-frontend/          برنامهٔ React و ابزارهای Vite
-chrome-extension/  افزونهٔ Chrome
-firefox-extension/ افزونهٔ Firefox
-docs/images/       تصاویر مستندات از محیط واقعی برنامه
-frontend/public/fonts/  قلم وزیرمتن (Self-hosted؛ بدون وابستگی به Google Fonts)
-run.bat            راه‌انداز تعاملی Windows
-run_network.bat    اجرای برنامه در شبکهٔ محلی
-run_production.bat اجرای production تک‌پورت در Windows
+backend/           Django REST API, models and database migrations
+frontend/          React app and Vite tooling
+chrome-extension/  Chrome extension
+firefox-extension/ Firefox extension
+docs/images/       Documentation screenshots from the real app
+frontend/public/fonts/  Vazirmatn font (self-hosted; no Google Fonts dependency)
+run.bat            Interactive Windows launcher
+run_network.bat    Run the app on the local network
+run_production.bat Single-port production run on Windows
 ```
 
-## نسخه‌بندی
+## Versioning
 
-منبع واحد شمارهٔ نسخه فایل [`VERSION`](VERSION) است. از الگوی Semantic Versioning استفاده می‌کنیم: تغییر سازگارنشکن یا بازطراحی بزرگ، نسخهٔ اصلی را افزایش می‌دهد؛ قابلیت سازگار جدید، نسخهٔ فرعی را؛ و رفع اشکال سازگار، نسخهٔ اصلاحی را. سابقهٔ کامل انتشارها در [CHANGELOG](CHANGELOG.md) است.
+The single source of the version number is the [`VERSION`](VERSION) file. We use Semantic Versioning: a breaking change or major redesign increments the major version; a new backward-compatible feature increments the minor version; and a backward-compatible bug fix increments the patch version. The full release history is in the [CHANGELOG](CHANGELOG.md).
 
-## امنیت و داده‌های خصوصی
+## Security & private data
 
-پایگاه‌داده، اسناد مشتریان، رسانه‌های بارگذاری‌شده، محیط‌های مجازی و خروجی‌های ساخت در `.gitignore` هستند. پیش از انتشار تغییرات، مطمئن شوید اطلاعات واقعی مشتری یا پشتیبان پایگاه‌داده به مخزن اضافه نشده باشد. حالت شبکهٔ محلی را فقط در شبکه‌ای اجرا کنید که به آن اعتماد دارید. جزئیات بیشتر در [SECURITY](SECURITY.md).
+The database, customer documents, uploaded media, virtual environments and build outputs are covered by `.gitignore`. Before publishing changes, make sure no real customer information or database backup has been added to the repository. Run the local-network mode only on a network you trust. More details in [SECURITY](SECURITY.md).
 
-## مشارکت
+## Contributing
 
-برای تغییرات بزرگ، ابتدا یک Issue بسازید تا دربارهٔ راهکار هماهنگ شویم. تغییرات را در شاخه‌ای جداگانه انجام دهید و Pull Request را با شرح تغییر و مراحل بازبینی ارسال کنید. راهنمای کامل در [CONTRIBUTING](CONTRIBUTING.md).
+For large changes, please open an Issue first so we can agree on the approach. Make changes on a separate branch and submit a Pull Request with a description of the change and the review steps. The full guide is in [CONTRIBUTING](CONTRIBUTING.md).
 
-## مجوز
+## License
 
-این پروژه تحت [مجوز MIT](LICENSE) منتشر شده است.
+This project is released under the [MIT License](LICENSE).
