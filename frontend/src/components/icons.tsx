@@ -535,4 +535,3 @@ export const RotateCwIcon = createIcon(
     <path d="M21 3v6h-6" />
   </>,
 );
-

@@ -1153,8 +1153,8 @@ const QuickInvoiceModal = ({
                 <div className="flex flex-wrap items-center gap-3 rounded-xl border border-teal-500/30 bg-teal-500/10 px-4 py-3 text-sm text-teal-200">
                   <span className="flex items-center gap-2">
                     <HistoryIcon className="h-4 w-4 shrink-0" />
-                    برای این پلاک، فاکتور {plateSuggestion.invoice_number}{" "}
-                    برای «{plateSuggestion.customer_name}» ثبت شده (
+                    برای این پلاک، فاکتور {plateSuggestion.invoice_number} برای
+                    «{plateSuggestion.customer_name}» ثبت شده (
                     {fmt(plateSuggestion.final_amount)})
                   </span>
                   <button

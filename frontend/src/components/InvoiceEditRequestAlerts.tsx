@@ -7,13 +7,7 @@ import {
   invoicesAPI,
 } from "../services/api";
 import { playChime } from "../lib/chime";
-import {
-  BanIcon,
-  BellIcon,
-  CheckCircleIcon,
-  InfoIcon,
-  XIcon,
-} from "./icons";
+import { BanIcon, BellIcon, CheckCircleIcon, InfoIcon, XIcon } from "./icons";
 
 type EditRequestItem = {
   id: number;

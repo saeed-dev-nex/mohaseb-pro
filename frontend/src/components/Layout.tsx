@@ -29,12 +29,7 @@ import {
 import type { ShortcutMap } from "../lib/shortcuts";
 import { isWaitingActive } from "../lib/waiting";
 import WaitingModal from "./WaitingModal";
-import {
-  BoltIcon,
-  CheckCircleIcon,
-  DownloadIcon,
-  InboxIcon,
-} from "./icons";
+import { BoltIcon, CheckCircleIcon, DownloadIcon, InboxIcon } from "./icons";
 
 type ChatNotice = { sender: string; text: string };
 
@@ -555,9 +550,7 @@ const Layout = () => {
           {offlineFlushed.length > 0 && (
             <div className="flex items-center gap-2.5 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-xl">
               <CheckCircleIcon className="h-5 w-5 shrink-0" />
-              <span>
-                فاکتور آفلاین ارسال شد: {offlineFlushed.join("، ")}
-              </span>
+              <span>فاکتور آفلاین ارسال شد: {offlineFlushed.join("، ")}</span>
             </div>
           )}
           {offlinePending > 0 && (
