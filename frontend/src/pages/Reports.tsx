@@ -3,7 +3,16 @@ import { Link } from "react-router-dom";
 import { invoicesAPI } from "../services/api";
 import { hideWaiting, showWaiting } from "../lib/waiting";
 import JalaliDatePicker from "../components/JalaliDatePicker";
-import { Button, StatCard } from "../components/ui";
+import { Button, PageHeader, StatCard } from "../components/ui";
+import {
+  BanknoteIcon,
+  ClipboardIcon,
+  CreditCardIcon,
+  DownloadIcon,
+  FileTextIcon,
+  HourglassIcon,
+  TrendingUpIcon,
+} from "../components/icons";
 import { jalaliMonthStartISO, jalaliPrevMonthRangeISO } from "../utils/persian";
 
 const fmt = (n: number | string | null | undefined) =>
@@ -147,20 +156,24 @@ const Reports = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-white">📈 گزارشات مالی</h2>
-          <p className="text-slate-400 text-sm mt-1">
-            تحلیل و گزارش‌گیری از عملکرد مالی
-          </p>
-        </div>
-        <div className="flex gap-2">
+      <PageHeader
+        title="گزارشات مالی"
+        description="تحلیل و گزارش‌گیری از عملکرد مالی"
+        actions={
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={downloadExcel}
             disabled={exporting}
             className="px-4 py-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/30 hover:bg-emerald-600/30 text-emerald-400 text-sm transition-all flex items-center gap-2 disabled:opacity-50"
           >
-            {exporting ? "در حال آماده‌سازی…" : "📊 دریافت گزارش Excel"}
+            {exporting ? (
+              "در حال آماده‌سازی…"
+            ) : (
+              <>
+                <DownloadIcon className="h-4 w-4" />
+                دریافت گزارش Excel
+              </>
+            )}
           </button>
           <button
             onClick={async () => {
@@ -186,10 +199,12 @@ const Reports = () => {
             }}
             className="px-4 py-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/30 hover:bg-emerald-600/30 text-emerald-400 text-sm transition-all flex items-center gap-2"
           >
-            📄 خروجی CSV
+            <FileTextIcon className="h-4 w-4" />
+            خروجی CSV
           </button>
         </div>
-      </div>
+        }
+      />
 
       {/* Date Filter */}
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5">
@@ -266,39 +281,39 @@ const Reports = () => {
       {report && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <StatCard
-            icon="💳"
             label="مبلغ دریافت‌شده"
             value={fmt(report.total_revenue)}
+            icon={<CreditCardIcon />}
             color="green"
           />
           <StatCard
-            icon="🟡"
             label="مانده فاکتورهای پرداخت‌نشده"
             value={fmt(report.pending_amount)}
+            icon={<HourglassIcon />}
             color="yellow"
           />
           <StatCard
-            icon="🧾"
             label="ارزش فاکتورها"
             value={fmt(report.invoice_amount)}
+            icon={<FileTextIcon />}
             color="purple"
           />
           <StatCard
-            icon="📋"
             label="تعداد فاکتور"
             value={fmtN(report.total_count)}
+            icon={<ClipboardIcon />}
             color="blue"
           />
           <StatCard
-            icon="💸"
             label="کل هزینه‌ها"
             value={fmt(report.expense_total)}
+            icon={<BanknoteIcon />}
             color="red"
           />
           <StatCard
-            icon="📈"
             label="سود خالص (کارمزد − هزینه)"
             value={fmt(report.net_profit)}
+            icon={<TrendingUpIcon />}
             color={Number(report.net_profit) >= 0 ? "green" : "red"}
           />
         </div>

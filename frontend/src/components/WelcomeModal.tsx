@@ -1,4 +1,5 @@
 import React from "react";
+import { SparklesIcon, XIcon } from "./icons";
 
 type WelcomeModalProps = { message: string; onClose: () => void };
 
@@ -22,16 +23,16 @@ const WelcomeModal = ({ message, onClose }: WelcomeModalProps) => (
         aria-label="بستن پیام خوش‌آمدگویی"
         className="absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20"
       >
-        ×
+        <XIcon className="h-5 w-5" />
       </button>
-      <div className="welcome-sparkle mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-orange-500 text-4xl shadow-lg shadow-amber-500/30">
-        ✨
+      <div className="welcome-sparkle mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-orange-500 text-white shadow-lg shadow-amber-500/30 [&>svg]:h-9 [&>svg]:w-9">
+        <SparklesIcon />
       </div>
       <p className="mb-2 text-sm font-medium text-amber-200">
         شروع یک روز تازه
       </p>
       <h2 id="welcome-title" className="text-2xl font-bold">
-        خوش آمدید 🌷
+        خوش آمدید
       </h2>
       <p className="mx-auto mt-4 max-w-md whitespace-pre-wrap text-sm leading-7 text-slate-200">
         {message}

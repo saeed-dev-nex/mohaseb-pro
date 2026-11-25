@@ -29,6 +29,12 @@ import {
 import type { ShortcutMap } from "../lib/shortcuts";
 import { isWaitingActive } from "../lib/waiting";
 import WaitingModal from "./WaitingModal";
+import {
+  BoltIcon,
+  CheckCircleIcon,
+  DownloadIcon,
+  InboxIcon,
+} from "./icons";
 
 type ChatNotice = { sender: string; text: string };
 
@@ -87,7 +93,11 @@ const SwUpdateToast = () => {
   }, []);
   if (!visible) return null;
   return (
-    <div className="fixed bottom-4 left-4 z-[90] flex items-center gap-3 rounded-2xl border border-emerald-400/40 bg-slate-800 px-4 py-3 shadow-2xl shadow-black/40">
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed top-4 left-4 z-[90] flex items-center gap-3 rounded-2xl border border-emerald-400/40 bg-slate-800 px-4 py-3 shadow-2xl shadow-black/40"
+    >
       <span className="text-sm text-slate-100">
         نسخهٔ جدید نرم‌افزار آماده است
       </span>
@@ -509,11 +519,12 @@ const Layout = () => {
           className="fixed bottom-6 left-6 z-40 w-14 h-14 rounded-2xl
           bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700
           text-white shadow-xl shadow-blue-500/30 hover:shadow-blue-500/50
-          flex items-center justify-center text-2xl
+          flex items-center justify-center
           transition-all duration-300 hover:scale-110 active:scale-95
           group"
         >
-          ⚡{/* Tooltip */}
+          <BoltIcon className="h-6 w-6" />
+          {/* Tooltip */}
           <span
             className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2
           bg-slate-800 text-white text-[11px] font-medium px-3 py-1.5 rounded-lg border border-slate-700
@@ -535,29 +546,40 @@ const Layout = () => {
           onSuccess={() => {}}
         />
       )}
-      {(offlineFlushed.length > 0 || offlinePending > 0) && (
-        <div className="fixed bottom-6 left-6 z-50 flex flex-col gap-2">
+      {(offlineFlushed.length > 0 || offlinePending > 0 || installPrompt) && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-24 left-6 z-50 flex flex-col gap-2"
+        >
           {offlineFlushed.length > 0 && (
-            <div className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-xl">
-              ✅ فاکتور آفلاین ارسال شد: {offlineFlushed.join("، ")}
+            <div className="flex items-center gap-2.5 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-xl">
+              <CheckCircleIcon className="h-5 w-5 shrink-0" />
+              <span>
+                فاکتور آفلاین ارسال شد: {offlineFlushed.join("، ")}
+              </span>
             </div>
           )}
           {offlinePending > 0 && (
-            <div className="rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white shadow-xl">
-              📥 {offlinePending} فاکتور در انتظار ارسال — با برگشت اینترنت
-              خودکار ارسال می‌شود
+            <div className="flex items-center gap-2.5 rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white shadow-xl">
+              <InboxIcon className="h-5 w-5 shrink-0" />
+              <span>
+                {offlinePending} فاکتور در انتظار ارسال — با برگشت اینترنت
+                خودکار ارسال می‌شود
+              </span>
             </div>
           )}
+          {installPrompt && (
+            <button
+              type="button"
+              onClick={installPwa}
+              className="flex items-center gap-2.5 rounded-xl bg-emerald-600 px-4 py-3 text-right text-sm font-semibold text-white shadow-xl shadow-emerald-900/30 hover:bg-emerald-500"
+            >
+              <DownloadIcon className="h-5 w-5 shrink-0" />
+              نصب محاسب پرو
+            </button>
+          )}
         </div>
-      )}
-      {installPrompt && (
-        <button
-          type="button"
-          onClick={installPwa}
-          className="fixed bottom-24 left-6 z-40 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-900/30 hover:bg-emerald-500"
-        >
-          ⬇ نصب محاسب پرو
-        </button>
       )}
     </div>
   );

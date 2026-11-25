@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { appUpdateAPI } from "../services/api";
+import { ArrowUpIcon, XIcon } from "./icons";
 
 /** Slim banner for the superuser when an approved-pending style
  * update is waiting: the new version exists, its changes are one
@@ -63,7 +64,7 @@ const UpdateBanner = () => {
 
   return (
     <div className="mx-6 mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-300/70 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 shadow-sm">
-      <span aria-hidden="true">⬆️</span>
+      <ArrowUpIcon aria-hidden="true" className="h-5 w-5 shrink-0" />
       <p className="min-w-0 flex-1">
         نسخهٔ جدید محاسب پرو
         {info.latest ? ` (${info.latest})` : ""} آمادهٔ نصب است. تغییراتش را
@@ -80,9 +81,9 @@ const UpdateBanner = () => {
         type="button"
         onClick={dismiss}
         aria-label="بستن اعلان آپدیت"
-        className="text-xs opacity-60 hover:opacity-100"
+        className="flex items-center justify-center rounded-md p-1 text-xs opacity-60 hover:opacity-100"
       >
-        ✕
+        <XIcon className="h-4 w-4" />
       </button>
     </div>
   );

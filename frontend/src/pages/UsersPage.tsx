@@ -5,7 +5,8 @@ import { usersAPI } from "../services/api";
 import { ALL_MODULES, MODULE_LABELS, ceilingFor } from "../utils/modules";
 import PasswordInput from "../components/PasswordInput";
 import type { ModuleName } from "../utils/modules";
-import { Button } from "../components/ui";
+import { Button, PageHeader } from "../components/ui";
+import { InfoIcon, PlusIcon } from "../components/icons";
 
 type RoleInfo = {
   label: string;
@@ -234,18 +235,16 @@ export default function UsersPage() {
   return (
     <div className="space-y-6" dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-white">🔐 مدیریت کاربران</h2>
-          <p className="text-slate-400 text-sm mt-1">
-            تعریف کارمند با نام کاربری و رمز ورود اختصاصی برای نظارت بر رفتار
-            کارکنان
-          </p>
-        </div>
-        <Button variant="primary" onClick={openCreate}>
-          + کاربر جدید
-        </Button>
-      </div>
+      <PageHeader
+        title="مدیریت کاربران"
+        description="تعریف کارمند با نام کاربری و رمز ورود اختصاصی برای نظارت بر رفتار کارکنان"
+        actions={
+          <Button variant="primary" onClick={openCreate}>
+            <PlusIcon className="h-4 w-4" />
+            کاربر جدید
+          </Button>
+        }
+      />
 
       {/* Error */}
       {error && (
@@ -256,7 +255,7 @@ export default function UsersPage() {
 
       {/* Info box */}
       <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl text-sm text-blue-300 flex gap-3 items-start">
-        <span className="text-lg mt-0.5">ℹ️</span>
+        <InfoIcon className="mt-0.5 h-4 w-4 shrink-0" />
         <div>
           <p className="font-semibold mb-1">راهنمای سطوح دسترسی</p>
           <p>

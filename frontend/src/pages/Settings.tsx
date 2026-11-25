@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useSelector } from "react-redux";
-import { Spinner } from "../components/ui";
+import { PageHeader, Spinner } from "../components/ui";
+import { CheckCircleIcon, CheckIcon } from "../components/icons";
 import {
   profileAPI,
   socialNetworksAPI,
@@ -388,30 +389,29 @@ const Settings = () => {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-white">🎨 تنظیمات</h2>
-          <p className="text-slate-400 text-sm mt-0.5">
-            شخصی‌سازی برند، لوگو و اطلاعات فروشگاه
-          </p>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm transition-all flex items-center gap-2 disabled:opacity-60"
-        >
-          {saving ? (
-            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          ) : (
-            "✅"
-          )}
-          ذخیره تنظیمات
-        </button>
-      </div>
+      <PageHeader
+        title="تنظیمات"
+        description="شخصی‌سازی برند، لوگو و اطلاعات فروشگاه"
+        actions={
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm text-white transition-all hover:bg-blue-700 disabled:opacity-60"
+          >
+            {saving ? (
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            ) : (
+              <CheckIcon className="h-4 w-4" />
+            )}
+            ذخیره تنظیمات
+          </button>
+        }
+      />
 
       {saved && (
         <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm px-4 py-3 rounded-xl flex items-center gap-2">
-          ✅ تنظیمات با موفقیت ذخیره شد
+          <CheckCircleIcon className="h-4 w-4 shrink-0" />
+          تنظیمات با موفقیت ذخیره شد
         </div>
       )}
 

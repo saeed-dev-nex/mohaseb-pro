@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { EyeIcon, EyeOffIcon } from "./icons";
 
 /**
  * Password field with a show/hide eye toggle. Drop-in replacement for
@@ -32,7 +33,11 @@ const PasswordInput = React.forwardRef<
         title={visible ? "مخفی کردن رمز" : "نمایش رمز"}
         className="absolute inset-y-0 left-0 flex w-11 items-center justify-center text-slate-400 hover:text-slate-200 transition-colors"
       >
-        {visible ? "🙈" : "👁️"}
+        {visible ? (
+          <EyeOffIcon className="h-5 w-5" />
+        ) : (
+          <EyeIcon className="h-5 w-5" />
+        )}
       </button>
     </div>
   );

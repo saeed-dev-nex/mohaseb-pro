@@ -18,6 +18,26 @@ import {
 import { MOTO_BRANDS } from "../lib/vehicle";
 import { enqueueQuickInvoice } from "../lib/offlineQueue";
 import { hideWaiting, showWaiting } from "../lib/waiting";
+import {
+  AlertTriangleIcon,
+  BikeIcon,
+  BoltIcon,
+  CarIcon,
+  CheckCircleIcon,
+  CogIcon,
+  FileTextIcon,
+  HistoryIcon,
+  InboxIcon,
+  PackageIcon,
+  PencilIcon,
+  PhoneIcon,
+  PlusIcon,
+  PrinterIcon,
+  SparklesIcon,
+  UserIcon,
+  WalletIcon,
+  XIcon,
+} from "./icons";
 
 const YEAR_OPTIONS = jalaliYearRange(1360, currentJalaliYear());
 
@@ -781,8 +801,8 @@ const QuickInvoiceModal = ({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="p-8 text-center space-y-4">
-            <div className="w-16 h-16 mx-auto bg-emerald-500/20 border border-emerald-500/30 rounded-2xl flex items-center justify-center text-3xl animate-bounce">
-              ✅
+            <div className="w-16 h-16 mx-auto bg-emerald-500/20 border border-emerald-500/30 rounded-2xl flex items-center justify-center text-emerald-400 animate-bounce [&>svg]:h-8 [&>svg]:w-8">
+              <CheckCircleIcon />
             </div>
             <h3 className="text-white font-bold text-lg">{result.message}</h3>
             <div className="bg-slate-700/40 rounded-xl p-4 space-y-2">
@@ -797,8 +817,9 @@ const QuickInvoiceModal = ({
                 <span className="text-white">{result.customer?.name}</span>
               </div>
               {result.customer?.is_new && (
-                <span className="inline-block text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-lg">
-                  🆕 مشتری جدید ایجاد شد
+                <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-lg">
+                  <SparklesIcon className="h-3 w-3" />
+                  مشتری جدید ایجاد شد
                 </span>
               )}
               <div className="flex justify-between text-sm">
@@ -812,25 +833,28 @@ const QuickInvoiceModal = ({
               <button
                 onClick={resetForm}
                 autoFocus
-                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm transition-all"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm transition-all"
               >
-                ⚡ ایجاد فاکتور جدید
+                <BoltIcon className="h-4 w-4" />
+                ایجاد فاکتور جدید
               </button>
               <button
                 onClick={() => {
                   window.location.href = `/invoices/${result.invoice?.id}`;
                 }}
-                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm transition-all"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm transition-all"
               >
-                🧾 رفتن به جزئیات فاکتور
+                <FileTextIcon className="h-4 w-4" />
+                رفتن به جزئیات فاکتور
               </button>
               <button
                 onClick={() => {
                   window.location.href = `/invoices/${result.invoice?.id}?print=1`;
                 }}
-                className="px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-all"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-all"
               >
-                🖨️ مشاهده و چاپ
+                <PrinterIcon className="h-4 w-4" />
+                مشاهده و چاپ
               </button>
               <button
                 onClick={onClose}
@@ -855,8 +879,8 @@ const QuickInvoiceModal = ({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="p-8 text-center space-y-4">
-            <div className="w-16 h-16 mx-auto bg-amber-500/20 border border-amber-500/30 rounded-2xl flex items-center justify-center text-3xl">
-              📥
+            <div className="w-16 h-16 mx-auto bg-amber-500/20 border border-amber-500/30 rounded-2xl flex items-center justify-center text-amber-400 [&>svg]:h-8 [&>svg]:w-8">
+              <InboxIcon />
             </div>
             <h3 className="text-white font-bold text-lg">
               فاکتور در صف ارسال ذخیره شد
@@ -870,9 +894,10 @@ const QuickInvoiceModal = ({
               <button
                 onClick={resetForm}
                 autoFocus
-                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm transition-all"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm transition-all"
               >
-                ⚡ ایجاد فاکتور جدید
+                <BoltIcon className="h-4 w-4" />
+                ایجاد فاکتور جدید
               </button>
               <button
                 onClick={onClose}
@@ -897,8 +922,8 @@ const QuickInvoiceModal = ({
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-700/50 shrink-0">
           <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/30 to-indigo-500/30 border border-blue-500/30 flex items-center justify-center text-lg">
-              ⚡
+            <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/30 to-indigo-500/30 border border-blue-500/30 flex items-center justify-center text-blue-300 [&>svg]:h-4 [&>svg]:w-4">
+              <BoltIcon />
             </span>
             <div>
               <h3 className="text-white font-semibold text-sm">فاکتور سریع</h3>
@@ -909,9 +934,10 @@ const QuickInvoiceModal = ({
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white text-xl transition-colors"
+            aria-label="بستن"
+            className="flex items-center justify-center rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-slate-700/60 transition-colors"
           >
-            ×
+            <XIcon className="h-5 w-5" />
           </button>
         </div>
 
@@ -950,8 +976,9 @@ const QuickInvoiceModal = ({
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-3 py-2 rounded-xl">
-              ⚠️ {error}
+            <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-3 py-2 rounded-xl">
+              <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
           {notice && (
@@ -960,9 +987,10 @@ const QuickInvoiceModal = ({
               <button
                 type="button"
                 onClick={() => setNotice("")}
-                className="text-teal-300/70 hover:text-teal-100 shrink-0"
+                aria-label="بستن پیام"
+                className="flex shrink-0 items-center justify-center rounded-md p-1 text-teal-300/70 hover:text-teal-100"
               >
-                ✕
+                <XIcon className="h-3.5 w-3.5" />
               </button>
             </div>
           )}
@@ -972,8 +1000,9 @@ const QuickInvoiceModal = ({
               {/* Customer */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-slate-400 mb-1 block">
-                    👤 نام مشتری *
+                  <label className="mb-1 flex items-center gap-1.5 text-xs text-slate-400">
+                    <UserIcon className="h-3.5 w-3.5" />
+                    نام مشتری *
                   </label>
                   <CustomerAutoComplete
                     value={customerName}
@@ -983,8 +1012,9 @@ const QuickInvoiceModal = ({
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-400 mb-1 block">
-                    📱 تلفن مشتری
+                  <label className="mb-1 flex items-center gap-1.5 text-xs text-slate-400">
+                    <PhoneIcon className="h-3.5 w-3.5" />
+                    تلفن مشتری
                   </label>
                   <input
                     className={inp}
@@ -997,10 +1027,15 @@ const QuickInvoiceModal = ({
 
               {/* Vehicle — same fields & behavior as the full invoice form */}
               <div className="bg-slate-700/20 border border-slate-700/50 rounded-xl p-3 space-y-3">
-                <label className="text-xs text-slate-400 font-medium block">
+                <label className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
+                  {isMoto ? (
+                    <BikeIcon className="h-4 w-4" />
+                  ) : (
+                    <CarIcon className="h-4 w-4" />
+                  )}
                   {isMoto
-                    ? "🏍️ اطلاعات موتورسیکلت (اختیاری)"
-                    : "🚗 اطلاعات خودرو (اختیاری)"}
+                    ? "اطلاعات موتورسیکلت (اختیاری)"
+                    : "اطلاعات خودرو (اختیاری)"}
                 </label>
                 <div>
                   <label className="text-[10px] text-slate-500 mb-1 block">
@@ -1116,8 +1151,9 @@ const QuickInvoiceModal = ({
 
               {plateSuggestion && (
                 <div className="flex flex-wrap items-center gap-3 rounded-xl border border-teal-500/30 bg-teal-500/10 px-4 py-3 text-sm text-teal-200">
-                  <span>
-                    🔁 برای این پلاک، فاکتور {plateSuggestion.invoice_number}{" "}
+                  <span className="flex items-center gap-2">
+                    <HistoryIcon className="h-4 w-4 shrink-0" />
+                    برای این پلاک، فاکتور {plateSuggestion.invoice_number}{" "}
                     برای «{plateSuggestion.customer_name}» ثبت شده (
                     {fmt(plateSuggestion.final_amount)})
                   </span>
@@ -1133,9 +1169,10 @@ const QuickInvoiceModal = ({
                     onClick={() =>
                       setPlateDismissedFor((vehiclePlate || "").trim())
                     }
-                    className="text-teal-300/70 hover:text-teal-200 text-xs"
+                    className="inline-flex items-center gap-1 text-teal-300/70 hover:text-teal-200 text-xs"
                   >
-                    ✕ صرف‌نظر
+                    <XIcon className="h-3.5 w-3.5" />
+                    صرف‌نظر
                   </button>
                 </div>
               )}
