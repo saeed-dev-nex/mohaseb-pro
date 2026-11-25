@@ -77,7 +77,9 @@ const Navbar = ({ onMenuToggle }: NavbarProps) => {
         <button
           onClick={toggleTheme}
           className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-700/50 hover:text-white border border-slate-700/50 transition-all"
-          aria-label={theme === "dark" ? "روشن کردن حالت روشن" : "روشن کردن حالت تیره"}
+          aria-label={
+            theme === "dark" ? "روشن کردن حالت روشن" : "روشن کردن حالت تیره"
+          }
           title={theme === "dark" ? "حالت روشن" : "حالت تیره"}
         >
           {theme === "dark" ? (
@@ -90,7 +92,14 @@ const Navbar = ({ onMenuToggle }: NavbarProps) => {
           {persianDate}
         </span>
         <div className="w-px h-5 bg-slate-700 hidden sm:block" />
-        <div className="hidden sm:flex items-center gap-2" title={online ? "اتصال برقرار است" : "اینترنت قطع است — فاکتورها ذخیره و بعداً ارسال می‌شوند"}>
+        <div
+          className="hidden sm:flex items-center gap-2"
+          title={
+            online
+              ? "اتصال برقرار است"
+              : "اینترنت قطع است — فاکتورها ذخیره و بعداً ارسال می‌شوند"
+          }
+        >
           <div
             className={`w-2 h-2 rounded-full ${online ? "bg-green-400 animate-pulse" : "bg-amber-500"}`}
           />

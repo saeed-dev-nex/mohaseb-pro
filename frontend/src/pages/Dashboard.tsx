@@ -276,9 +276,7 @@ const DonutChart = ({
                 {s.service_title_snapshot || "---"}
               </span>
             </div>
-            <span className="num text-slate-400 shrink-0">
-              {s.count} بار
-            </span>
+            <span className="num text-slate-400 shrink-0">{s.count} بار</span>
           </div>
         ))}
       </div>
@@ -304,7 +302,11 @@ const ACTION_TONE = {
 
 // Layout-shaped placeholder so the dashboard does not jump on load.
 const DashboardSkeleton = () => (
-  <div className="space-y-6" aria-busy="true" aria-label="در حال بارگذاری داشبورد">
+  <div
+    className="space-y-6"
+    aria-busy="true"
+    aria-label="در حال بارگذاری داشبورد"
+  >
     <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
       {[0, 1, 2, 3].map((i) => (
         <div
@@ -372,8 +374,7 @@ const Dashboard = () => {
   // A greeting and the Jalali date give the page a human "today" anchor
   // instead of a bare section title.
   const hour = new Date().getHours();
-  const greet =
-    hour < 12 ? "صبح بخیر" : hour < 17 ? "ظهر بخیر" : "عصر بخیر";
+  const greet = hour < 12 ? "صبح بخیر" : hour < 17 ? "ظهر بخیر" : "عصر بخیر";
   const firstName = currentUser?.first_name || currentUser?.username || "";
   const today = new Intl.DateTimeFormat("fa-IR", {
     weekday: "long",
@@ -425,8 +426,7 @@ const Dashboard = () => {
   const netProfit = Number(stats?.net_profit || 0);
   const profitPositive = netProfit >= 0;
   const spendBase = commission + expenses;
-  const commissionPct =
-    spendBase > 0 ? (commission / spendBase) * 100 : 50;
+  const commissionPct = spendBase > 0 ? (commission / spendBase) * 100 : 50;
   const expensePct = 100 - commissionPct;
   const margin =
     commission > 0 ? Math.round((netProfit / commission) * 100) : 0;
@@ -583,7 +583,11 @@ const Dashboard = () => {
                 </span>
                 <span>
                   حاشیهٔ سود:{" "}
-                  <span className={profitPositive ? "text-emerald-400" : "text-rose-400"}>
+                  <span
+                    className={
+                      profitPositive ? "text-emerald-400" : "text-rose-400"
+                    }
+                  >
                     {fmt(margin)}٪
                   </span>
                 </span>
@@ -705,10 +709,7 @@ const Dashboard = () => {
           )}
         </Card>
 
-        <Card
-          title="بیشترین خدمات"
-          icon={<CogIcon />}
-        >
+        <Card title="بیشترین خدمات" icon={<CogIcon />}>
           {(stats?.top_services || []).length > 0 ? (
             <DonutChart data={stats.top_services} total={topSvcTotal} />
           ) : (

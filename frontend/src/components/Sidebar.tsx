@@ -91,7 +91,12 @@ const BASE_NAV_GROUPS: NavGroup[] = [
   {
     label: "ارتباطات",
     items: [
-      { to: "/chat", label: "گفتگوی کاربران", icon: <ChatIcon />, module: "chat" },
+      {
+        to: "/chat",
+        label: "گفتگوی کاربران",
+        icon: <ChatIcon />,
+        module: "chat",
+      },
     ],
   },
   {

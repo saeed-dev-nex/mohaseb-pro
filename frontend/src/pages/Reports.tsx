@@ -160,49 +160,49 @@ const Reports = () => {
         title="گزارشات مالی"
         description="تحلیل و گزارش‌گیری از عملکرد مالی"
         actions={
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={downloadExcel}
-            disabled={exporting}
-            className="px-4 py-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/30 hover:bg-emerald-600/30 text-emerald-400 text-sm transition-all flex items-center gap-2 disabled:opacity-50"
-          >
-            {exporting ? (
-              "در حال آماده‌سازی…"
-            ) : (
-              <>
-                <DownloadIcon className="h-4 w-4" />
-                دریافت گزارش Excel
-              </>
-            )}
-          </button>
-          <button
-            onClick={async () => {
-              showWaiting("در حال آماده‌سازی خروجی CSV…");
-              try {
-                const { data } = await invoicesAPI.exportCsv({
-                  date_from: dateFrom,
-                  date_to: dateTo,
-                  status: statusFilter,
-                  customer_name: customerSearch,
-                });
-                const url = URL.createObjectURL(data);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `invoices_${dateFrom}_${dateTo}.csv`;
-                a.click();
-                window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-              } catch {
-                alert("خطا در دانلود");
-              } finally {
-                hideWaiting();
-              }
-            }}
-            className="px-4 py-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/30 hover:bg-emerald-600/30 text-emerald-400 text-sm transition-all flex items-center gap-2"
-          >
-            <FileTextIcon className="h-4 w-4" />
-            خروجی CSV
-          </button>
-        </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={downloadExcel}
+              disabled={exporting}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/30 hover:bg-emerald-600/30 text-emerald-400 text-sm transition-all flex items-center gap-2 disabled:opacity-50"
+            >
+              {exporting ? (
+                "در حال آماده‌سازی…"
+              ) : (
+                <>
+                  <DownloadIcon className="h-4 w-4" />
+                  دریافت گزارش Excel
+                </>
+              )}
+            </button>
+            <button
+              onClick={async () => {
+                showWaiting("در حال آماده‌سازی خروجی CSV…");
+                try {
+                  const { data } = await invoicesAPI.exportCsv({
+                    date_from: dateFrom,
+                    date_to: dateTo,
+                    status: statusFilter,
+                    customer_name: customerSearch,
+                  });
+                  const url = URL.createObjectURL(data);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `invoices_${dateFrom}_${dateTo}.csv`;
+                  a.click();
+                  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+                } catch {
+                  alert("خطا در دانلود");
+                } finally {
+                  hideWaiting();
+                }
+              }}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/30 hover:bg-emerald-600/30 text-emerald-400 text-sm transition-all flex items-center gap-2"
+            >
+              <FileTextIcon className="h-4 w-4" />
+              خروجی CSV
+            </button>
+          </div>
         }
       />
 
