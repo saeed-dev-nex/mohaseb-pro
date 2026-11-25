@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { staffAPI } from "../services/api";
-import { Button, Spinner } from "../components/ui";
+import { Button, PageHeader, Spinner } from "../components/ui";
+import { HardHatIcon } from "../components/icons";
 
 const fmt = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0);
@@ -206,23 +207,23 @@ const StaffPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-white">👷 مدیریت پرسنل</h2>
-          <p className="text-slate-400 text-sm mt-1">
-            تکنسین‌ها، پورسانت و عملکرد
-          </p>
-        </div>
-        <Button variant="primary" onClick={() => setModal("add")}>
-          + افزودن پرسنل
-        </Button>
-      </div>
+      <PageHeader
+        title="مدیریت پرسنل"
+        description="تکنسین‌ها، پورسانت و عملکرد"
+        actions={
+          <Button variant="primary" onClick={() => setModal("add")}>
+            افزودن پرسنل
+          </Button>
+        }
+      />
 
       {loading ? (
         <Spinner size="lg" />
       ) : list.length === 0 ? (
         <div className="text-center py-16 bg-slate-800/50 border border-slate-700/50 rounded-2xl">
-          <p className="text-4xl mb-3">👷</p>
+          <span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-700/40 text-slate-400 [&>svg]:h-6 [&>svg]:w-6">
+            <HardHatIcon />
+          </span>
           <p className="text-slate-300 font-medium text-lg">
             پرسنلی تعریف نشده
           </p>

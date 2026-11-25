@@ -10,6 +10,7 @@ import {
   invoiceKeys,
 } from "../hooks/useInvoices";
 import {
+  PageHeader,
   StatusBadge,
   Button,
   Spinner,
@@ -20,6 +21,17 @@ import {
 import { invoicesAPI, invoiceSettingsAPI } from "../services/api";
 import JalaliDatePicker from "../components/JalaliDatePicker";
 import RequestEditModal from "../components/RequestEditModal";
+import {
+  BanIcon,
+  CarIcon,
+  CheckIcon,
+  ClipboardIcon,
+  EyeIcon,
+  FileTextIcon,
+  PencilIcon,
+  PlusIcon,
+  TrashIcon,
+} from "../components/icons";
 
 type FilterUser = {
   id: number;
@@ -319,17 +331,18 @@ const Invoices = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-white">🧾 فاکتورها</h2>
-          <p className="text-slate-400 text-sm mt-1">
-            مدیریت و پیگیری فاکتورها
-          </p>
-        </div>
-        <Link to="/invoices/new">
-          <Button variant="primary">+ فاکتور جدید</Button>
-        </Link>
-      </div>
+      <PageHeader
+        title="فاکتورها"
+        description="مدیریت و پیگیری فاکتورها"
+        actions={
+          <Link to="/invoices/new">
+            <Button variant="primary">
+              <PlusIcon className="h-4 w-4" />
+              فاکتور جدید
+            </Button>
+          </Link>
+        }
+      />
 
       {isManager && editRequests.length > 0 && (
         <section className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 space-y-3">
@@ -586,7 +599,7 @@ const Invoices = () => {
           <Spinner />
         ) : list.length === 0 ? (
           <EmptyState
-            icon="🧾"
+            icon={<FileTextIcon />}
             title="فاکتوری یافت نشد"
             description="با کلیک روی فاکتور جدید، اولین فاکتور خود را صادر کنید"
           />
@@ -639,8 +652,9 @@ const Invoices = () => {
                         {inv.customer_name || "---"}
                       </span>
                       {inv.vehicle_plate && (
-                        <span className="block text-slate-500 text-xs font-mono mt-0.5">
-                          🚗 {inv.vehicle_plate}
+                        <span className="mt-0.5 flex items-center gap-1 text-slate-500 text-xs font-mono">
+                          <CarIcon className="h-3.5 w-3.5 shrink-0" />
+                          {inv.vehicle_plate}
                         </span>
                       )}
                     </td>
@@ -655,7 +669,7 @@ const Invoices = () => {
                           : ""}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 text-slate-300">
+                    <td className="num py-3.5 px-4 text-slate-300">
                       {formatPrice(inv.final_amount)}
                       {Number(
                         inv.paid_amount ??
@@ -668,7 +682,7 @@ const Invoices = () => {
                           </span>
                         )}
                     </td>
-                    <td className="py-3.5 px-4 text-white font-semibold">
+                    <td className="num py-3.5 px-4 text-white font-semibold">
                       {formatPrice(
                         inv.paid_amount ??
                           (inv.status === "paid" ? inv.final_amount : 0),
@@ -704,9 +718,10 @@ const Invoices = () => {
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <Link
                           to={`/invoices/${inv.id}`}
-                          className="text-xs px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition-all"
+                          className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition-all"
                         >
-                          👁️ جزئیات
+                          <EyeIcon className="h-3.5 w-3.5" />
+                          جزئیات
                         </Link>
                         {inv.status === "paid" &&
                           !isManager &&
@@ -735,29 +750,36 @@ const Invoices = () => {
                         {inv.can_edit && (
                           <Link
                             to={`/invoices/${inv.id}/edit`}
-                            className="text-xs px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/20 transition-all"
+                            className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/20 transition-all"
                           >
-                            ✏️ ویرایش
+                            <PencilIcon className="h-3.5 w-3.5" />
+                            ویرایش
                           </Link>
                         )}
                         {cloneEnabled && (
                           <Link
                             to={`/invoices/new?clone=${inv.id}`}
-                            className="text-xs px-2.5 py-1 rounded-lg bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 border border-teal-500/20 transition-all"
+                            className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 border border-teal-500/20 transition-all"
                             title="صدور فاکتور جدید با همین مشخصات و ردیف‌ها"
                           >
-                            📋 صدور مشابه
+                            <ClipboardIcon className="h-3.5 w-3.5" />
+                            صدور مشابه
                           </Link>
                         )}
                         {inv.status === "pending" && (
                           <button
                             onClick={() => handleMarkPaid(inv.id)}
                             disabled={actionLoading === inv.id + "_paid"}
-                            className="text-xs px-2.5 py-1 rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20 transition-all disabled:opacity-50"
+                            className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20 transition-all disabled:opacity-50"
                           >
-                            {actionLoading === inv.id + "_paid"
-                              ? "..."
-                              : "✅ پرداخت"}
+                            {actionLoading === inv.id + "_paid" ? (
+                              "..."
+                            ) : (
+                              <>
+                                <CheckIcon className="h-3.5 w-3.5" />
+                                پرداخت
+                              </>
+                            )}
                           </button>
                         )}
                         {(inv.status === "pending" ||
@@ -765,21 +787,26 @@ const Invoices = () => {
                           <button
                             onClick={() => handleCancel(inv.id)}
                             disabled={actionLoading === inv.id + "_cancel"}
-                            className="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all disabled:opacity-50"
+                            className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all disabled:opacity-50"
                           >
-                            {actionLoading === inv.id + "_cancel"
-                              ? "..."
-                              : "❌ لغو"}
+                            {actionLoading === inv.id + "_cancel" ? (
+                              "..."
+                            ) : (
+                              <>
+                                <BanIcon className="h-3.5 w-3.5" />
+                                لغو
+                              </>
+                            )}
                           </button>
                         )}
                         {(inv.status !== "paid" || isManager) && (
                           <button
                             onClick={() => setDeleteTarget(inv)}
-                            className="text-xs px-2.5 py-1 rounded-lg bg-slate-500/10 text-slate-400 hover:bg-slate-500/20 border border-slate-500/20 transition-all"
+                            className="inline-flex items-center justify-center text-xs p-1.5 rounded-lg bg-slate-500/10 text-slate-400 hover:bg-red-500/20 hover:text-red-400 border border-slate-500/20 transition-all"
                             aria-label={`حذف فاکتور ${inv.invoice_number}`}
                             title="حذف فاکتور"
                           >
-                            🗑️
+                            <TrashIcon className="h-3.5 w-3.5" />
                           </button>
                         )}
                       </div>

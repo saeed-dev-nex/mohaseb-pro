@@ -175,7 +175,16 @@ function hookState(firstState, overrides = {}) {
 function findElement(element, predicate) {
   if (!React.isValidElement(element)) return null;
   if (predicate(element)) return element;
-  for (const child of React.Children.toArray(element.props.children)) {
+  // Layout components such as PageHeader receive the page's primary action
+  // through a named prop instead of children, so walk element-valued props
+  // as well as children.
+  const candidates = [
+    ...React.Children.toArray(element.props.children),
+    ...Object.values(element.props || {}).filter((value) =>
+      React.isValidElement(value),
+    ),
+  ];
+  for (const child of candidates) {
     const found = findElement(child, predicate);
     if (found) return found;
   }
@@ -228,7 +237,9 @@ for (const page of ["Services", "Cheques"]) {
       const open = findElement(
         tree(),
         (element) =>
-          element.type === "button" &&
+          // The page-level trigger is either a raw <button> or the shared
+          // <Button> component; both render the same <button> element.
+          (element.type === "button" || element.type?.name === "Button") &&
           (operation === "save"
             ? String(element.props.children).includes(
                 page === "Services" ? "افزودن خدمت" : "ثبت چک جدید",

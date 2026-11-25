@@ -9,6 +9,7 @@ import {
   customerKeys,
 } from "../hooks/useCustomers";
 import {
+  PageHeader,
   formatPrice,
   Button,
   Modal,
@@ -18,6 +19,14 @@ import {
   ConfirmDialog,
 } from "../components/ui";
 import { toPersianKeyboard } from "../utils/persian";
+import {
+  EyeIcon,
+  PencilIcon,
+  PlusIcon,
+  SearchIcon,
+  TrashIcon,
+  UsersIcon,
+} from "../components/icons";
 
 type CustomerRow = {
   id: number;
@@ -214,15 +223,16 @@ const Customers = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-white">👥 مشتریان</h2>
-          <p className="text-slate-400 text-sm mt-1">مدیریت اطلاعات مشتریان</p>
-        </div>
-        <Button variant="primary" onClick={openAdd}>
-          + افزودن مشتری
-        </Button>
-      </div>
+      <PageHeader
+        title="مشتریان"
+        description="مدیریت اطلاعات مشتریان"
+        actions={
+          <Button variant="primary" onClick={openAdd}>
+            <PlusIcon className="h-4 w-4" />
+            افزودن مشتری
+          </Button>
+        }
+      />
 
       {/* Search */}
       <div className="relative">
@@ -233,8 +243,8 @@ const Customers = () => {
           placeholder="جستجو بر اساس نام، تلفن یا کد ملی..."
           className="w-full px-4 py-3 pr-12 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
         />
-        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500">
-          🔍
+        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-500">
+          <SearchIcon className="h-5 w-5" />
         </span>
       </div>
 
@@ -244,7 +254,7 @@ const Customers = () => {
           <Spinner />
         ) : list.length === 0 ? (
           <EmptyState
-            icon="👥"
+            icon={<UsersIcon />}
             title="مشتری‌ای یافت نشد"
             description="با کلیک روی دکمه افزودن مشتری، اولین مشتری را ثبت کنید"
           />
@@ -293,33 +303,42 @@ const Customers = () => {
                     <td className="py-3.5 px-4 text-slate-400 font-mono text-xs">
                       {c.national_id || "---"}
                     </td>
-                    <td className="py-3.5 px-4 text-slate-300">
+                    <td className="num py-3.5 px-4 text-slate-300">
                       {new Intl.NumberFormat("fa-IR").format(
                         c.total_invoices || 0,
                       )}
                     </td>
-                    <td className="py-3.5 px-4 text-green-400 text-xs">
+                    <td className="num py-3.5 px-4 text-green-400 text-xs">
                       {formatPrice(c.total_paid || 0)}
                     </td>
                     <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity">
                         <Link
                           to={`/customers/${c.id}`}
-                          className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-500/10 transition-all text-xs"
+                          className="inline-flex items-center gap-1 p-1.5 rounded-lg text-blue-400 hover:bg-blue-500/10 transition-all text-xs"
+                          aria-label={`مشاهده پرونده ${c.name}`}
+                          title="مشاهده"
                         >
-                          👁️ مشاهده
+                          <EyeIcon className="h-4 w-4" />
+                          مشاهده
                         </Link>
                         <button
                           onClick={() => openEdit(c)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-500/10 transition-all text-xs"
+                          className="inline-flex items-center gap-1 p-1.5 rounded-lg text-slate-400 hover:bg-slate-500/10 transition-all text-xs"
+                          aria-label={`ویرایش ${c.name}`}
+                          title="ویرایش"
                         >
-                          ✏️ ویرایش
+                          <PencilIcon className="h-4 w-4" />
+                          ویرایش
                         </button>
                         <button
                           onClick={() => setDeleteTarget(c)}
-                          className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-all text-xs"
+                          className="inline-flex items-center gap-1 p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-all text-xs"
+                          aria-label={`حذف ${c.name}`}
+                          title="حذف"
                         >
-                          🗑️ حذف
+                          <TrashIcon className="h-4 w-4" />
+                          حذف
                         </button>
                       </div>
                     </td>

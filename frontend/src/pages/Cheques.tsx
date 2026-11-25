@@ -5,6 +5,7 @@ import JalaliDatePicker from "../components/JalaliDatePicker";
 import SearchableSelect from "../components/SearchableSelect";
 import { toJalali, toPersianKeyboard } from "../utils/persian";
 import {
+  PageHeader,
   StatCard,
   Spinner,
   EmptyState,
@@ -14,6 +15,13 @@ import {
   ConfirmDialog,
   formatPrice,
 } from "../components/ui";
+import {
+  AlertTriangleIcon,
+  CheckCircleIcon,
+  DownloadIcon,
+  SendIcon,
+  TicketIcon,
+} from "../components/icons";
 import { formatApiError } from "../utils/apiError";
 
 const fmt = (n: number | string | null | undefined) =>
@@ -476,23 +484,21 @@ const Cheques = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-white">🎫 مدیریت چک‌ها</h2>
-          <p className="text-slate-400 text-sm mt-1">
-            ثبت، پیگیری و یادآوری چک‌های دریافتی و پرداختی
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            setFormError("");
-            setModal("add");
-          }}
-          className="inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/25 px-5 py-2.5 text-sm"
-        >
-          + ثبت چک جدید
-        </button>
-      </div>
+      <PageHeader
+        title="مدیریت چک‌ها"
+        description="ثبت، پیگیری و یادآوری چک‌های دریافتی و پرداختی"
+        actions={
+          <Button
+            variant="primary"
+            onClick={() => {
+              setFormError("");
+              setModal("add");
+            }}
+          >
+            ثبت چک جدید
+          </Button>
+        }
+      />
 
       {error && (
         <div
@@ -516,25 +522,25 @@ const Cheques = () => {
         <StatCard
           label="چک‌های دریافتی معلق"
           value={formatPrice(stats.incomingPending)}
-          icon="📥"
+          icon={<DownloadIcon />}
           color="blue"
         />
         <StatCard
           label="چک‌های پرداختی معلق"
           value={formatPrice(stats.outgoingPending)}
-          icon="📤"
+          icon={<SendIcon />}
           color="purple"
         />
         <StatCard
           label="چک‌های پاس شده"
           value={formatPrice(stats.passed)}
-          icon="✅"
+          icon={<CheckCircleIcon />}
           color="green"
         />
         <StatCard
           label="چک‌های برگشت خورده"
           value={formatPrice(stats.bounced)}
-          icon="🚨"
+          icon={<AlertTriangleIcon />}
           color="red"
         />
       </div>
@@ -600,7 +606,7 @@ const Cheques = () => {
         <EmptyState
           title="هیچ چکی یافت نشد"
           description="چک جدیدی ثبت کنید یا فیلترهای جستجو را تغییر دهید"
-          icon="🎫"
+          icon={<TicketIcon />}
         />
       ) : (
         <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden shadow-xl">

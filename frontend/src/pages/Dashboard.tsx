@@ -1,12 +1,36 @@
 import React, { useEffect, useState } from "react";
+import { useSelector } from "react-redux";
 import { dashboardAPI, invoicesAPI } from "../services/api";
 import {
   Button,
+  Card,
+  ErrorState,
+  PageHeader,
+  Skeleton,
   StatCard,
   StatusBadge,
-  Spinner,
   formatPrice,
 } from "../components/ui";
+import {
+  AlertTriangleIcon,
+  BanknoteIcon,
+  BarChartIcon,
+  CheckCircleIcon,
+  ClipboardIcon,
+  CogIcon,
+  CrownIcon,
+  FileTextIcon,
+  HardHatIcon,
+  HourglassIcon,
+  PlusIcon,
+  SlidersIcon,
+  TicketIcon,
+  TrendingDownIcon,
+  TrendingUpIcon,
+  UserIcon,
+  UsersIcon,
+  WalletIcon,
+} from "../components/icons";
 import { Link } from "react-router-dom";
 import { toJalali } from "../utils/persian";
 
@@ -134,14 +158,15 @@ const BarChart = ({ data }: { data: MonthData[] }) => {
       <div className="absolute inset-x-0 top-0 bottom-7 flex flex-col justify-between pointer-events-none">
         {[1, 0.66, 0.33, 0].map((tick, index) => (
           <div key={index} className="flex items-center gap-2">
-            <span className="w-10 text-left text-[10px] text-slate-500">
+            <span className="num w-12 shrink-0 text-left text-[10px] text-slate-500">
               {compactAmount(maxVal * tick)}
             </span>
             <span className="h-px flex-1 border-t border-dashed border-slate-700/70" />
           </div>
         ))}
       </div>
-      <div className="relative flex items-end gap-3 h-48 pl-12 pb-7">
+      {/* RTL: the axis labels sit on the right, so reserve space on that side. */}
+      <div className="relative flex items-end gap-3 h-48 pr-14 pb-7">
         {data.map((month, i) => {
           const revPct = Math.max(((month.revenue || 0) / maxVal) * 100, 2);
           const expPct = Math.max(((month.expense || 0) / maxVal) * 100, 2);
@@ -232,8 +257,8 @@ const DonutChart = ({
           className="w-full h-full rounded-full"
           style={{ background: gradient }}
         />
-        <div className="absolute inset-3 rounded-full bg-slate-800 flex items-center justify-center flex-col">
-          <span className="text-white font-bold text-sm">
+        <div className="absolute inset-3 rounded-full bg-slate-900 flex items-center justify-center flex-col">
+          <span className="num text-white font-bold text-sm">
             {segments.length}
           </span>
           <span className="text-slate-500 text-[10px]">خدمت</span>
@@ -251,7 +276,9 @@ const DonutChart = ({
                 {s.service_title_snapshot || "---"}
               </span>
             </div>
-            <span className="text-slate-400 shrink-0">{s.count} بار</span>
+            <span className="num text-slate-400 shrink-0">
+              {s.count} بار
+            </span>
           </div>
         ))}
       </div>
@@ -259,26 +286,82 @@ const DonutChart = ({
   );
 };
 
+// One row in the «نیازمند اقدام» panel.
+type ActionItem = {
+  key: string;
+  to: string;
+  title: string;
+  meta: string;
+  amount: string;
+  tone: "danger" | "warning" | "info";
+};
+
+const ACTION_TONE = {
+  danger: { dot: "bg-red-400", text: "text-red-400" },
+  warning: { dot: "bg-amber-400", text: "text-amber-300" },
+  info: { dot: "bg-sky-400", text: "text-sky-300" },
+} as const;
+
+// Layout-shaped placeholder so the dashboard does not jump on load.
+const DashboardSkeleton = () => (
+  <div className="space-y-6" aria-busy="true" aria-label="در حال بارگذاری داشبورد">
+    <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      {[0, 1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className="rounded-2xl border border-slate-700/50 bg-slate-800/50 p-5"
+        >
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="mt-3 h-7 w-28" />
+        </div>
+      ))}
+    </div>
+    <div className="grid gap-6 xl:grid-cols-3">
+      <Skeleton className="h-56 rounded-2xl xl:col-span-2" />
+      <Skeleton className="h-56 rounded-2xl" />
+    </div>
+    <div className="grid gap-6 xl:grid-cols-3">
+      <Skeleton className="h-64 rounded-2xl xl:col-span-2" />
+      <Skeleton className="h-64 rounded-2xl" />
+    </div>
+  </div>
+);
+
 const Dashboard = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [reminders, setReminders] = useState<DashboardReminders | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const currentUser = useSelector((s: any) => s.auth.currentUser);
 
-  useEffect(() => {
-    const refresh = () =>
-      dashboardAPI
-        .stats()
-        .then((res) => setStats(res.data))
-        .catch(console.error)
-        .finally(() => setLoading(false));
+  const load = React.useCallback(() => {
+    dashboardAPI
+      .stats()
+      .then((res) => {
+        // Guard against non-JSON payloads (e.g. an SPA fallback page) so a
+        // misrouted request shows the error state instead of crashing.
+        if (res?.data && typeof res.data === "object") {
+          setStats(res.data);
+          setError(false);
+        } else {
+          setError(true);
+        }
+      })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
     dashboardAPI
       .reminders(7)
-      .then((res) => setReminders(res.data))
+      .then((res) => {
+        if (res?.data && typeof res.data === "object") setReminders(res.data);
+      })
       .catch(() => {});
-    refresh();
-    window.addEventListener("mohaseb:data-changed", refresh);
-    return () => window.removeEventListener("mohaseb:data-changed", refresh);
   }, []);
+
+  useEffect(() => {
+    load();
+    window.addEventListener("mohaseb:data-changed", load);
+    return () => window.removeEventListener("mohaseb:data-changed", load);
+  }, [load]);
 
   const handleMarkPaid = async (id: number) => {
     await invoicesAPI.markPaid(id);
@@ -286,204 +369,321 @@ const Dashboard = () => {
     setStats(res.data);
   };
 
-  if (loading) return <Spinner size="lg" />;
+  // A greeting and the Jalali date give the page a human "today" anchor
+  // instead of a bare section title.
+  const hour = new Date().getHours();
+  const greet =
+    hour < 12 ? "صبح بخیر" : hour < 17 ? "ظهر بخیر" : "عصر بخیر";
+  const firstName = currentUser?.first_name || currentUser?.username || "";
+  const today = new Intl.DateTimeFormat("fa-IR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
+
+  const header = (
+    <PageHeader
+      title="داشبورد"
+      description={`${greet}${firstName ? `، ${firstName}` : ""} · ${today}`}
+      actions={
+        <Link to="/invoices/new">
+          <Button variant="primary">
+            <PlusIcon className="h-4 w-4" />
+            فاکتور جدید
+          </Button>
+        </Link>
+      }
+    />
+  );
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        {header}
+        <DashboardSkeleton />
+      </div>
+    );
+  }
+
+  if (error && !stats) {
+    return (
+      <div className="space-y-6">
+        {header}
+        <ErrorState onRetry={load} />
+      </div>
+    );
+  }
 
   const topSvcTotal = (stats?.top_services || []).reduce(
     (a, s) => a + Number(s.total || 0),
     0,
   );
 
+  const commission = Number(stats?.total_commission || 0);
+  const expenses = Number(stats?.total_expenses || 0);
+  const netProfit = Number(stats?.net_profit || 0);
+  const profitPositive = netProfit >= 0;
+  const spendBase = commission + expenses;
+  const commissionPct =
+    spendBase > 0 ? (commission / spendBase) * 100 : 50;
+  const expensePct = 100 - commissionPct;
+  const margin =
+    commission > 0 ? Math.round((netProfit / commission) * 100) : 0;
+
+  // Everything that wants the user's attention today, in one place and in
+  // priority order: overdue first, then due soon, then cheques.
+  const actionItems: ActionItem[] = [
+    ...(stats?.overdue_items || []).map((item) => ({
+      key: `overdue-${item.id}`,
+      to: `/invoices/${item.id}`,
+      title: `فاکتور ${item.invoice_number} · ${item.customer_name}`,
+      meta: `سررسید گذشته · ${toJalali(item.due_date)}`,
+      amount: formatPrice(item.remaining_amount),
+      tone: "danger" as const,
+    })),
+    ...(reminders?.due_soon_invoices || []).slice(0, 5).map((item) => ({
+      key: `due-${item.id}`,
+      to: `/invoices/${item.id}`,
+      title: `فاکتور ${item.invoice_number} · ${item.customer_name}`,
+      meta: `${fmt(item.days)} روز مانده · ${toJalali(item.due_date)}`,
+      amount: formatPrice(item.remaining_amount),
+      tone: "warning" as const,
+    })),
+    ...(reminders?.cheques_due || []).slice(0, 5).map((item) => ({
+      key: `cheque-${item.id}`,
+      to: "/cheques",
+      title: `چک ${item.cheque_number} · ${item.bank_name} · ${item.customer_name}`,
+      meta: `${fmt(item.days)} روز مانده · ${toJalali(item.due_date)}`,
+      amount: formatPrice(item.amount),
+      tone: "info" as const,
+    })),
+  ];
+  const bouncedCount = reminders?.totals?.bounced_cheques_count || 0;
+  const bouncedAmount = reminders?.totals?.bounced_cheques_amount || 0;
+  const shownActions = actionItems.slice(0, 8);
+  const moreActions = actionItems.length - shownActions.length;
+  const attentionTotal = actionItems.length + bouncedCount;
+
+  const financials = [
+    {
+      label: "کارمزد (درآمد)",
+      value: formatPrice(commission),
+      icon: <TrendingUpIcon className="h-4 w-4" />,
+      tone: "text-emerald-400",
+    },
+    {
+      label: "کل هزینه‌ها",
+      value: formatPrice(expenses),
+      icon: <BanknoteIcon className="h-4 w-4" />,
+      tone: "text-rose-400",
+    },
+    {
+      label: "سود خالص",
+      value: formatPrice(netProfit),
+      icon: profitPositive ? (
+        <TrendingUpIcon className="h-4 w-4" />
+      ) : (
+        <TrendingDownIcon className="h-4 w-4" />
+      ),
+      tone: profitPositive ? "text-emerald-400" : "text-rose-400",
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-white">📊 داشبورد</h2>
-          <p className="text-slate-400 text-sm mt-1">
-            خلاصه وضعیت مالی و تحلیلی
-          </p>
-        </div>
-        <Link to="/invoices/new">
-          <Button variant="primary">+ فاکتور جدید</Button>
-        </Link>
-      </div>
+      {header}
 
-      {/* Stats Row 1 */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard
-          label="کل مشتریان"
-          value={fmt(stats?.total_customers || 0)}
-          icon="👥"
-          color="blue"
-        />
+      {/* Primary KPIs — one row, one job: how is the business doing. */}
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard
           label="کل فاکتورها"
           value={fmt(stats?.total_invoices || 0)}
-          icon="🧾"
+          icon={<FileTextIcon />}
           color="purple"
-        />
-        <StatCard
-          label="درآمد خالص (کارمزد)"
-          value={formatPrice(stats?.total_commission || 0)}
-          icon="💰"
-          color="green"
+          sub={`پرداخت‌شده: ${fmt(stats?.paid_invoices || 0)}`}
         />
         <StatCard
           label="در انتظار پرداخت"
           value={fmt(stats?.pending_invoices || 0)}
-          icon="⏳"
+          icon={<HourglassIcon />}
           color="yellow"
-          sub={`پرداخت شده: ${fmt(stats?.paid_invoices || 0)}`}
+        />
+        <StatCard
+          label="فاکتورهای معوق"
+          value={fmt(stats?.overdue_invoices || 0)}
+          icon={<AlertTriangleIcon />}
+          color="red"
+          sub={`مانده: ${formatPrice(stats?.overdue_amount || 0)}`}
+        />
+        <StatCard
+          label="کل مشتریان"
+          value={fmt(stats?.total_customers || 0)}
+          icon={<UsersIcon />}
+          color="blue"
         />
       </div>
 
-      {/* Stats Row 2 — Financial Overview */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 rounded-2xl p-5">
-          <p className="text-emerald-400/80 text-xs mb-1">💼 کل کارمزد</p>
-          <p className="text-emerald-400 text-xl font-bold">
-            {formatPrice(stats?.total_commission || 0)}
-          </p>
-        </div>
-        <div className="bg-gradient-to-br from-red-500/10 to-red-600/5 border border-red-500/20 rounded-2xl p-5">
-          <p className="text-red-400/80 text-xs mb-1">💸 کل هزینه‌ها</p>
-          <p className="text-red-400 text-xl font-bold">
-            {formatPrice(stats?.total_expenses || 0)}
-          </p>
-        </div>
-        <div
-          className={`bg-gradient-to-br border rounded-2xl p-5 ${
-            (stats?.net_profit || 0) >= 0
-              ? "from-green-500/10 to-green-600/5 border-green-500/20"
-              : "from-red-500/10 to-red-600/5 border-red-500/20"
-          }`}
-        >
-          <p
-            className={`text-xs mb-1 ${(stats?.net_profit || 0) >= 0 ? "text-green-400/80" : "text-red-400/80"}`}
-          >
-            📊 سود خالص
-          </p>
-          <p
-            className={`text-xl font-bold ${(stats?.net_profit || 0) >= 0 ? "text-green-400" : "text-red-400"}`}
-          >
-            {formatPrice(stats?.net_profit || 0)}
-          </p>
-        </div>
-        <div className="bg-gradient-to-br from-orange-500/10 to-orange-600/5 border border-orange-500/20 rounded-2xl p-5">
-          <p className="text-orange-400/80 text-xs mb-1">
-            ⚠️ فاکتورهای عقب‌افتاده
-          </p>
-          <p className="text-orange-400 text-xl font-bold">
-            {fmt(stats?.overdue_invoices || 0)}
-          </p>
-        </div>
-      </div>
-
-      {stats?.overdue_items?.length > 0 && (
-        <section className="rounded-2xl border border-orange-500/25 bg-orange-500/5 p-5 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="font-semibold text-orange-500">
-                فاکتورهای سررسیدگذشته
-              </h3>
-              <p className="mt-1 text-xs text-slate-500">
-                ماندهٔ کل: {formatPrice(stats.overdue_amount || 0)}
-              </p>
-            </div>
+      {/* Money in / money out, next to what needs attention. */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <Card
+          className="xl:col-span-2"
+          title="خلاصهٔ مالی"
+          icon={<WalletIcon />}
+          actions={
             <Link
               to="/reports"
-              className="text-xs text-blue-400 hover:underline"
+              className="text-xs text-blue-400 transition-colors hover:text-blue-300"
             >
-              همهٔ معوقات
+              گزارش کامل ←
             </Link>
-          </div>
-          <div className="divide-y divide-orange-500/10">
-            {stats.overdue_items.map((item) => (
-              <Link
-                key={item.id}
-                to={`/invoices/${item.id}`}
-                className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm hover:bg-orange-500/5"
+          }
+        >
+          <dl className="grid gap-4 sm:grid-cols-3">
+            {financials.map((item) => (
+              <div
+                key={item.label}
+                className="rounded-xl bg-slate-700/30 p-3.5"
               >
-                <span className="text-slate-200">
-                  {item.invoice_number} · {item.customer_name}
-                </span>
-                <span className="text-slate-500 text-xs">
-                  سررسید {toJalali(item.due_date)}
-                </span>
-                <span className="font-medium text-orange-500">
-                  {formatPrice(item.remaining_amount)}
-                </span>
-              </Link>
+                <dt className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <span className={item.tone}>{item.icon}</span>
+                  {item.label}
+                </dt>
+                <dd className={`num mt-1.5 text-lg font-bold ${item.tone}`}>
+                  {item.value}
+                </dd>
+              </div>
             ))}
-          </div>
-        </section>
-      )}
+          </dl>
 
-      {reminders &&
-        (reminders.totals.due_soon_invoices_count > 0 ||
-          reminders.totals.cheques_due_count > 0 ||
-          reminders.totals.bounced_cheques_count > 0) && (
-          <section className="rounded-2xl border border-sky-500/25 bg-sky-500/5 p-5 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="font-semibold text-sky-400">
-                یادآوری سررسید (۷ روز آینده)
-              </h3>
-              {reminders.totals.bounced_cheques_count > 0 && (
-                <span className="text-xs text-red-400">
-                  ⚠️ {fmt(reminders.totals.bounced_cheques_count)} چک برگشتی
-                  نیازمند پیگیری (
-                  {formatPrice(reminders.totals.bounced_cheques_amount)})
+          {spendBase > 0 && (
+            <div className="mt-5">
+              <div
+                className="flex h-2 overflow-hidden rounded-full bg-slate-700/40"
+                role="img"
+                aria-label={`سهم کارمزد ${fmt(Math.round(commissionPct))} درصد، سهم هزینه ${fmt(Math.round(expensePct))} درصد`}
+              >
+                <span
+                  className="h-full bg-emerald-500/80"
+                  style={{ width: `${commissionPct}%` }}
+                />
+                <span
+                  className="h-full bg-rose-500/70"
+                  style={{ width: `${expensePct}%` }}
+                />
+              </div>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-sm bg-emerald-500/80" />
+                  کارمزد {fmt(Math.round(commissionPct))}٪
                 </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-sm bg-rose-500/70" />
+                  هزینه {fmt(Math.round(expensePct))}٪
+                </span>
+                <span>
+                  حاشیهٔ سود:{" "}
+                  <span className={profitPositive ? "text-emerald-400" : "text-rose-400"}>
+                    {fmt(margin)}٪
+                  </span>
+                </span>
+              </div>
+            </div>
+          )}
+        </Card>
+
+        <Card
+          title="نیازمند اقدام"
+          icon={<AlertTriangleIcon className="!text-amber-400" />}
+          actions={
+            attentionTotal > 0 ? (
+              <span className="num rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                {fmt(attentionTotal)} مورد
+              </span>
+            ) : undefined
+          }
+          bodyClassName="max-h-[26rem] overflow-y-auto -mx-2 px-2"
+        >
+          {bouncedCount > 0 && (
+            <div className="mb-3 flex items-center gap-2 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              <AlertTriangleIcon className="h-4 w-4 shrink-0" />
+              <span>
+                {fmt(bouncedCount)} چک برگشتی نیازمند پیگیری (
+                {formatPrice(bouncedAmount)})
+              </span>
+            </div>
+          )}
+
+          {shownActions.length === 0 && bouncedCount === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-400 [&>svg]:h-5 [&>svg]:w-5">
+                <CheckCircleIcon />
+              </span>
+              <p className="text-sm font-medium text-slate-200">
+                همه‌چیز مرتب است
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                فاکتور یا چک سررسید‌شده‌ای برای پیگیری ندارید
+              </p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-700/40">
+              {shownActions.map((item) => (
+                <li key={item.key}>
+                  <Link
+                    to={item.to}
+                    className="group flex items-center gap-3 py-2.5"
+                  >
+                    <span
+                      className={`h-2 w-2 shrink-0 rounded-full ${ACTION_TONE[item.tone].dot}`}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm text-slate-200 group-hover:text-white transition-colors">
+                        {item.title}
+                      </span>
+                      <span className="block truncate text-xs text-slate-500">
+                        {item.meta}
+                      </span>
+                    </span>
+                    <span
+                      className={`num shrink-0 text-sm font-semibold ${ACTION_TONE[item.tone].text}`}
+                    >
+                      {item.amount}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {(moreActions > 0 || actionItems.length > 0) && (
+            <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-700/40 pt-3 text-xs">
+              <Link
+                to="/reports"
+                className="text-blue-400 transition-colors hover:text-blue-300"
+              >
+                همهٔ معوقات
+              </Link>
+              {moreActions > 0 && (
+                <Link
+                  to="/cheques"
+                  className="text-slate-500 transition-colors hover:text-slate-300"
+                >
+                  {fmt(moreActions)} مورد دیگر
+                </Link>
               )}
             </div>
-            <div className="divide-y divide-sky-500/10">
-              {reminders.due_soon_invoices.slice(0, 5).map((item) => (
-                <Link
-                  key={`inv-${item.id}`}
-                  to={`/invoices/${item.id}`}
-                  className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm hover:bg-sky-500/5"
-                >
-                  <span className="text-slate-200">
-                    فاکتور {item.invoice_number} · {item.customer_name}
-                  </span>
-                  <span className="text-slate-500 text-xs">
-                    {fmt(item.days)} روز مانده · {toJalali(item.due_date)}
-                  </span>
-                  <span className="font-medium text-sky-400">
-                    {formatPrice(item.remaining_amount)}
-                  </span>
-                </Link>
-              ))}
-              {reminders.cheques_due.slice(0, 5).map((item) => (
-                <Link
-                  key={`chq-${item.id}`}
-                  to="/cheques"
-                  className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm hover:bg-sky-500/5"
-                >
-                  <span className="text-slate-200">
-                    چک {item.cheque_number} · {item.bank_name} ·{" "}
-                    {item.customer_name}
-                  </span>
-                  <span className="text-slate-500 text-xs">
-                    {fmt(item.days)} روز مانده · {toJalali(item.due_date)}
-                  </span>
-                  <span className="font-medium text-sky-400">
-                    {formatPrice(item.amount)}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
+          )}
+        </Card>
+      </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Revenue/Expense Chart */}
-        <div className="xl:col-span-2 bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-white font-semibold">
-              درآمد و هزینه ۶ ماه گذشته
-            </h3>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <Card
+          className="xl:col-span-2"
+          title="درآمد و هزینه ۶ ماه گذشته"
+          actions={
             <div className="flex items-center gap-3 text-xs text-slate-500">
               <span className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-sm bg-blue-500" />
@@ -494,7 +694,8 @@ const Dashboard = () => {
                 هزینه
               </span>
             </div>
-          </div>
+          }
+        >
           {stats?.monthly_revenue ? (
             <BarChart data={stats.monthly_revenue} />
           ) : (
@@ -502,11 +703,12 @@ const Dashboard = () => {
               داده‌ای موجود نیست
             </div>
           )}
-        </div>
+        </Card>
 
-        {/* Top Services Donut */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-          <h3 className="text-white font-semibold mb-4">🔧 بیشترین خدمات</h3>
+        <Card
+          title="بیشترین خدمات"
+          icon={<CogIcon />}
+        >
           {(stats?.top_services || []).length > 0 ? (
             <DonutChart data={stats.top_services} total={topSvcTotal} />
           ) : (
@@ -514,14 +716,16 @@ const Dashboard = () => {
               داده‌ای موجود نیست
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* Top Customers + Quick Actions */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {/* Top Customers */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 min-w-0 overflow-hidden">
-          <h3 className="text-white font-semibold mb-4">🏆 بهترین مشتریان</h3>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <Card
+          title="بهترین مشتریان"
+          icon={<CrownIcon className="!text-amber-400/80" />}
+          className="min-w-0 overflow-hidden"
+        >
           {(stats?.top_customers || []).length > 0 ? (
             <div className="space-y-2">
               {stats.top_customers.map((c, i) => (
@@ -531,20 +735,22 @@ const Dashboard = () => {
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <span
-                      className={`w-7 h-7 shrink-0 rounded-lg flex items-center justify-center text-xs font-bold
+                      className={`num w-7 h-7 shrink-0 rounded-lg flex items-center justify-center text-xs font-bold
                       ${i === 0 ? "bg-yellow-500/20 text-yellow-400" : i === 1 ? "bg-slate-400/20 text-slate-300" : "bg-orange-500/20 text-orange-400"}`}
                     >
-                      {i + 1}
+                      {fmt(i + 1)}
                     </span>
                     <span className="text-white text-sm font-medium truncate min-w-0">
                       {c.customer__name || "---"}
                     </span>
                   </div>
                   <div className="text-left shrink-0 whitespace-nowrap">
-                    <p className="text-blue-400 font-semibold text-sm">
+                    <p className="num text-blue-400 font-semibold text-sm">
                       {formatPrice(c.total)}
                     </p>
-                    <p className="text-slate-500 text-xs">{c.count} فاکتور</p>
+                    <p className="text-slate-500 text-xs">
+                      {fmt(c.count)} فاکتور
+                    </p>
                   </div>
                 </div>
               ))}
@@ -554,89 +760,54 @@ const Dashboard = () => {
               داده‌ای موجود نیست
             </div>
           )}
-        </div>
+        </Card>
 
-        {/* Quick Actions */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-          <h3 className="text-white font-semibold mb-4">دسترسی سریع</h3>
+        {/* Shortcuts are secondary: one neutral tile style, accent on hover. */}
+        <Card title="دسترسی سریع">
           <div className="grid grid-cols-2 gap-2.5">
             {[
-              {
-                to: "/invoices/new",
-                icon: "➕",
-                label: "صدور فاکتور",
-                cls: "bg-blue-500/10 border-blue-500/20 text-blue-300 hover:bg-blue-500/20",
-              },
-              {
-                to: "/customers",
-                icon: "👤",
-                label: "مشتریان",
-                cls: "bg-purple-500/10 border-purple-500/20 text-purple-300 hover:bg-purple-500/20",
-              },
-              {
-                to: "/services",
-                icon: "⚙️",
-                label: "خدمات",
-                cls: "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20",
-              },
-              {
-                to: "/expenses",
-                icon: "💰",
-                label: "هزینه‌ها",
-                cls: "bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20",
-              },
-              {
-                to: "/staff",
-                icon: "👷",
-                label: "پرسنل",
-                cls: "bg-indigo-500/10 border-indigo-500/20 text-indigo-300 hover:bg-indigo-500/20",
-              },
-              {
-                to: "/reports",
-                icon: "📈",
-                label: "گزارشات",
-                cls: "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20",
-              },
-              {
-                to: "/settings",
-                icon: "🎨",
-                label: "تنظیمات برند",
-                cls: "bg-pink-500/10 border-pink-500/20 text-pink-300 hover:bg-pink-500/20",
-              },
+              { to: "/invoices/new", icon: <PlusIcon />, label: "صدور فاکتور" },
+              { to: "/customers", icon: <UserIcon />, label: "مشتریان" },
+              { to: "/services", icon: <CogIcon />, label: "خدمات" },
+              { to: "/expenses", icon: <WalletIcon />, label: "هزینه‌ها" },
+              { to: "/staff", icon: <HardHatIcon />, label: "پرسنل" },
+              { to: "/reports", icon: <BarChartIcon />, label: "گزارشات" },
+              { to: "/settings", icon: <SlidersIcon />, label: "تنظیمات برند" },
               {
                 to: "/invoices?status=pending",
-                icon: "📋",
+                icon: <ClipboardIcon />,
                 label: "فاکتورهای معلق",
-                cls: "bg-orange-500/10 border-orange-500/20 text-orange-300 hover:bg-orange-500/20",
               },
             ].map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
-                className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-sm ${item.cls}`}
+                className="flex items-center gap-3 rounded-xl border border-slate-700/50 bg-slate-700/20 p-3 text-sm text-slate-200 transition-colors hover:border-blue-400/40 hover:bg-blue-500/10 hover:text-white"
               >
-                <span className="text-lg">{item.icon}</span>
+                <span className="shrink-0 text-slate-400 [&>svg]:h-5 [&>svg]:w-5">
+                  {item.icon}
+                </span>
                 <span>{item.label}</span>
               </Link>
             ))}
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Recent Invoices + Upcoming Cheques */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Invoices */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 min-w-0 overflow-hidden">
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="text-white font-semibold">آخرین فاکتورها</h3>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card
+          title="آخرین فاکتورها"
+          className="min-w-0 overflow-hidden"
+          actions={
             <Link
               to="/invoices"
-              className="text-blue-400 text-sm hover:text-blue-300 transition-colors"
+              className="text-xs text-blue-400 transition-colors hover:text-blue-300"
             >
               مشاهده همه ←
             </Link>
-          </div>
-
+          }
+        >
           {stats?.recent_invoices?.length > 0 ? (
             <div className="space-y-2">
               {stats.recent_invoices.map((inv) => (
@@ -653,11 +824,11 @@ const Dashboard = () => {
                     </span>
                   </div>
                   <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-                    <span className="text-slate-300 text-sm font-medium whitespace-nowrap">
+                    <span className="num text-slate-300 text-sm font-medium whitespace-nowrap">
                       {formatPrice(inv.total_amount)}
                     </span>
                     <StatusBadge status={inv.status} />
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex gap-1">
+                    <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity hidden sm:flex gap-1">
                       <Link
                         to={`/invoices/${inv.id}`}
                         className="text-xs px-2 py-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-600 transition-all"
@@ -682,22 +853,21 @@ const Dashboard = () => {
               هنوز فاکتوری ثبت نشده است
             </p>
           )}
-        </div>
+        </Card>
 
-        {/* Upcoming Cheques */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 min-w-0 overflow-hidden">
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="text-white font-semibold">
-              🎫 چک‌های سررسید نزدیک (۱۰ روز آینده)
-            </h3>
+        <Card
+          title="چک‌های سررسید نزدیک (۱۰ روز آینده)"
+          icon={<TicketIcon />}
+          className="min-w-0 overflow-hidden"
+          actions={
             <Link
               to="/cheques"
-              className="text-blue-400 text-sm hover:text-blue-300 transition-colors"
+              className="text-xs text-blue-400 transition-colors hover:text-blue-300"
             >
               مشاهده همه ←
             </Link>
-          </div>
-
+          }
+        >
           {stats?.upcoming_cheques?.length > 0 ? (
             <div className="space-y-2">
               {stats.upcoming_cheques.map((chq) => (
@@ -725,10 +895,10 @@ const Dashboard = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-                    <span className="text-slate-300 text-sm font-medium whitespace-nowrap">
+                    <span className="num text-slate-300 text-sm font-medium whitespace-nowrap">
                       {formatPrice(chq.amount)}
                     </span>
-                    <span className="text-xs text-yellow-400 font-mono bg-yellow-500/10 px-2 py-1 rounded-lg">
+                    <span className="num text-xs text-yellow-400 font-mono bg-yellow-500/10 px-2 py-1 rounded-lg">
                       {toJalali(chq.due_date)}
                     </span>
                   </div>
@@ -740,7 +910,7 @@ const Dashboard = () => {
               چک سررسید نزدیک در ۱۰ روز آینده وجود ندارد
             </p>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );

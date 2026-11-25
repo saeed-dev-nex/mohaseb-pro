@@ -7,6 +7,13 @@ import {
   invoicesAPI,
 } from "../services/api";
 import { playChime } from "../lib/chime";
+import {
+  BanIcon,
+  BellIcon,
+  CheckCircleIcon,
+  InfoIcon,
+  XIcon,
+} from "./icons";
 
 type EditRequestItem = {
   id: number;
@@ -60,7 +67,9 @@ const InvoiceEditRequestAlerts = () => {
     if (!isManager) return;
     try {
       const { data } = await invoicesAPI.editRequests();
-      setRequests(data);
+      // A non-array payload (e.g. an SPA fallback page) must never take the
+      // whole shell down through the top-level error boundary.
+      setRequests(Array.isArray(data) ? data : []);
     } catch {
       // Keep the last known requests visible while the API is temporarily unavailable.
     }
@@ -202,8 +211,11 @@ const InvoiceEditRequestAlerts = () => {
               className="rounded-2xl border border-amber-400/50 bg-white p-4 shadow-2xl shadow-slate-900/20"
             >
               <div className="flex items-start gap-3">
-                <span className="mt-0.5 text-xl" aria-hidden="true">
-                  🔔
+                <span
+                  className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center text-amber-500 [&>svg]:h-5 [&>svg]:w-5"
+                  aria-hidden="true"
+                >
+                  <BellIcon />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-slate-900">
@@ -267,12 +279,17 @@ const InvoiceEditRequestAlerts = () => {
               }`}
             >
               <div className="flex items-start gap-2">
-                <span aria-hidden="true">
-                  {toast.tone === "success"
-                    ? "✅"
-                    : toast.tone === "danger"
-                      ? "⛔"
-                      : "ℹ️"}
+                <span
+                  aria-hidden="true"
+                  className="mt-0.5 flex shrink-0 [&>svg]:h-4 [&>svg]:w-4"
+                >
+                  {toast.tone === "success" ? (
+                    <CheckCircleIcon />
+                  ) : toast.tone === "danger" ? (
+                    <BanIcon />
+                  ) : (
+                    <InfoIcon />
+                  )}
                 </span>
                 <p className="min-w-0 flex-1 text-sm">{toast.text}</p>
                 <button
@@ -283,9 +300,9 @@ const InvoiceEditRequestAlerts = () => {
                       current.filter((t) => t.id !== toast.id),
                     )
                   }
-                  className="text-xs opacity-60 hover:opacity-100"
+                  className="flex shrink-0 items-center justify-center rounded-md p-1 opacity-60 hover:opacity-100"
                 >
-                  ✕
+                  <XIcon className="h-4 w-4" />
                 </button>
               </div>
             </section>

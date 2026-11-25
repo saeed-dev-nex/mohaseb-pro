@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useSelector } from "react-redux";
+import { MoonIcon, SunIcon } from "./icons";
 
 type NavbarProps = { onMenuToggle: () => void };
 
@@ -8,6 +9,18 @@ const Navbar = ({ onMenuToggle }: NavbarProps) => {
   const [theme, setTheme] = useState(
     () => localStorage.getItem("app-theme") || "dark",
   );
+  // Real connection status: the old badge was always green even offline.
+  const [online, setOnline] = useState(() => navigator.onLine);
+  React.useEffect(() => {
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    return () => {
+      window.removeEventListener("online", up);
+      window.removeEventListener("offline", down);
+    };
+  }, []);
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
@@ -41,6 +54,7 @@ const Navbar = ({ onMenuToggle }: NavbarProps) => {
       {/* Mobile menu button */}
       <button
         onClick={onMenuToggle}
+        aria-label="باز کردن منو"
         className="lg:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-all"
       >
         <svg
@@ -62,18 +76,27 @@ const Navbar = ({ onMenuToggle }: NavbarProps) => {
       <div className="flex items-center gap-3">
         <button
           onClick={toggleTheme}
-          className="px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-700/50 border border-slate-700/50"
-          aria-label="تغییر پوسته"
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-700/50 hover:text-white border border-slate-700/50 transition-all"
+          aria-label={theme === "dark" ? "روشن کردن حالت روشن" : "روشن کردن حالت تیره"}
+          title={theme === "dark" ? "حالت روشن" : "حالت تیره"}
         >
-          {theme === "dark" ? "☀️ حالت روشن" : "🌙 حالت تیره"}
+          {theme === "dark" ? (
+            <SunIcon className="h-5 w-5" />
+          ) : (
+            <MoonIcon className="h-5 w-5" />
+          )}
         </button>
         <span className="hidden sm:inline text-slate-400 text-sm">
           {persianDate}
         </span>
         <div className="w-px h-5 bg-slate-700 hidden sm:block" />
-        <div className="hidden sm:flex items-center gap-2">
-          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-          <span className="text-slate-400 text-xs">آنلاین</span>
+        <div className="hidden sm:flex items-center gap-2" title={online ? "اتصال برقرار است" : "اینترنت قطع است — فاکتورها ذخیره و بعداً ارسال می‌شوند"}>
+          <div
+            className={`w-2 h-2 rounded-full ${online ? "bg-green-400 animate-pulse" : "bg-amber-500"}`}
+          />
+          <span className="text-slate-400 text-xs">
+            {online ? "آنلاین" : "آفلاین"}
+          </span>
         </div>
       </div>
 

@@ -6,6 +6,128 @@ import type {
   SelectHTMLAttributes,
 } from "react";
 import { createPortal } from "react-dom";
+import { AlertTriangleIcon, InboxIcon, RotateCwIcon } from "./icons";
+
+// ---- Page Header ----
+// One header pattern for every page: a single visual anchor (h1), a quiet
+// description line, and the page's primary action on the trailing edge.
+type PageHeaderProps = {
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+};
+
+export const PageHeader = ({
+  title,
+  description,
+  actions,
+}: PageHeaderProps) => (
+  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="min-w-0">
+      <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+        {title}
+      </h1>
+      {description && (
+        <p className="mt-1 text-sm leading-6 text-slate-400">{description}</p>
+      )}
+    </div>
+    {actions && (
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {actions}
+      </div>
+    )}
+  </div>
+);
+
+// ---- Card ----
+// The app's single panel surface. Keeping one radius, border and padding
+// scale is what stops the layout from reading as a pile of look-alike boxes.
+type CardProps = {
+  title?: ReactNode;
+  icon?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  bodyClassName?: string;
+};
+
+export const Card = ({
+  title,
+  icon,
+  actions,
+  children,
+  className = "",
+  bodyClassName = "",
+}: CardProps) => (
+  <section
+    className={`rounded-2xl border border-slate-700/50 bg-slate-800/50 p-5 sm:p-6 ${className}`}
+  >
+    {(title || actions) && (
+      <header className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="flex min-w-0 items-center gap-2 text-sm font-semibold text-white sm:text-base">
+          {icon && (
+            <span className="shrink-0 text-slate-400 [&>svg]:h-[18px] [&>svg]:w-[18px]">
+              {icon}
+            </span>
+          )}
+          <span className="truncate">{title}</span>
+        </h2>
+        {actions && (
+          <div className="flex shrink-0 items-center gap-2">{actions}</div>
+        )}
+      </header>
+    )}
+    <div className={bodyClassName}>{children}</div>
+  </section>
+);
+
+// ---- Skeleton ----
+// Layout-shaped placeholder instead of a centered spinner, so the page does
+// not jump when data lands.
+export const Skeleton = ({ className = "" }: { className?: string }) => (
+  <div
+    aria-hidden="true"
+    className={`animate-pulse rounded-lg bg-slate-700/40 ${className}`}
+  />
+);
+
+// ---- Error State ----
+// Load failures used to end in a console.error and a permanently empty page;
+// give the user the reason and a way forward.
+type ErrorStateProps = {
+  title?: ReactNode;
+  message?: ReactNode;
+  onRetry?: () => void;
+  retryLabel?: ReactNode;
+};
+
+export const ErrorState = ({
+  title = "دریافت اطلاعات انجام نشد",
+  message = "اتصال به سرور برقرار نشد. اینترنت یا وضعیت سرور را بررسی کنید و دوباره تلاش کنید.",
+  onRetry,
+  retryLabel = "تلاش دوباره",
+}: ErrorStateProps) => (
+  <div
+    role="alert"
+    className="flex flex-col items-center justify-center rounded-2xl border border-red-500/25 bg-red-500/5 px-6 py-12 text-center"
+  >
+    <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/15 text-red-400 [&>svg]:h-6 [&>svg]:w-6">
+      <AlertTriangleIcon />
+    </span>
+    <h3 className="mb-1 text-base font-semibold text-slate-200">{title}</h3>
+    <p className="max-w-sm text-sm leading-6 text-slate-500">{message}</p>
+    {onRetry && (
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-5 inline-flex items-center gap-2 rounded-xl border border-slate-600/60 bg-slate-700/40 px-4 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-700/70"
+      >
+        <RotateCwIcon className="h-4 w-4" />
+        {retryLabel}
+      </button>
+    )}
+  </div>
+);
 
 // ---- Stat Card ----
 type StatCardProps = {
@@ -23,28 +145,31 @@ export const StatCard = ({
   color = "blue",
   sub,
 }: StatCardProps) => {
-  const colors: Record<string, string> = {
-    blue: "from-blue-500/20 to-blue-600/10 border-blue-500/20 text-blue-400",
-    green:
-      "from-green-500/20 to-green-600/10 border-green-500/20 text-green-400",
-    yellow:
-      "from-yellow-500/20 to-yellow-600/10 border-yellow-500/20 text-yellow-400",
-    red: "from-red-500/20 to-red-600/10 border-red-500/20 text-red-400",
-    purple:
-      "from-purple-500/20 to-purple-600/10 border-purple-500/20 text-purple-400",
+  // Neutral surface + one colored icon chip keeps the dashboard calm and
+  // professional; full-color cards read as dated "rainbow" dashboards.
+  const chips: Record<string, string> = {
+    blue: "bg-blue-500/15 text-blue-400",
+    green: "bg-green-500/15 text-green-400",
+    yellow: "bg-yellow-500/15 text-yellow-400",
+    red: "bg-red-500/15 text-red-400",
+    purple: "bg-purple-500/15 text-purple-400",
   };
 
   return (
-    <div
-      className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br p-6 ${colors[color]}`}
-    >
-      <div className="flex items-start justify-between">
-        <div>
+    <div className="rounded-2xl border border-slate-700/50 bg-slate-800/50 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-slate-400 text-sm mb-1">{label}</p>
-          <p className="text-white text-2xl font-bold">{value}</p>
+          <p className="num text-white text-2xl font-bold">{value}</p>
           {sub && <p className="text-slate-500 text-xs mt-1">{sub}</p>}
         </div>
-        <span className="text-3xl opacity-80">{icon}</span>
+        {icon && (
+          <span
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-2xl [&>svg]:h-5 [&>svg]:w-5 ${chips[color]}`}
+          >
+            {icon}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -52,33 +177,43 @@ export const StatCard = ({
 
 // ---- Status Badge ----
 export const StatusBadge = ({ status }: { status: string }) => {
-  const map: Record<string, { label: string; cls: string }> = {
+  const map: Record<string, { label: string; cls: string; dot: string }> = {
     draft: {
       label: "پیش‌نویس",
       cls: "bg-slate-500/20 text-slate-400 border-slate-500/30",
+      dot: "bg-slate-400",
     },
     pending: {
       label: "در انتظار",
       cls: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+      dot: "bg-yellow-400",
     },
     paid: {
       label: "پرداخت شده",
       cls: "bg-green-500/20 text-green-400 border-green-500/30",
+      dot: "bg-green-400",
     },
     commission_paid: {
       label: "کارمزد پرداخت شده",
       cls: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+      dot: "bg-emerald-300",
     },
     cancelled: {
       label: "لغو شده",
       cls: "bg-red-500/20 text-red-400 border-red-500/30",
+      dot: "bg-red-400",
     },
   };
-  const { label, cls } = map[status] || { label: status, cls: "" };
+  const { label, cls, dot } = map[status] || {
+    label: status,
+    cls: "",
+    dot: "",
+  };
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${cls}`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${cls}`}
     >
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden="true" />
       {label}
     </span>
   );
@@ -121,19 +256,24 @@ type EmptyStateProps = {
   icon?: ReactNode;
   title: ReactNode;
   description?: ReactNode;
+  action?: ReactNode;
 };
 
 export const EmptyState = ({
-  icon = "📭",
+  icon,
   title,
   description,
+  action,
 }: EmptyStateProps) => (
-  <div className="flex flex-col items-center justify-center py-16 text-center">
-    <span className="text-5xl mb-4">{icon}</span>
+  <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+    <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-700/40 text-slate-400 [&>svg]:h-6 [&>svg]:w-6">
+      {icon || <InboxIcon />}
+    </span>
     <h3 className="text-slate-300 text-lg font-semibold mb-2">{title}</h3>
     {description && (
       <p className="text-slate-500 text-sm max-w-sm">{description}</p>
     )}
+    {action && <div className="mt-5">{action}</div>}
   </div>
 );
 
@@ -254,7 +394,7 @@ export const Modal = ({
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
     >
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={() => {
           if (dismissible) onClose();
         }}
@@ -266,7 +406,7 @@ export const Modal = ({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`relative w-full ${sizes[size]} bg-slate-800 border border-slate-700/50 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto`}
+        className={`modal-panel relative w-full ${sizes[size]} bg-slate-800 border border-slate-700/50 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto`}
       >
         <div className="flex items-center justify-between p-6 border-b border-slate-700/50">
           <h2 id={titleId} className="text-white text-lg font-semibold">

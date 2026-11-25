@@ -17,7 +17,13 @@
     color: #f1f5f9;
     direction: rtl;
     text-align: right;
+    /* Persian needs a touch more leading than the Latin default. */
+    line-height: 1.7;
     -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: rgba(96, 165, 250, 0.35);
   }
 
   /* Scrollbar */
@@ -41,11 +47,31 @@
     background-color: #1e293b;
     color: #f1f5f9;
   }
+
+  /* Visible keyboard focus ring on every interactive element.
+     Blue-400 reads well on both dark and light surfaces. */
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible,
+  [role="tab"]:focus-visible {
+    outline: 2px solid #60a5fa;
+    outline-offset: 2px;
+    border-radius: 0.5rem;
+  }
 }
 
 @layer utilities {
   .font-vazirmatn {
     font-family: "Vazirmatn", system-ui, sans-serif;
+  }
+
+  /* Aligned Persian digits for amounts and counters in tables and KPIs. */
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
   }
 
   .text-gradient {
@@ -76,6 +102,38 @@
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+/* Modal entrance: backdrop fades in while the panel scales up from 97%. */
+.modal-backdrop {
+  animation: modalBackdropIn 0.16s ease-out both;
+}
+.modal-panel {
+  animation: modalPanelIn 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes modalBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes modalPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop,
+  .modal-panel {
+    animation: none !important;
   }
 }
 
@@ -337,35 +395,28 @@
 
 /* Light-theme chrome and authentication surfaces. */
 [data-theme="light"].login-page {
-  background: linear-gradient(135deg, #e9eef8, #dbeafe, #f4f6fb) !important;
+  background: #f4f6fb !important;
 }
 [data-theme="light"].login-page > div[aria-hidden="true"] {
-  opacity: 0.08;
+  opacity: 0.1;
 }
-[data-theme="light"].login-page > .relative.z-10 {
-  background: rgba(255, 255, 255, 0.94) !important;
+[data-theme="light"] .login-card {
+  background: #fff !important;
   border-color: #d6deea !important;
-  box-shadow: 0 16px 48px rgba(30, 41, 59, 0.14) !important;
+  box-shadow: 0 20px 56px rgba(30, 41, 59, 0.12) !important;
 }
-[data-theme="light"].login-page > .relative.z-10 h1 {
-  color: #172033 !important;
-}
-[data-theme="light"].login-page > .relative.z-10 p,
-[data-theme="light"].login-page > .relative.z-10 label {
-  color: #344256 !important;
-}
-[data-theme="light"].login-page [class*="text-red-100"] {
+[data-theme="light"] .login-card [class*="text-red-100"] {
   color: #b91c1c !important;
 }
-[data-theme="light"].login-page input {
+[data-theme="light"] .login-card input {
   background: #f8fafc !important;
   border-color: #cbd5e1 !important;
   color: #172033 !important;
 }
-[data-theme="light"].login-page input::placeholder {
+[data-theme="light"] .login-card input::placeholder {
   color: #55677f !important;
 }
-[data-theme="light"].login-page form button {
+[data-theme="light"] .login-card form button {
   color: #fff !important;
 }
 [data-theme="light"] .sticky {
@@ -481,4 +532,17 @@
 }
 [data-theme="light"] [class*="bg-indigo-600/80"] {
   background-color: #4338ca !important;
+}
+
+/* Respect the OS "reduce motion" setting everywhere, not only for the
+   components that opted in. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -11,6 +11,7 @@ import {
 import PriceInput from "../components/PriceInput";
 import { toPersianKeyboard } from "../utils/persian";
 import {
+  PageHeader,
   Button,
   ConfirmDialog,
   ErrorNotice,
@@ -316,21 +317,21 @@ const Services = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-white">⚙️ خدمات</h2>
-          <p className="text-slate-400 text-sm mt-1">مدیریت خدمات و تعرفه‌ها</p>
-        </div>
-        <button
-          onClick={() => {
-            setFormError("");
-            setModal("add");
-          }}
-          className="inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/25 px-5 py-2.5 text-sm"
-        >
-          + افزودن خدمت
-        </button>
-      </div>
+      <PageHeader
+        title="خدمات"
+        description="مدیریت خدمات و تعرفه‌ها"
+        actions={
+          <Button
+            variant="primary"
+            onClick={() => {
+              setFormError("");
+              setModal("add");
+            }}
+          >
+            افزودن خدمت
+          </Button>
+        }
+      />
 
       {loadError && (
         <div>

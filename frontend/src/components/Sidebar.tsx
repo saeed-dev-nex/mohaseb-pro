@@ -1,15 +1,37 @@
 import React, { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { logout } from "../features/authSlice";
 import { invoicesAPI, chatAPI, authAPI } from "../services/api";
 import { hasModule } from "../utils/modules";
 import type { ModuleName } from "../utils/modules";
+import {
+  BarChartIcon,
+  ChatIcon,
+  CogIcon,
+  CrownIcon,
+  DashboardIcon,
+  FileTextIcon,
+  GemIcon,
+  HardHatIcon,
+  KeyIcon,
+  LogoutIcon,
+  PlusIcon,
+  ChevronsLeftIcon,
+  ChevronsRightIcon,
+  ShieldCheckIcon,
+  SlidersIcon,
+  TicketIcon,
+  UserIcon,
+  UsersIcon,
+  WalletIcon,
+} from "./icons";
 
 type NavItem = {
   to: string;
   label: string;
-  icon: string;
+  icon: ReactNode;
   exact?: boolean;
   module?: ModuleName;
 };
@@ -22,40 +44,77 @@ type NavGroup = {
 const BASE_NAV_GROUPS: NavGroup[] = [
   {
     label: "اصلی",
-    items: [{ to: "/", label: "داشبورد", icon: "📊", exact: true }],
+    items: [
+      { to: "/", label: "داشبورد", icon: <DashboardIcon />, exact: true },
+    ],
   },
   {
     label: "فاکتور",
     items: [
-      { to: "/invoices", label: "فاکتورها", icon: "🧾", module: "invoices" },
+      {
+        to: "/invoices",
+        label: "فاکتورها",
+        icon: <FileTextIcon />,
+        module: "invoices",
+      },
       {
         to: "/invoices/new",
         label: "فاکتور جدید",
-        icon: "➕",
+        icon: <PlusIcon />,
         module: "invoices",
       },
-      { to: "/reports", label: "گزارشات", icon: "📈", module: "reports" },
+      {
+        to: "/reports",
+        label: "گزارشات",
+        icon: <BarChartIcon />,
+        module: "reports",
+      },
     ],
   },
   {
     label: "مالی",
     items: [
-      { to: "/expenses", label: "هزینه‌ها", icon: "💰", module: "expenses" },
-      { to: "/cheques", label: "مدیریت چک‌ها", icon: "🎫", module: "cheques" },
+      {
+        to: "/expenses",
+        label: "هزینه‌ها",
+        icon: <WalletIcon />,
+        module: "expenses",
+      },
+      {
+        to: "/cheques",
+        label: "مدیریت چک‌ها",
+        icon: <TicketIcon />,
+        module: "cheques",
+      },
     ],
   },
   {
     label: "ارتباطات",
     items: [
-      { to: "/chat", label: "گفتگوی کاربران", icon: "💬", module: "chat" },
+      { to: "/chat", label: "گفتگوی کاربران", icon: <ChatIcon />, module: "chat" },
     ],
   },
   {
     label: "مدیریت",
     items: [
-      { to: "/customers", label: "مشتریان", icon: "👥", module: "customers" },
-      { to: "/services", label: "خدمات", icon: "⚙️", module: "services" },
-      { to: "/staff", label: "پرسنل", icon: "👷", module: "staff" },
+      {
+        to: "/customers",
+        label: "مشتریان",
+        icon: <UsersIcon />,
+        module: "customers",
+      },
+      {
+        to: "/services",
+        label: "خدمات",
+        icon: <CogIcon />,
+        module: "services",
+      },
+      {
+        to: "/staff",
+        label: "پرسنل",
+        icon: <HardHatIcon />,
+        module: "staff",
+      },
     ],
   },
 ];
@@ -133,7 +192,7 @@ const Sidebar = ({
             {
               to: "/users",
               label: "مدیریت کاربران",
-              icon: "🔐",
+              icon: <ShieldCheckIcon />,
               module: "users" as ModuleName,
             },
           ]
@@ -141,7 +200,7 @@ const Sidebar = ({
       {
         to: "/settings",
         label: "تنظیمات و برند",
-        icon: "🎨",
+        icon: <SlidersIcon />,
         module: "settings",
       },
     ],
@@ -195,8 +254,8 @@ const Sidebar = ({
           <div
             className={`flex items-center ${isCollapsed ? "lg:justify-center" : ""} gap-3`}
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-lg shadow-lg shadow-blue-500/30">
-              💎
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30 [&>svg]:h-5 [&>svg]:w-5">
+              <GemIcon />
             </div>
             <div className={isCollapsed ? "lg:hidden" : ""}>
               <h1 className="text-white font-bold text-lg leading-tight">
@@ -212,9 +271,9 @@ const Sidebar = ({
             aria-label={
               isCollapsed ? "باز کردن نوار کناری" : "جمع کردن نوار کناری"
             }
-            className="hidden lg:flex absolute top-4 left-3 h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white"
+            className="hidden lg:flex absolute top-4 left-3 h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white [&>svg]:h-4 [&>svg]:w-4"
           >
-            {isCollapsed ? "⇤" : "⇥"}
+            {isCollapsed ? <ChevronsLeftIcon /> : <ChevronsRightIcon />}
           </button>
           {currentUser && (
             <div
@@ -236,12 +295,21 @@ const Sidebar = ({
                     ? `${currentUser.first_name} ${currentUser.last_name || ""}`.trim()
                     : currentUser.username}
                 </p>
-                <p className="text-slate-500 text-[10px]">
-                  {isAdmin
-                    ? "👑 مدیر ارشد"
-                    : currentUser.is_staff
-                      ? "🔑 مدیر"
-                      : "👤 اپراتور"}
+                <p className="mt-0.5 flex items-center gap-1 text-slate-500 text-[10px]">
+                  {isAdmin ? (
+                    <CrownIcon className="h-3 w-3 text-amber-400/80" />
+                  ) : currentUser.is_staff ? (
+                    <KeyIcon className="h-3 w-3 text-sky-400/80" />
+                  ) : (
+                    <UserIcon className="h-3 w-3 text-slate-400/80" />
+                  )}
+                  <span>
+                    {isAdmin
+                      ? "مدیر ارشد"
+                      : currentUser.is_staff
+                        ? "مدیر"
+                        : "اپراتور"}
+                  </span>
                 </p>
               </div>
             </div>
@@ -266,33 +334,46 @@ const Sidebar = ({
                     to={item.to}
                     end={item.exact}
                     onClick={onClose}
+                    title={isCollapsed ? item.label : undefined}
                     className={({ isActive }) =>
-                      `flex items-center ${isCollapsed ? "lg:justify-center lg:px-2" : ""} gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                      `relative flex items-center ${isCollapsed ? "lg:justify-center lg:px-2" : ""} gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors duration-200 border border-transparent
                       ${
                         isActive
-                          ? "bg-gradient-to-l from-blue-600/30 to-indigo-600/20 text-blue-300 border border-blue-500/30 shadow-lg shadow-blue-500/10"
+                          ? "bg-blue-500/10 text-blue-200 border-blue-400/15"
                           : "text-slate-400 hover:text-white hover:bg-slate-700/50"
                       }`
                     }
                   >
-                    <span className="text-base">{item.icon}</span>
-                    <span className={isCollapsed ? "lg:hidden" : ""}>
-                      {item.label}
-                    </span>
-                    {isManager &&
-                      item.to === "/invoices" &&
-                      editRequestCount > 0 && (
-                        <span className="mr-auto min-w-5 rounded-full bg-amber-500 px-1.5 py-0.5 text-center text-[10px] font-bold text-white">
-                          {editRequestCount}
+                    {({ isActive }) => (
+                      <>
+                        {isActive && (
+                          <span
+                            aria-hidden="true"
+                            className="absolute right-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-l-full bg-blue-400"
+                          />
+                        )}
+                        <span className="shrink-0 text-base [&>svg]:h-[18px] [&>svg]:w-[18px]">
+                          {item.icon}
                         </span>
-                      )}
-                    {item.to === "/chat" && chatUnreadCount > 0 && (
-                      <span
-                        className="mr-auto min-w-5 rounded-full bg-blue-500 px-1.5 py-0.5 text-center text-[10px] font-bold text-white"
-                        title={`${chatUnreadCount} پیام خوانده‌نشده`}
-                      >
-                        {chatUnreadCount > 99 ? "۹۹+" : chatUnreadCount}
-                      </span>
+                        <span className={isCollapsed ? "lg:hidden" : ""}>
+                          {item.label}
+                        </span>
+                        {isManager &&
+                          item.to === "/invoices" &&
+                          editRequestCount > 0 && (
+                            <span className="mr-auto min-w-5 rounded-full bg-amber-500 px-1.5 py-0.5 text-center text-[10px] font-bold text-white">
+                              {editRequestCount}
+                            </span>
+                          )}
+                        {item.to === "/chat" && chatUnreadCount > 0 && (
+                          <span
+                            className="mr-auto min-w-5 rounded-full bg-blue-500 px-1.5 py-0.5 text-center text-[10px] font-bold text-white"
+                            title={`${chatUnreadCount} پیام خوانده‌نشده`}
+                          >
+                            {chatUnreadCount > 99 ? "۹۹+" : chatUnreadCount}
+                          </span>
+                        )}
+                      </>
                     )}
                   </NavLink>
                 ))}
@@ -307,9 +388,9 @@ const Sidebar = ({
         >
           <button
             onClick={handleLogout}
-            className={`w-full flex items-center ${isCollapsed ? "lg:justify-center lg:px-2" : ""} gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200`}
+            className={`w-full flex items-center ${isCollapsed ? "lg:justify-center lg:px-2" : ""} gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 [&>svg]:h-[18px] [&>svg]:w-[18px]`}
           >
-            <span>🚪</span>
+            <LogoutIcon />
             <span className={isCollapsed ? "lg:hidden" : ""}>
               خروج از سیستم
             </span>

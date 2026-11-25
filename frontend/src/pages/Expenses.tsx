@@ -3,7 +3,19 @@ import { expensesAPI, expenseCategoriesAPI } from "../services/api";
 import PriceInput from "../components/PriceInput";
 import JalaliDatePicker from "../components/JalaliDatePicker";
 import { toJalali, toPersianKeyboard } from "../utils/persian";
-import { Button, EmptyState, Spinner, StatCard } from "../components/ui";
+import {
+  Button,
+  EmptyState,
+  PageHeader,
+  Spinner,
+  StatCard,
+} from "../components/ui";
+import {
+  BanknoteIcon,
+  FileTextIcon,
+  FolderIcon,
+  PlusIcon,
+} from "../components/icons";
 
 const fmt = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0);
@@ -270,36 +282,35 @@ const Expenses = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-white">💰 مدیریت هزینه‌ها</h2>
-          <p className="text-slate-400 text-sm mt-1">
-            ثبت و پیگیری هزینه‌های کسب‌وکار
-          </p>
-        </div>
-        <Button variant="primary" onClick={() => setModal("add")}>
-          + ثبت هزینه
-        </Button>
-      </div>
+      <PageHeader
+        title="مدیریت هزینه‌ها"
+        description="ثبت و پیگیری هزینه‌های کسب‌وکار"
+        actions={
+          <Button variant="primary" onClick={() => setModal("add")}>
+            <PlusIcon className="h-4 w-4" />
+            ثبت هزینه
+          </Button>
+        }
+      />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard
           label="کل هزینه‌ها"
           value={fmt(summary.total) + " تومان"}
-          icon="💸"
+          icon={<BanknoteIcon />}
           color="red"
         />
         <StatCard
           label="تعداد هزینه‌ها"
           value={expenses.length}
-          icon="🧾"
+          icon={<FileTextIcon />}
           color="blue"
         />
         <StatCard
           label="دسته‌بندی‌ها"
           value={categories.length}
-          icon="🗂️"
+          icon={<FolderIcon />}
           color="purple"
         />
       </div>
@@ -338,7 +349,7 @@ const Expenses = () => {
       ) : expenses.length === 0 ? (
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl">
           <EmptyState
-            icon="💸"
+            icon={<BanknoteIcon />}
             title="هنوز هزینه‌ای ثبت نشده"
             description="با دکمه «ثبت هزینه» اولین هزینه خود را ثبت کنید"
           />
